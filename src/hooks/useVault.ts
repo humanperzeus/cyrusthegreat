@@ -40,6 +40,19 @@ export const useVault = () => {
     },
   });
 
+  // Debug logging for vault balance fetching
+  React.useEffect(() => {
+    console.log('🔍 Vault Balance Fetching Debug:', {
+      address,
+      contractAddress: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS,
+      args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined,
+      vaultBalanceData,
+      vaultBalanceDataType: typeof vaultBalanceData,
+      vaultBalanceDataValue: vaultBalanceData?.toString(),
+      isEnabled: !!address
+    });
+  }, [address, vaultBalanceData]);
+
   // Get current fee from contract
   const { data: currentFee, refetch: refetchFee } = useReadContract({
     address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
@@ -64,6 +77,7 @@ export const useVault = () => {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
 
   const walletBalanceFormatted = walletBalance ? formatEther(walletBalance.value) : '0.00';
   const vaultBalanceFormatted = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.00';
@@ -119,11 +133,40 @@ export const useVault = () => {
     }
 
     try {
-      setIsLoading(true);
+      // SIMULATION: Check if user has enough balance before proceeding
+      setIsSimulating(true);
       
       const amountInWei = parseEther(amount);
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
-      const totalValue = amountInWei + feeInWei; // Send amount + fee together
+      const totalValue = amountInWei + feeInWei;
+      
+      console.log('🔍 Deposit Simulation:', {
+        amount,
+        amountInWei: amountInWei.toString(),
+        feeInWei: feeInWei.toString(),
+        totalValue: totalValue.toString(),
+        walletBalance: walletBalance ? walletBalance.value.toString() : 'null'
+      });
+      
+      // Check if user has enough ETH for deposit + fee
+      if (walletBalance && walletBalance.value < totalValue) {
+        const required = formatEther(totalValue);
+        const available = formatEther(walletBalance.value);
+        console.log('❌ Insufficient wallet balance for deposit:', { required, available });
+        toast({
+          title: "Insufficient Balance",
+          description: `You need ${required} ETH (${amount} + ${formatEther(feeInWei)} fee). You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      console.log('✅ Deposit simulation successful, proceeding with transaction');
+      
+      // Simulation successful - proceed with transaction
+      setIsSimulating(false);
+      setIsLoading(true);
       
       console.log('Depositing ETH:', { 
         amount, 
@@ -156,6 +199,7 @@ export const useVault = () => {
         variant: "destructive",
       });
       setIsLoading(false);
+      setIsSimulating(false);
     }
   };
 
@@ -180,10 +224,52 @@ export const useVault = () => {
     }
 
     try {
-      setIsLoading(true);
+      // SIMULATION: Check if user has enough vault balance before proceeding
+      setIsSimulating(true);
       
       const amountInWei = parseEther(amount);
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      
+      console.log('🔍 Withdrawal Simulation:', {
+        amount,
+        amountInWei: amountInWei.toString(),
+        vaultBalanceData: vaultBalanceData ? (vaultBalanceData as bigint).toString() : 'null',
+        feeInWei: feeInWei.toString(),
+        walletBalance: walletBalance ? walletBalance.value.toString() : 'null'
+      });
+      
+      // Check if user has enough ETH in vault for withdrawal
+      if ((vaultBalanceData as bigint) < amountInWei) {
+        const available = formatEther(vaultBalanceData as bigint);
+        console.log('❌ Insufficient vault balance:', { available, requested: amount });
+        toast({
+          title: "Insufficient Vault Balance",
+          description: `You only have ${available} ETH in vault. Cannot withdraw ${amount} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      // Check if user has enough ETH for fee
+      if (walletBalance && walletBalance.value < feeInWei) {
+        const feeRequired = formatEther(feeInWei);
+        const available = formatEther(walletBalance.value);
+        console.log('❌ Insufficient wallet balance for fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the withdrawal fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      console.log('✅ Withdrawal simulation successful, proceeding with transaction');
+      
+      // Simulation successful - proceed with transaction
+      setIsSimulating(false);
+      setIsLoading(true);
       
       console.log('Withdrawing ETH:', { 
         amount, 
@@ -215,6 +301,7 @@ export const useVault = () => {
         variant: "destructive",
       });
       setIsLoading(false);
+      setIsSimulating(false);
     }
   };
 
@@ -249,10 +336,53 @@ export const useVault = () => {
     }
 
     try {
-      setIsLoading(true);
+      // SIMULATION: Check if user has enough vault balance before proceeding
+      setIsSimulating(true);
       
       const amountInWei = parseEther(amount);
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      
+      console.log('🔍 Transfer Simulation:', {
+        to,
+        amount,
+        amountInWei: amountInWei.toString(),
+        vaultBalanceData: vaultBalanceData ? (vaultBalanceData as bigint).toString() : 'null',
+        feeInWei: feeInWei.toString(),
+        walletBalance: walletBalance ? walletBalance.value.toString() : 'null'
+      });
+      
+      // Check if user has enough ETH in vault for transfer
+      if ((vaultBalanceData as bigint) < amountInWei) {
+        const available = formatEther(vaultBalanceData as bigint);
+        console.log('❌ Insufficient vault balance for transfer:', { available, requested: amount });
+        toast({
+          title: "Insufficient Vault Balance",
+          description: `You only have ${available} ETH in vault. Cannot transfer ${amount} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      // Check if user has enough ETH for fee
+      if (walletBalance && walletBalance.value < feeInWei) {
+        const feeRequired = formatEther(feeInWei);
+        const available = formatEther(walletBalance.value);
+        console.log('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the transfer fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      console.log('✅ Transfer simulation successful, proceeding with transaction');
+      
+      // Simulation successful - proceed with transaction
+      setIsSimulating(false);
+      setIsLoading(true);
       
       console.log('Transferring ETH:', { 
         to, 
@@ -285,6 +415,7 @@ export const useVault = () => {
         variant: "destructive",
       });
       setIsLoading(false);
+      setIsSimulating(false);
     }
   };
 
@@ -331,6 +462,7 @@ export const useVault = () => {
     vaultBalance: vaultBalanceFormatted,
     currentFee: currentFeeFormatted,
     isLoading: isTransactionLoading,
+    isSimulating, // Add simulation state for UI
     depositETH,
     withdrawETH,
     transferETH,
