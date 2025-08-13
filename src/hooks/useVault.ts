@@ -314,6 +314,14 @@ export const useVault = () => {
     }
   }, [isConfirmed, toast, refetchVaultBalance, refetchWalletBalance, refetchFee]);
 
+  // FIX: Reset loading state when transaction is cancelled or fails
+  React.useEffect(() => {
+    if (!isWritePending && isLoading) {
+      console.log('🔄 Transaction cancelled or failed, resetting loading state...');
+      setIsLoading(false);
+    }
+  }, [isWritePending, isLoading]);
+
   // Combined loading state
   const isTransactionLoading = isLoading || isWritePending || isConfirming;
 
