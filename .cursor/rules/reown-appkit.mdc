@@ -1,0 +1,49 @@
+# Reown AppKit Development Rules
+
+## Project Context
+This project uses Reown AppKit with Wagmi adapter for blockchain integration. The project is built with:
+- React 18 + TypeScript
+- Vite as build tool
+- Tailwind CSS + shadcn/ui for styling
+- Reown AppKit for wallet connections
+- Wagmi + Viem for Ethereum interactions
+
+## Development Guidelines
+
+### Node.js Version
+- Use **Node 18 LTS** (not Node 22) for optimal compatibility
+- React 18 + TypeScript 5.8 + Vite 5.4 require Node 18+
+- Avoid Node 22 as it may have compatibility issues with some dependencies
+
+### Reown AppKit Integration
+- The project uses `@reown/appkit` and `@reown/appkit-adapter-wagmi`
+- Follow Reown documentation patterns for wallet connections
+- Use the `useAppKit` hook for wallet interactions
+- Implement proper error handling for blockchain operations
+
+### Code Standards
+- Use ES modules syntax (import/export) - this project has `"type": "module"`
+- Implement proper TypeScript types for blockchain interactions
+- Use React hooks for state management
+- Follow shadcn/ui component patterns for consistent UI
+
+### Blockchain Integration
+- Always handle wallet connection states properly
+- Implement proper error boundaries for blockchain operations
+- Use Wagmi hooks for contract interactions
+- Follow security best practices for token approvals
+
+### Testing
+- Use the test wallet address: `0x84064947bcD9729872c5Be91D2aE50380Cbd691E`
+- This wallet contains TKK, USDC, and USDE tokens for testing
+- Test with minimal token approvals for security
+
+### Performance
+- Implement proper loading states for blockchain operations
+- Use React Query for data fetching and caching
+- Optimize re-renders with proper dependency arrays
+- Implement proper error handling and user feedback
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Persian Empire Theme - Sand and Red */
+    --background: 35 20% 8%;
+    --foreground: 35 15% 92%;
+
+    --card: 35 25% 12%;
+    --card-foreground: 35 15% 92%;
+
+    --popover: 35 25% 12%;
+    --popover-foreground: 35 15% 92%;
+
+    /* Persian Gold primary */
+    --primary: 45 85% 55%;
+    --primary-foreground: 35 20% 8%;
+    --primary-glow: 45 90% 65%;
+
+    /* Sand secondary */
+    --secondary: 35 30% 20%;
+    --secondary-foreground: 35 15% 92%;
+
+    --muted: 35 25% 18%;
+    --muted-foreground: 35 15% 65%;
+
+    /* Persian Red accent */
+    --accent: 5 75% 50%;
+    --accent-foreground: 35 15% 92%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 35 15% 92%;
+
+    --border: 35 25% 25%;
+    --input: 35 25% 18%;
+    --ring: 45 85% 55%;
+
+    --radius: 0.75rem;
+
+    /* Vault specific colors - Persian theme */
+    --vault-primary: 45 85% 55%;
+    --vault-secondary: 5 75% 50%;
+    --vault-glow: 45 90% 50%;
+    --vault-success: 142 76% 36%;
+    --vault-warning: 38 92% 50%;
+
+    /* Persian Gradients */
+    --gradient-vault: linear-gradient(135deg, hsl(45 85% 55%), hsl(5 75% 50%));
+    --gradient-glow: linear-gradient(135deg, hsl(45 85% 55% / 0.3), hsl(5 75% 50% / 0.3));
+    --gradient-card: linear-gradient(135deg, hsl(35 25% 12%), hsl(35 20% 15%));
+
+    /* Persian Shadows */
+    --shadow-vault: 0 0 40px hsl(45 85% 55% / 0.4);
+    --shadow-glow: 0 0 25px hsl(45 85% 55% / 0.3);
+    --shadow-card: 0 8px 32px hsl(35 20% 5% / 0.5);
+
+    /* Animations */
+    --transition-vault: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-glow: all 0.3s ease-out;
+
+    --sidebar-background: 35 20% 8%;
+    --sidebar-foreground: 35 15% 92%;
+    --sidebar-primary: 45 85% 55%;
+    --sidebar-primary-foreground: 35 20% 8%;
+    --sidebar-accent: 35 30% 20%;
+    --sidebar-accent-foreground: 35 15% 92%;
+    --sidebar-border: 35 25% 25%;
+    --sidebar-ring: 45 85% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    background: radial-gradient(ellipse at center, hsl(35 25% 12%) 0%, hsl(35 20% 8%) 100%);
+    min-height: 100vh;
+  }
+
+  /* Vault animations */
+  .vault-glow {
+    animation: vault-pulse 3s ease-in-out infinite;
+  }
+
+  .vault-float {
+    animation: vault-float 6s ease-in-out infinite;
+  }
+
+  .vault-rotate {
+    animation: vault-rotate 20s linear infinite;
+  }
+
+  @keyframes vault-pulse {
+    0%, 100% { 
+      box-shadow: var(--shadow-vault);
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 0 60px hsl(45 85% 55% / 0.6);
+      transform: scale(1.02);
+    }
+  }
+
+  @keyframes vault-float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  @keyframes vault-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
+  }
+}
