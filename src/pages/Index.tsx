@@ -66,6 +66,18 @@ const Index = () => {
     setDepositModalOpen(true);
   };
 
+  // Handle ETH withdraw (reset token info)
+  const handleETHWithdraw = () => {
+    setTokenWithdrawInfo(null);
+    setWithdrawModalOpen(true);
+  };
+
+  // Handle ETH transfer (reset token info)
+  const handleETHTransfer = () => {
+    setTokenTransferInfo(null);
+    setTransferModalOpen(true);
+  };
+
   // Handle token deposit from modal
   const handleTokenDepositFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
     // Call the simple delay deposit function with string amount (function handles decimals internally)
@@ -116,8 +128,8 @@ const Index = () => {
         refetchWalletTokens={refetchWalletTokens}
         refetchVaultTokens={refetchVaultTokens}
         onDeposit={handleETHDeposit}
-        onWithdraw={() => setWithdrawModalOpen(true)}
-        onTransfer={() => setTransferModalOpen(true)}
+        onWithdraw={handleETHWithdraw}
+        onTransfer={handleETHTransfer}
         onTokenDeposit={handleTokenDeposit}
         onTokenWithdraw={handleTokenWithdraw}
         onTokenTransfer={handleTokenTransfer}
