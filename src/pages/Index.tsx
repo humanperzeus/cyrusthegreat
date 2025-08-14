@@ -23,7 +23,8 @@ const Index = () => {
     isLoadingTokens,
     refetchWalletTokens,
     refetchVaultTokens,
-    depositToken
+    depositToken,
+    depositTokenWithDelay
   } = useVault();
 
   const [depositModalOpen, setDepositModalOpen] = useState(false);
@@ -51,9 +52,9 @@ const Index = () => {
 
   // Handle token deposit from modal
   const handleTokenDepositFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
-    // Convert amount to bigint and call the actual deposit function
+    // Convert amount to bigint and call the simple delay deposit function
     const amountBigInt = parseEther(amount);
-    depositToken(tokenAddress, amountBigInt, tokenSymbol);
+    depositTokenWithDelay(tokenAddress, amountBigInt, tokenSymbol);
   };
 
   return (

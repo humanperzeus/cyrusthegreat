@@ -123,6 +123,12 @@ export const useVault = () => {
             const tokenAddr = tokenAddresses[i];
             const tokenBalance = tokenBalances[i];
             
+            // Skip native ETH (address 0) - it's already displayed in top balance
+            if (tokenAddr === '0x0000000000000000000000000000000000000000') {
+              console.log('⏭️ Skipping native ETH (address 0) - already displayed in top balance');
+              continue;
+            }
+            
             console.log(`🔄 Processing token ${i}:`, { address: tokenAddr, balance: tokenBalance });
             
             try {
@@ -180,7 +186,7 @@ export const useVault = () => {
             }
           }
           
-          console.log('✅ Final processed vault tokens from signed call:', processedTokens);
+          console.log('✅ Final processed vault tokens (ETH filtered out):', processedTokens);
           setVaultTokens(processedTokens);
         };
         
@@ -203,6 +209,14 @@ export const useVault = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   const [hasRefreshedAfterConfirmation, setHasRefreshedAfterConfirmation] = useState(false);
+  
+  // State for tracking pending approvals that should trigger auto-deposit
+  const [pendingApprovalForDeposit, setPendingApprovalForDeposit] = useState<{
+    tokenAddress: string;
+    amount: bigint;
+    tokenSymbol: string;
+    approvalHash: string;
+  } | null>(null);
   
   // Token detection state
   const [walletTokens, setWalletTokens] = useState<Array<{address: string, symbol: string, balance: string, decimals: number}>>([]);
@@ -391,7 +405,11 @@ export const useVault = () => {
             const tokenAddr = tokenAddresses[i];
             const tokenBalance = tokenBalances[i];
             
-            console.log(`🔄 Processing token ${i}:`, { address: tokenAddr, balance: tokenBalance });
+            // Skip native ETH (address 0) - it's already displayed in top balance
+            if (tokenAddr === '0x0000000000000000000000000000000000000000') {
+              console.log('⏭️ Skipping native ETH (address 0) - already displayed in top balance');
+              continue;
+            }
             
             try {
               // Fetch token metadata (symbol, decimals) from the token contract
@@ -943,6 +961,284 @@ export const useVault = () => {
     // Remove the finally block - let transaction confirmation handle loading state
   };
 
+  // NEW: Smart token deposit with automatic allowance checking and auto-deposit
+  const depositTokenSmart = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log(`🧠 Smart deposit for ${formatEther(amount)} ${tokenSymbol}`);
+
+      // Step 1: Check current allowance
+      console.log(`🔍 Checking current allowance for ${tokenSymbol}...`);
+      const currentAllowance = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": true,
+            "inputs": [
+              {"name": "owner", "type": "address"},
+              {"name": "spender", "type": "address"}
+            ],
+            "name": "allowance",
+            "outputs": [{"name": "", "type": "uint256"}],
+            "payable": false,
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        functionName: 'allowance',
+        args: [address, WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`],
+      });
+
+      console.log(`📊 Current allowance: ${currentAllowance}, Required: ${amount}`);
+
+      // Step 2: Check if approval is needed
+      if ((currentAllowance as bigint) >= amount) {
+        console.log(`✅ Sufficient allowance (${currentAllowance}), proceeding directly to deposit`);
+        // Skip approval, go straight to deposit
+        await executeTokenDeposit(tokenAddress, amount, tokenSymbol);
+      } else {
+        console.log(`❌ Insufficient allowance (${currentAllowance} < ${amount}), approval needed`);
+        // Need approval first, then auto-deposit after confirmation
+        await executeTokenApprovalAndDeposit(tokenAddress, amount, tokenSymbol);
+      }
+
+    } catch (error) {
+      console.error('❌ Smart token deposit error:', error);
+      toast({
+        title: "Error",
+        description: `Failed to deposit ${tokenSymbol}`,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
+  // SIMPLE APPROACH: 3-second delay between approval and deposit
+  const depositTokenWithDelay = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log(`⏱️ Deposit with 3-second delay for ${formatEther(amount)} ${tokenSymbol}`);
+
+      // Step 1: Send approval transaction
+      console.log(`🔐 Sending approval transaction for ${tokenSymbol}...`);
+      
+      await writeVaultContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": false,
+            "inputs": [
+              {"name": "spender", "type": "address"},
+              {"name": "amount", "type": "uint256"}
+            ],
+            "name": "approve",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": false,
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        functionName: 'approve',
+        args: [
+          WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+          amount
+        ],
+        chain: sepolia,
+        account: address,
+      });
+
+      console.log(`✅ Approval transaction sent, waiting 3 seconds...`);
+      
+      toast({
+        title: "Token Approval Sent",
+        description: `Approving ${formatEther(amount)} ${tokenSymbol} for vault...`,
+      });
+
+      // Step 2: Wait 3 seconds then send deposit
+      setTimeout(async () => {
+        try {
+          console.log(`⏰ 3 seconds elapsed, sending deposit transaction for ${tokenSymbol}...`);
+          
+          // Get current fee for the transaction
+          if (!currentFee) {
+            throw new Error('Current fee not available');
+          }
+          
+          const feeWei = currentFee as bigint;
+          console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+          
+          // Send the deposit transaction
+          await writeVaultContract({
+            address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+            abi: VAULT_ABI,
+            functionName: 'depositToken',
+            args: [tokenAddress, amount],
+            chain: sepolia,
+            account: address,
+            value: feeWei, // Send ETH fee along with token deposit
+          });
+          
+          console.log(`📝 Deposit transaction sent with ETH fee`);
+          
+          toast({
+            title: "Token Deposit Sent",
+            description: `Depositing ${formatEther(amount)} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
+          });
+          
+          // DON'T refresh here - let the transaction confirmation system handle it
+          // DON'T set isLoading(false) here - let the transaction confirmation system handle it
+          
+        } catch (error) {
+          console.error('❌ Deposit transaction error:', error);
+          toast({
+            title: "Deposit Failed",
+            description: `Failed to deposit ${tokenSymbol}`,
+            variant: "destructive",
+          });
+          setIsLoading(false);
+        }
+      }, 3000); // 3 seconds delay
+
+      // DON'T set isLoading(false) here - let the delayed deposit handle it
+      
+    } catch (error) {
+      console.error('❌ Approval transaction error:', error);
+      toast({
+        title: "Approval Failed",
+        description: `Failed to approve ${tokenSymbol}`,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
+  // Helper: Execute token deposit (when allowance is sufficient)
+  const executeTokenDeposit = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+    try {
+      console.log(`🚀 Executing direct deposit for ${tokenSymbol}...`);
+      
+      // Get current fee for the transaction
+      if (!currentFee) {
+        throw new Error('Current fee not available');
+      }
+      
+      const feeWei = currentFee as bigint;
+      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+      
+      // Call the actual vault deposit function WITH ETH fee
+      await writeVaultContract({
+        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'depositToken',
+        args: [tokenAddress, amount],
+        chain: sepolia,
+        account: address,
+        value: feeWei, // Send ETH fee along with token deposit
+      });
+      
+      console.log(`📝 Direct token deposit transaction initiated with ETH fee`);
+      
+      toast({
+        title: "Token Deposit Initiated",
+        description: `Depositing ${formatEther(amount)} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
+      });
+      
+      // DON'T refresh here - let the transaction confirmation system handle it
+      // DON'T set isLoading(false) here - let the transaction confirmation system handle it
+      
+    } catch (error) {
+      console.error('❌ Direct token deposit error:', error);
+      toast({
+        title: "Error",
+        description: `Failed to deposit ${tokenSymbol}`,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
+  // Helper: Execute approval then auto-deposit after confirmation
+  const executeTokenApprovalAndDeposit = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+    try {
+      console.log(`🔐 Executing approval + auto-deposit for ${tokenSymbol}...`);
+      
+      // Step 1: Send approval transaction
+      await writeVaultContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": false,
+            "inputs": [
+              {"name": "spender", "type": "address"},
+              {"name": "amount", "type": "uint256"}
+            ],
+            "name": "approve",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": false,
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        functionName: 'approve',
+        args: [
+          WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+          amount
+        ],
+        chain: sepolia,
+        account: address,
+      });
+
+      console.log(`✅ Approval transaction sent`);
+      
+      toast({
+        title: "Token Approval Sent",
+        description: `Approving ${formatEther(amount)} ${tokenSymbol} for vault...`,
+      });
+
+      // Step 2: Wait for approval confirmation
+      console.log(`⏳ Waiting for approval confirmation...`);
+      
+      // Use the transaction confirmation system to auto-trigger deposit
+      // We'll set a flag to indicate this is an approval transaction
+      // The hash will be available in the hook state after the transaction is sent
+      setPendingApprovalForDeposit({
+        tokenAddress,
+        amount,
+        tokenSymbol,
+        approvalHash: '' // Will be set when transaction is sent
+      });
+
+      // DON'T set isLoading(false) here - let the approval confirmation trigger deposit
+      
+    } catch (error) {
+      console.error('❌ Token approval error:', error);
+      toast({
+        title: "Error",
+        description: `Failed to approve ${tokenSymbol}`,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
   // Handle transaction state changes
   React.useEffect(() => {
     if (isConfirmed && !hasRefreshedAfterConfirmation) {
@@ -956,6 +1252,26 @@ export const useVault = () => {
         description: "Your transaction has been confirmed on the blockchain",
       });
       setIsLoading(false);
+      
+      // Check if this was an approval transaction that should trigger auto-deposit
+      if (pendingApprovalForDeposit) {
+        console.log('🔐 Approval confirmed, automatically proceeding to deposit...');
+        
+        // Auto-execute the deposit
+        executeTokenDeposit(
+          pendingApprovalForDeposit.tokenAddress,
+          pendingApprovalForDeposit.amount,
+          pendingApprovalForDeposit.tokenSymbol
+        );
+        
+        // Clear the pending approval
+        setPendingApprovalForDeposit(null);
+        
+        toast({
+          title: "Approval Confirmed!",
+          description: `Automatically proceeding to deposit ${pendingApprovalForDeposit.tokenSymbol}...`,
+        });
+      }
       
       // Smart refetch ONLY after transaction confirmation
       // This updates balances without constant API polling
@@ -978,7 +1294,7 @@ export const useVault = () => {
       
       console.log('✅ Smart refetch completed!');
     }
-  }, [isConfirmed, hasRefreshedAfterConfirmation, toast, refetchVaultBalance, refetchWalletBalance, refetchFee]);
+  }, [isConfirmed, hasRefreshedAfterConfirmation, toast, refetchVaultBalance, refetchWalletBalance, refetchFee, fetchWalletTokens, fetchVaultTokensSigned, pendingApprovalForDeposit, hash]);
 
   // FIX: Reset loading state when transaction is cancelled or fails
   React.useEffect(() => {
@@ -1011,6 +1327,8 @@ export const useVault = () => {
     // Token functions
     approveToken,
     depositToken,
+    depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
+    depositTokenWithDelay, // SIMPLE: 3-second delay approach
     // Transaction status for UI feedback
     isPending: isWritePending,
     isConfirming,
