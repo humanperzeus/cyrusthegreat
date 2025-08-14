@@ -515,8 +515,51 @@ export const VaultCore = ({
           human rights since 539BC
         </p>
         {isConnected && (
-          <div className="flex items-center justify-center">
+          <div className="flex flex-col items-center space-y-4">
             <WalletConnector />
+            
+            {/* Display Mode Switcher - Icons Only */}
+            <div className="flex justify-center space-x-2">
+              <Button
+                variant={displayMode === 'tabs' ? 'default' : 'outline'}
+                size="sm"
+                className={`w-10 h-10 p-0 transition-all duration-200 ${
+                  displayMode === 'tabs' 
+                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
+                    : 'hover:bg-background/40'
+                }`}
+                onClick={() => setDisplayMode('tabs')}
+                title="Tabs Mode"
+              >
+                📋
+              </Button>
+              <Button
+                variant={displayMode === 'cards' ? 'default' : 'outline'}
+                size="sm"
+                className={`w-10 h-10 p-0 transition-all duration-200 ${
+                  displayMode === 'cards' 
+                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
+                    : 'hover:bg-background/40'
+                }`}
+                onClick={() => setDisplayMode('cards')}
+                title="Cards Mode"
+              >
+                🎴
+              </Button>
+              <Button
+                variant={displayMode === 'tabbed-cards' ? 'default' : 'outline'}
+                size="sm"
+                className={`w-10 h-10 p-0 transition-all duration-200 ${
+                  displayMode === 'tabbed-cards' 
+                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
+                    : 'hover:bg-background/40'
+                }`}
+                onClick={() => setDisplayMode('tabbed-cards')}
+                title="Tabbed-Cards Mode"
+              >
+                🎯
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -577,53 +620,6 @@ export const VaultCore = ({
                 </div>
               </div>
             </div>
-
-            {/* Display Mode Switcher */}
-            {isConnected && (
-              <div className="w-full">
-                <div className="text-center space-y-3 p-4 bg-background/20 rounded-lg border border-border/30">
-                  <div className="text-sm text-muted-foreground">Display Mode</div>
-                  <div className="flex justify-center space-x-2">
-                    <Button
-                      variant={displayMode === 'tabs' ? 'default' : 'outline'}
-                      size="sm"
-                      className={`transition-all duration-200 ${
-                        displayMode === 'tabs' 
-                          ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
-                          : 'hover:bg-background/40'
-                      }`}
-                      onClick={() => setDisplayMode('tabs')}
-                    >
-                      📋 Tabs
-                    </Button>
-                    <Button
-                      variant={displayMode === 'cards' ? 'default' : 'outline'}
-                      size="sm"
-                      className={`transition-all duration-200 ${
-                        displayMode === 'cards' 
-                          ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
-                          : 'hover:bg-background/40'
-                      }`}
-                      onClick={() => setDisplayMode('cards')}
-                    >
-                      🎴 Cards
-                    </Button>
-                    <Button
-                      variant={displayMode === 'tabbed-cards' ? 'default' : 'outline'}
-                      size="sm"
-                      className={`transition-all duration-200 ${
-                        displayMode === 'tabbed-cards' 
-                          ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
-                          : 'hover:bg-background/40'
-                      }`}
-                      onClick={() => setDisplayMode('tabbed-cards')}
-                    >
-                      🎯 Tabbed-Cards
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Dynamic Token Display Section */}
             <div className="w-full max-w-4xl">
