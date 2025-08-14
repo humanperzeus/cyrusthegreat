@@ -26,7 +26,7 @@ export const useVault = () => {
 
   // Get vault ETH balance using the correct function name from the real ABI
   const { data: vaultBalanceData, refetch: refetchVaultBalance } = useReadContract({
-    address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+    address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
     abi: VAULT_ABI,
     functionName: 'getBalance', // Changed from 'getETHBalance' to 'getBalance'
     args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined, // ETH is represented as address(0)
@@ -44,7 +44,7 @@ export const useVault = () => {
   React.useEffect(() => {
     console.log('🔍 Vault Balance Fetching Debug:', {
       address,
-      contractAddress: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS,
+      contractAddress: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH,
       args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined,
       vaultBalanceData,
       vaultBalanceDataType: typeof vaultBalanceData,
@@ -55,7 +55,7 @@ export const useVault = () => {
 
   // Get current fee from contract
   const { data: currentFee, refetch: refetchFee } = useReadContract({
-    address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+    address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
     abi: VAULT_ABI,
     functionName: 'getCurrentFeeInWei',
     query: {
@@ -70,7 +70,7 @@ export const useVault = () => {
 
   // Get vault tokens for the connected user - using signed call since it's private
   const { data: vaultTokensData, refetch: refetchVaultTokens } = useReadContract({
-    address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+    address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
     abi: VAULT_ABI,
     functionName: 'getMyVaultedTokens',
     args: address ? [address] : undefined,
@@ -100,7 +100,7 @@ export const useVault = () => {
       
       // Make a direct call to the private function
       const result = await publicClient.readContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'getMyVaultedTokens',
         args: [],
@@ -510,7 +510,7 @@ export const useVault = () => {
     (window as any).testVaultTokens = () => {
       console.log('🧪 Manual vault tokens test...');
       console.log('📍 Current address:', address);
-      console.log('🏦 Vault contract address:', WEB3_CONFIG.CROSSCHAINBANK_ADDRESS);
+      console.log('🏦 Vault contract address:', WEB3_CONFIG.CTGVAULT_ADDRESS_ETH);
       console.log('📊 Current vault tokens data:', vaultTokensData);
       console.log('🪙 Current vault tokens state:', vaultTokens);
       
@@ -596,7 +596,7 @@ export const useVault = () => {
       
       // Call the real contract - send amount + fee together
       writeVaultContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI as any,
         functionName: 'depositETH',
         args: [],
@@ -698,7 +698,7 @@ export const useVault = () => {
       
       // Call the real contract - send fee with withdrawal
       writeVaultContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI as any,
         functionName: 'withdrawETH',
         args: [amountInWei],
@@ -812,7 +812,7 @@ export const useVault = () => {
       
       // Call the real contract for anonymous transfer - send fee with transfer
       writeVaultContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI as any,
         functionName: 'transferInternalETH',
         args: [to as `0x${string}`, amountInWei],
@@ -871,7 +871,7 @@ export const useVault = () => {
         ],
         functionName: 'approve',
         args: [
-          WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+          WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
           amount
         ],
         chain: sepolia,
@@ -948,7 +948,7 @@ export const useVault = () => {
       
       // Call the actual vault deposit function WITH ETH fee
       await writeVaultContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'depositToken',
         args: [tokenAddress, amountWei],
@@ -1037,7 +1037,7 @@ export const useVault = () => {
           }
         ],
         functionName: 'allowance',
-        args: [address, WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`],
+        args: [address, WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`],
       });
 
       console.log(`📊 Current allowance: ${currentAllowance}, Required: ${amountWei}`);
@@ -1121,7 +1121,7 @@ export const useVault = () => {
         ],
         functionName: 'approve',
         args: [
-          WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+          WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
           amountWei // Use proper amount
         ],
         chain: sepolia,
@@ -1150,7 +1150,7 @@ export const useVault = () => {
           
           // Send the deposit transaction
           await writeVaultContract({
-            address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+            address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
             abi: VAULT_ABI,
             functionName: 'depositToken',
             args: [tokenAddress, amountWei], // Use proper amount
@@ -1208,7 +1208,7 @@ export const useVault = () => {
       
       // Call the actual vault deposit function WITH ETH fee
       await writeVaultContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'depositToken',
         args: [tokenAddress, amount],
@@ -1262,7 +1262,7 @@ export const useVault = () => {
         ],
         functionName: 'approve',
         args: [
-          WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+          WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
           amount
         ],
         chain: sepolia,
@@ -1362,7 +1362,7 @@ export const useVault = () => {
 
       // Call the vault withdraw function WITH ETH fee
       await writeVaultContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'withdrawToken',
         args: [tokenAddress, amountWei],
@@ -1464,7 +1464,7 @@ export const useVault = () => {
       });
 
       const result = await writeVaultContract({
-        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        address: WEB3_CONFIG.CTGVAULT_ADDRESS_ETH as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'transferInternalToken',
         args: [tokenAddress, to, amountWei],

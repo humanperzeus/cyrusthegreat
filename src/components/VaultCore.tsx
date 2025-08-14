@@ -690,8 +690,8 @@ export const VaultCore = ({
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 space-y-8">
       {/* Header */}
-      <div className="text-center space-y-4">
-        <h1 className="text-5xl font-bold bg-gradient-vault bg-clip-text text-transparent">
+      <div className="text-center space-y-6 py-4">
+        <h1 className="text-5xl font-bold bg-gradient-vault bg-clip-text text-transparent px-4 py-2">
           cyrusthegreat.dev
         </h1>
         <p className="text-xl text-muted-foreground">
@@ -779,7 +779,7 @@ export const VaultCore = ({
               <div className="w-32 h-32 bg-gradient-vault rounded-full p-1 vault-rotate">
                 <div className="w-full h-full rounded-full overflow-hidden bg-gradient-card">
                   <img 
-                    src="/lovable-uploads/6c482ff7-4c96-458d-99ec-89ce96a62004.png" 
+                    src="/ctg.png" 
                     alt="Cyrus the Great" 
                     className="w-full h-full object-cover filter sepia-[0.3] contrast-110"
                   />
