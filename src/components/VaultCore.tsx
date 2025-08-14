@@ -701,96 +701,68 @@ export const VaultCore = ({
           <div className="flex flex-col items-center space-y-4">
             <WalletConnector />
             
+            {/* Chain Switcher - Icons Only */}
+            <div className="flex justify-center space-x-2">
+              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-white bg-vault-primary border border-vault-primary rounded cursor-default" title="Ethereum (Current)">
+                ETH
+              </div>
+              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Binance Chain (Coming Soon)">
+                BSC
+              </div>
+              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Base (Coming Soon)">
+                BASE
+              </div>
+              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Solana (Coming Soon)">
+                SOL
+              </div>
+            </div>
+
             {/* Display Mode Switcher - Icons Only */}
             <div className="flex justify-center space-x-2">
-              <Button
-                variant={displayMode === 'tabs' ? 'default' : 'outline'}
-                size="sm"
-                className={`w-10 h-10 p-0 transition-all duration-200 ${
+              <div 
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
                   displayMode === 'tabs' 
-                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
-                    : 'hover:bg-background/40'
+                    ? 'text-white bg-vault-warning border border-vault-warning' 
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
                 }`}
                 onClick={() => setDisplayMode('tabs')}
                 title="Tabs Mode"
               >
                 📋
-              </Button>
-              <Button
-                variant={displayMode === 'cards' ? 'default' : 'outline'}
-                size="sm"
-                className={`w-10 h-10 p-0 transition-all duration-200 ${
+              </div>
+              <div 
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
                   displayMode === 'cards' 
-                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
-                    : 'hover:bg-background/40'
+                    ? 'text-white bg-vault-warning border border-vault-warning' 
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
                 }`}
                 onClick={() => setDisplayMode('cards')}
                 title="Cards Mode"
               >
                 🎴
-              </Button>
-              <Button
-                variant={displayMode === 'tabbed-cards' ? 'default' : 'outline'}
-                size="sm"
-                className={`w-10 h-10 p-0 transition-all duration-200 ${
+              </div>
+              <div 
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
                   displayMode === 'tabbed-cards' 
-                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
-                    : 'hover:bg-background/40'
+                    ? 'text-white bg-vault-warning border border-vault-warning' 
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
                 }`}
                 onClick={() => setDisplayMode('tabbed-cards')}
                 title="Tabbed-Cards Mode"
               >
                 🎯
-              </Button>
-              <Button
-                variant={displayMode === 'native-tokens' ? 'default' : 'outline'}
-                size="sm"
-                className={`w-10 h-10 p-0 transition-all duration-200 ${
+              </div>
+              <div 
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
                   displayMode === 'native-tokens' 
-                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
-                    : 'hover:bg-background/40'
+                    ? 'text-white bg-vault-warning border border-vault-warning' 
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
                 }`}
                 onClick={() => setDisplayMode('native-tokens')}
                 title="Native/Tokens Mode"
               >
                 ⚡
-              </Button>
-            </div>
-
-            {/* Chain Switcher - Icons Only */}
-            <div className="flex justify-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
-                title="Ethereum (Current)"
-              >
-                🔵
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
-                title="Binance Chain"
-              >
-                🟡
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
-                title="Base"
-              >
-                🔷
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
-                title="Solana"
-              >
-                🟣
-              </Button>
+              </div>
             </div>
           </div>
         )}
@@ -950,6 +922,16 @@ export const VaultCore = ({
           💡 Switch modes: Use buttons above or <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+1</kbd> for Tabs, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+2</kbd> for Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+3</kbd> for Tabbed-Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+4</kbd> for Native/Tokens
         </div>
       )}
+
+      {/* Alpha 0.22 Information */}
+      <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
+        🚀 <strong>Alpha 0.22</strong> - New Native/Tokens Display Mode & Multi-Chain Preparation
+      </div>
+
+      {/* Made by humanperzeus */}
+      <div className="text-xs text-muted-foreground text-center p-2">
+        made by <a href="https://x.com/humanperzeus" target="_blank" rel="noopener noreferrer" className="text-vault-primary hover:text-vault-primary/80 transition-colors">@humanperzeus</a>
+      </div>
     </div>
   );
 };
