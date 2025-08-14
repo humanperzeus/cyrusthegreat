@@ -60,7 +60,7 @@ export const WithdrawModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
             <ArrowUpDown className="w-6 h-6 text-vault-success" />
-            Withdraw ETH from Vault
+            Withdraw from Vault
           </DialogTitle>
         </DialogHeader>
         
@@ -145,7 +145,7 @@ export const WithdrawModal = ({
                   Withdrawing...
                 </>
               ) : (
-                'Withdraw ETH'
+                'Withdraw'
               )}
             </Button>
           </div>

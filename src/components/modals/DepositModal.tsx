@@ -136,7 +136,7 @@ export const DepositModal = ({
                 Depositing...
               </>
             ) : (
-              'Deposit ETH'
+              'Deposit'
             )}
           </Button>
         </div>
