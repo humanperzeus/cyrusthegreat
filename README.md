@@ -1,73 +1,178 @@
-# Welcome to your Lovable project
+# Cyrus The Great - Anonymous Web3 Vault
 
-## Project info
+**Live Demo**: [cyrusthegreat.dev](https://cyrusthegreat.dev)
 
-**URL**: https://lovable.dev/projects/12072656-fc3b-453c-86a8-a327ba06e6b7
+A sophisticated, privacy-focused Web3 vault that enables anonymous ETH and ERC20 token transfers across multiple blockchain networks.
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+### **Core Functionality**
+- **Anonymous ETH Operations**: Deposit, withdraw, and internal transfers
+- **Full ERC20 Support**: Dynamic token detection and management
+- **Multi-Chain Ready**: Ethereum, Binance Smart Chain, Base, and Solana (coming soon)
+- **Smart Fee System**: Dynamic $0.10 USD fees via Chainlink price feeds
 
-**Use Lovable**
+### **User Experience**
+- **Beautiful UI/UX**: Modern, responsive design with shadcn/ui components
+- **Multiple Display Modes**: Tabs, Cards, Tabbed-Cards, and Native/Tokens views
+- **Real-Time Updates**: Live balance updates and transaction confirmations
+- **One-Click Operations**: Uniswap-style approval and deposit flows
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/12072656-fc3b-453c-86a8-a327ba06e6b7) and start prompting.
+### **Security & Privacy**
+- **Method ID Privacy**: Obfuscated transaction methods
+- **Event Privacy**: Anonymous internal transfers
+- **Smart Contract Security**: Audited vault contracts with proper access controls
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🛠️ Technology Stack
 
-**Use your preferred IDE**
+- **Frontend**: React 18 + TypeScript + Vite
+- **UI Framework**: shadcn/ui + Tailwind CSS
+- **Web3 Integration**: Wagmi + Viem + Reown AppKit
+- **Blockchain**: Ethereum (Sepolia/Mainnet), BSC, Base
+- **Deployment**: Cloudflare Pages
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🚀 Quick Start
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### **Prerequisites**
+- Node.js 18+ (20+ recommended)
+- npm or yarn
+- MetaMask or compatible Web3 wallet
 
-Follow these steps:
+### **Installation**
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/cyrus-the-great.git
+cd cyrus-the-great
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your API keys and contract addresses
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### **Environment Variables**
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env` file in the root directory:
 
-**Use GitHub Codespaces**
+```bash
+# Cyrus The Great Vault Configuration
+VITE_CTGVAULT_ADDRESS_ETH=your_eth_contract_address
+VITE_CTGVAULT_ADDRESS_BSC=your_bsc_contract_address
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# API Keys
+VITE_REOWN_PROJECT_ID=your_reown_project_id
+VITE_ANKR_API_KEY=your_ankr_api_key
+VITE_ALCHEMY_API_KEY=your_alchemy_api_key
+VITE_ETHERSCAN_API_KEY=your_etherscan_api_key
+VITE_BSCSCAN_API_KEY=your_bscscan_api_key
+```
 
-## What technologies are used for this project?
+## 📱 Usage
 
-This project is built with:
+### **Display Modes**
+- **Tabs Mode**: Clean tabbed interface for tokens
+- **Cards Mode**: Visual card-based token display
+- **Tabbed-Cards Mode**: Hybrid approach with internal tabs
+- **Native/Tokens Mode**: Separate native currency and token management
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### **Keyboard Shortcuts**
+- `Ctrl+1`: Switch to Tabs mode
+- `Ctrl+2`: Switch to Cards mode
+- `Ctrl+3`: Switch to Tabbed-Cards mode
+- `Ctrl+4`: Switch to Native/Tokens mode
 
-## How can I deploy this project?
+### **Token Operations**
+1. **Deposit**: Approve and deposit tokens to vault
+2. **Withdraw**: Remove tokens from vault to wallet
+3. **Transfer**: Send tokens anonymously to other vault users
 
-Simply open [Lovable](https://lovable.dev/projects/12072656-fc3b-453c-86a8-a327ba06e6b7) and click on Share -> Publish.
+## 🔧 Development
 
-## Can I connect a custom domain to my Lovable project?
+### **Available Scripts**
 
-Yes, you can!
+```bash
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run preview      # Preview production build
+npm run lint         # Run ESLint
+npm run type-check   # Run TypeScript type checking
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### **Project Structure**
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+```
+src/
+├── components/          # React components
+│   ├── modals/         # Modal dialogs
+│   ├── ui/             # shadcn/ui components
+│   ├── VaultCore.tsx   # Main dashboard
+│   └── WalletConnector.tsx
+├── hooks/              # Custom React hooks
+├── config/             # Configuration files
+├── lib/                # Utility libraries
+└── pages/              # Page components
+```
+
+## 🌐 Deployment
+
+### **Cloudflare Pages (Recommended)**
+
+1. Connect your GitHub repository to Cloudflare Pages
+2. Set build command: `npm run build`
+3. Set output directory: `dist`
+4. Add environment variables
+5. Deploy and connect custom domain
+
+### **Manual Deployment**
+
+```bash
+# Build the project
+npm run build
+
+# Deploy to your preferred hosting service
+# The built files are in the `dist` directory
+```
+
+## 🔒 Security
+
+- **No API keys** are stored in the repository
+- **Environment variables** are properly excluded from git
+- **Smart contract interactions** use proper error handling
+- **User data** is never stored or transmitted
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Reown AppKit** for wallet integration
+- **shadcn/ui** for beautiful UI components
+- **Wagmi** for Web3 React hooks
+- **Viem** for low-level Ethereum interactions
+
+## 📞 Support
+
+- **Website**: [cyrusthegreat.dev](https://cyrusthegreat.dev)
+- **Twitter**: [@humanperzeus](https://x.com/humanperzeus)
+- **GitHub**: [Issues](https://github.com/yourusername/cyrus-the-great/issues)
+
+---
+
+**Made with ❤️ by [@humanperzeus](https://x.com/humanperzeus)**
+
+*Cyrus The Great - Empowering anonymous Web3 transactions*
