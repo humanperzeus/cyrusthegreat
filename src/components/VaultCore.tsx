@@ -928,11 +928,6 @@ export const VaultCore = ({
         🚀 <strong>Alpha 0.25</strong> - Cyrus The Great Rebranding & Multi-Chain Preparation
       </div>
 
-      {/* Alpha 0.22 Information */}
-      <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-        🚀 <strong>Alpha 0.22</strong> - New Native/Tokens Display Mode & Multi-Chain Preparation
-      </div>
-
       {/* Made by humanperzeus */}
       <div className="text-xs text-muted-foreground text-center p-2">
         made by <a href="https://x.com/humanperzeus" target="_blank" rel="noopener noreferrer" className="text-vault-primary hover:text-vault-primary/80 transition-colors">@humanperzeus</a>
