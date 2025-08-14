@@ -10,23 +10,34 @@ interface TransferModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onTransfer: (to: string, amount: string) => void;
-  isLoading: boolean;
-  isSimulating?: boolean; // Add simulation state
+  onTokenTransfer?: (to: string, amount: string) => void;
   vaultBalance: string;
   currentFee?: string;
+  isLoading: boolean;
+  isSimulating?: boolean;
   isTransactionConfirmed?: boolean;
+  // Token-specific props
+  isTokenTransfer?: boolean;
+  tokenSymbol?: string;
+  tokenAddress?: string;
+  tokenBalance?: string;
 }
 
-export const TransferModal = ({ 
-  open, 
-  onOpenChange, 
-  onTransfer, 
-  isLoading, 
-  isSimulating = false, // Add simulation state
+export function TransferModal({
+  open,
+  onOpenChange,
+  onTransfer,
+  onTokenTransfer,
   vaultBalance,
   currentFee = "0.00",
-  isTransactionConfirmed = false
-}: TransferModalProps) => {
+  isLoading,
+  isSimulating = false,
+  isTransactionConfirmed = false,
+  isTokenTransfer,
+  tokenSymbol,
+  tokenAddress,
+  tokenBalance
+}: TransferModalProps) {
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
 
@@ -53,7 +64,11 @@ export const TransferModal = ({
   };
 
   const setMaxAmount = () => {
-    setAmount(vaultBalance);
+    if (isTokenTransfer && tokenBalance) {
+      setAmount(tokenBalance);
+    } else {
+      setAmount(vaultBalance);
+    }
   };
 
   return (
@@ -62,7 +77,7 @@ export const TransferModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
             <Shield className="w-6 h-6 text-vault-secondary" />
-            Anonymous ETH Transfer
+            {isTokenTransfer ? `Anonymous ${tokenSymbol} Transfer` : 'Anonymous ETH Transfer'}
           </DialogTitle>
         </DialogHeader>
         
@@ -74,6 +89,26 @@ export const TransferModal = ({
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Token Contract Display for Token Transfers */}
+          {isTokenTransfer && tokenAddress && (
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Token Contract</Label>
+              <div className="flex items-center gap-2 p-2 bg-background/20 rounded border">
+                <span className="text-xs font-mono text-foreground">
+                  {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => window.open(`https://sepolia.etherscan.io/address/${tokenAddress}`, '_blank')}
+                >
+                  🔗
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="to" className="text-foreground">
               Recipient Address
@@ -91,7 +126,7 @@ export const TransferModal = ({
 
           <div className="space-y-2">
             <Label htmlFor="amount" className="text-foreground">
-              Amount (ETH)
+              Amount {isTokenTransfer ? `(${tokenSymbol})` : '(ETH)'}
             </Label>
             <div className="relative">
               <Input
@@ -116,7 +151,7 @@ export const TransferModal = ({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Available in vault: {vaultBalance} ETH
+              Available in vault: {isTokenTransfer ? `${tokenBalance} ${tokenSymbol}` : `${vaultBalance} ETH`}
             </p>
           </div>
 
@@ -126,7 +161,7 @@ export const TransferModal = ({
               <div className="flex justify-between text-sm">
                 <span className="text-amber-700 dark:text-amber-300">Recipient receives:</span>
                 <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
-                  {amount} ETH
+                  {amount} {isTokenTransfer ? tokenSymbol : 'ETH'}
                 </span>
               </div>
               <div className="flex justify-between text-sm text-amber-600">
@@ -139,7 +174,10 @@ export const TransferModal = ({
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              The recipient receives exactly {amount || "0"} ETH. The fee is paid separately from your wallet balance.
+              {isTokenTransfer 
+                ? `The recipient receives exactly ${amount || "0"} ${tokenSymbol}. The ETH fee is paid separately from your wallet balance.`
+                : `The recipient receives exactly ${amount || "0"} ETH. The fee is paid separately from your wallet balance.`
+              }
             </AlertDescription>
           </Alert>
 
@@ -154,7 +192,13 @@ export const TransferModal = ({
               Cancel
             </Button>
             <Button 
-              onClick={() => onTransfer(to, amount)} 
+              onClick={() => {
+                if (isTokenTransfer && onTokenTransfer) {
+                  onTokenTransfer(to, amount);
+                } else {
+                  onTransfer(to, amount);
+                }
+              }} 
               disabled={!to || !amount || isLoading || isSimulating}
               className="w-full"
             >
@@ -169,7 +213,7 @@ export const TransferModal = ({
                   Transferring...
                 </>
               ) : (
-                'Transfer ETH'
+                isTokenTransfer ? `Transfer ${tokenSymbol}` : 'Transfer ETH'
               )}
             </Button>
           </div>

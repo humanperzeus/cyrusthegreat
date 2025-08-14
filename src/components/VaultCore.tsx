@@ -20,6 +20,7 @@ interface VaultCoreProps {
   // Token operation handlers
   onTokenDeposit: (token: { symbol: string; address: string; balance: string }) => void;
   onTokenWithdraw: (token: { symbol: string; address: string; balance: string }) => void;
+  onTokenTransfer: (token: { symbol: string; address: string; balance: string }) => void;
   // Token display props
   walletTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
   vaultTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
@@ -44,7 +45,9 @@ export const VaultCore = ({
   // Token deposit handler
   onTokenDeposit,
   // Token withdraw handler
-  onTokenWithdraw
+  onTokenWithdraw,
+  // Token transfer handler
+  onTokenTransfer
 }: VaultCoreProps) => {
   const { isConnected } = useAccount();
   
@@ -213,7 +216,7 @@ export const VaultCore = ({
                         <Button
                           size="sm"
                           className="bg-vault-success hover:bg-vault-success/80 text-white"
-                          onClick={() => console.log(`Transfer ${token.symbol}`)}
+                          onClick={() => onTokenTransfer(token)}
                         >
                           Transfer
                         </Button>
@@ -356,7 +359,7 @@ export const VaultCore = ({
                   <Button
                     size="sm"
                     className="bg-vault-success hover:bg-vault-success/80 text-white"
-                    onClick={() => console.log(`Transfer ${token.symbol}`)}
+                    onClick={() => onTokenTransfer(token)}
                   >
                     Transfer
                   </Button>
@@ -484,7 +487,7 @@ export const VaultCore = ({
                       <Button
                         size="sm"
                         className="flex-1 bg-vault-success hover:bg-vault-success/80 text-white"
-                        onClick={() => console.log(`Transfer ${token.symbol}`)}
+                        onClick={() => onTokenTransfer(token)}
                       >
                         Transfer
                       </Button>

@@ -25,7 +25,8 @@ const Index = () => {
     refetchVaultTokens,
     depositToken,
     depositTokenWithDelay,
-    withdrawToken
+    withdrawToken,
+    transferInternalToken // Add transferInternalToken to the hook
   } = useVault();
 
   const [depositModalOpen, setDepositModalOpen] = useState(false);
@@ -46,6 +47,13 @@ const Index = () => {
     balance: string;
   } | null>(null);
 
+  // State for token transfer modal
+  const [tokenTransferInfo, setTokenTransferInfo] = useState<{
+    symbol: string;
+    address: string;
+    balance: string;
+  } | null>(null);
+
   // Handle token deposit click
   const handleTokenDeposit = (token: { symbol: string; address: string; balance: string }) => {
     setTokenDepositInfo(token);
@@ -60,9 +68,8 @@ const Index = () => {
 
   // Handle token deposit from modal
   const handleTokenDepositFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
-    // Convert amount to bigint and call the simple delay deposit function
-    const amountBigInt = parseEther(amount);
-    depositTokenWithDelay(tokenAddress, amountBigInt, tokenSymbol);
+    // Call the simple delay deposit function with string amount (function handles decimals internally)
+    depositTokenWithDelay(tokenAddress, amount, tokenSymbol);
   };
 
   // Handle token withdraw click
@@ -75,6 +82,23 @@ const Index = () => {
   const handleTokenWithdrawFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
     // Call the token withdraw function
     withdrawToken(tokenAddress, amount, tokenSymbol);
+  };
+
+  // Token transfer handler
+  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string }) => {
+    setTokenTransferInfo({
+      symbol: token.symbol,
+      address: token.address,
+      balance: token.balance
+    });
+    setTransferModalOpen(true);
+  };
+
+  // Token transfer from modal (for ETH compatibility - keeps existing logic)
+  const handleTokenTransferFromModal = (to: string, amount: string) => {
+    if (tokenTransferInfo) {
+      transferInternalToken(tokenTransferInfo.address, to, amount, tokenTransferInfo.symbol);
+    }
   };
 
   return (
@@ -96,6 +120,7 @@ const Index = () => {
         onTransfer={() => setTransferModalOpen(true)}
         onTokenDeposit={handleTokenDeposit}
         onTokenWithdraw={handleTokenWithdraw}
+        onTokenTransfer={handleTokenTransfer}
       />
 
       <DepositModal
@@ -140,6 +165,11 @@ const Index = () => {
         currentFee={currentFee}
         isTransactionConfirmed={isConfirmed}
         isSimulating={isSimulating}
+        onTokenTransfer={handleTokenTransferFromModal}
+        isTokenTransfer={!!tokenTransferInfo}
+        tokenSymbol={tokenTransferInfo?.symbol}
+        tokenAddress={tokenTransferInfo?.address}
+        tokenBalance={tokenTransferInfo?.balance}
       />
     </>
   );

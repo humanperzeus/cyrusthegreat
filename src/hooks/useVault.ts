@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
-import { formatEther, parseEther } from 'viem';
+import { formatEther, parseEther, parseUnits } from 'viem';
 import { getContract } from 'viem';
 import { WEB3_CONFIG, VAULT_ABI } from '@/config/web3';
 import { useToast } from '@/hooks/use-toast';
@@ -572,7 +572,7 @@ export const useVault = () => {
         const required = formatEther(totalValue);
         const available = formatEther(walletBalance.value);
         console.log('❌ Insufficient wallet balance for deposit:', { required, available });
-        toast({
+      toast({
           title: "Insufficient Balance",
           description: `You need ${required} ETH (${amount} + ${formatEther(feeInWei)} fee). You have ${available} ETH.`,
           variant: "destructive",
@@ -605,10 +605,10 @@ export const useVault = () => {
         account: address,
       });
 
-      toast({
+        toast({
         title: "Deposit Initiated",
         description: `Depositing ${amount} ETH + ${formatEther(feeInWei)} ETH fee to vault...`,
-      });
+        });
       
     } catch (error) {
       console.error('Deposit error:', error);
@@ -661,7 +661,7 @@ export const useVault = () => {
       if ((vaultBalanceData as bigint) < amountInWei) {
         const available = formatEther(vaultBalanceData as bigint);
         console.log('❌ Insufficient vault balance:', { available, requested: amount });
-        toast({
+      toast({
           title: "Insufficient Vault Balance",
           description: `You only have ${available} ETH in vault. Cannot withdraw ${amount} ETH.`,
           variant: "destructive",
@@ -774,7 +774,7 @@ export const useVault = () => {
       if ((vaultBalanceData as bigint) < amountInWei) {
         const available = formatEther(vaultBalanceData as bigint);
         console.log('❌ Insufficient vault balance for transfer:', { available, requested: amount });
-        toast({
+      toast({
           title: "Insufficient Vault Balance",
           description: `You only have ${available} ETH in vault. Cannot transfer ${amount} ETH.`,
           variant: "destructive",
@@ -893,7 +893,7 @@ export const useVault = () => {
   };
 
   // Extended deposit function for tokens
-  const depositToken = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+  const depositToken = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
     if (!address) {
       toast({
         title: "Error",
@@ -905,16 +905,37 @@ export const useVault = () => {
 
     try {
       setIsLoading(true);
-      console.log(`💰 Depositing ${amount} of ${tokenSymbol} to vault`);
+      console.log(`💰 Depositing ${amount} ${tokenSymbol} to vault`);
 
-      // First approve the token
-      const approved = await approveToken(tokenAddress, amount);
+      // Step 1: Get token decimals (like transferInternalToken)
+      const decimals = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": true,
+            "inputs": [],
+            "name": "decimals",
+            "outputs": [{"name": "", "type": "uint8"}],
+            "type": "function"
+          }
+        ],
+        functionName: 'decimals',
+      }) as number;
+
+      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+
+      // Step 2: Convert amount using proper decimals
+      const amountWei = parseUnits(amount, decimals);
+      console.log(`💰 Amount in wei:`, amountWei.toString());
+
+      // Step 3: First approve the token
+      const approved = await approveToken(tokenAddress, amountWei);
       if (!approved) {
         setIsLoading(false);
         return;
       }
 
-      // Then deposit to vault (this would call your vault contract)
+      // Step 4: Then deposit to vault (this would call your vault contract)
       console.log(`✅ Token approved, proceeding with deposit...`);
       
       // Get current fee for the transaction
@@ -930,7 +951,7 @@ export const useVault = () => {
         address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'depositToken',
-        args: [tokenAddress, amount],
+        args: [tokenAddress, amountWei],
         chain: sepolia,
         account: address,
         value: feeWei, // Send ETH fee along with token deposit
@@ -940,7 +961,7 @@ export const useVault = () => {
       
       toast({
         title: "Token Deposit Initiated",
-        description: `Depositing ${formatEther(amount)} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
+        description: `Depositing ${amount} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
       });
       
       // DON'T refresh here - let the transaction confirmation system handle it
@@ -962,7 +983,7 @@ export const useVault = () => {
   };
 
   // NEW: Smart token deposit with automatic allowance checking and auto-deposit
-  const depositTokenSmart = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+  const depositTokenSmart = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
     if (!address) {
       toast({
         title: "Error",
@@ -974,9 +995,30 @@ export const useVault = () => {
 
     try {
       setIsLoading(true);
-      console.log(`🧠 Smart deposit for ${formatEther(amount)} ${tokenSymbol}`);
+      console.log(`🧠 Smart deposit for ${amount} ${tokenSymbol}`);
 
-      // Step 1: Check current allowance
+      // Step 1: Get token decimals (like other functions)
+      const decimals = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": true,
+            "inputs": [],
+            "name": "decimals",
+            "outputs": [{"name": "", "type": "uint8"}],
+            "type": "function"
+          }
+        ],
+        functionName: 'decimals',
+      }) as number;
+
+      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+
+      // Step 2: Convert amount using proper decimals
+      const amountWei = parseUnits(amount, decimals);
+      console.log(`💰 Amount in wei:`, amountWei.toString());
+
+      // Step 3: Check current allowance
       console.log(`🔍 Checking current allowance for ${tokenSymbol}...`);
       const currentAllowance = await publicClient.readContract({
         address: tokenAddress as `0x${string}`,
@@ -998,17 +1040,17 @@ export const useVault = () => {
         args: [address, WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`],
       });
 
-      console.log(`📊 Current allowance: ${currentAllowance}, Required: ${amount}`);
+      console.log(`📊 Current allowance: ${currentAllowance}, Required: ${amountWei}`);
 
-      // Step 2: Check if approval is needed
-      if ((currentAllowance as bigint) >= amount) {
+      // Step 4: Check if approval is needed
+      if ((currentAllowance as bigint) >= amountWei) {
         console.log(`✅ Sufficient allowance (${currentAllowance}), proceeding directly to deposit`);
         // Skip approval, go straight to deposit
-        await executeTokenDeposit(tokenAddress, amount, tokenSymbol);
+        await executeTokenDeposit(tokenAddress, amountWei, tokenSymbol);
       } else {
-        console.log(`❌ Insufficient allowance (${currentAllowance} < ${amount}), approval needed`);
+        console.log(`❌ Insufficient allowance (${currentAllowance} < ${amountWei}), approval needed`);
         // Need approval first, then auto-deposit after confirmation
-        await executeTokenApprovalAndDeposit(tokenAddress, amount, tokenSymbol);
+        await executeTokenApprovalAndDeposit(tokenAddress, amountWei, tokenSymbol);
       }
 
     } catch (error) {
@@ -1023,7 +1065,7 @@ export const useVault = () => {
   };
 
   // SIMPLE APPROACH: 3-second delay between approval and deposit
-  const depositTokenWithDelay = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+  const depositTokenWithDelay = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
     if (!address) {
       toast({
         title: "Error",
@@ -1035,9 +1077,30 @@ export const useVault = () => {
 
     try {
       setIsLoading(true);
-      console.log(`⏱️ Deposit with 3-second delay for ${formatEther(amount)} ${tokenSymbol}`);
+      console.log(`⏱️ Deposit with 3-second delay for ${amount} ${tokenSymbol}`);
 
-      // Step 1: Send approval transaction
+      // Step 1: Get token decimals (like other functions)
+      const decimals = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": true,
+            "inputs": [],
+            "name": "decimals",
+            "outputs": [{"name": "", "type": "uint8"}],
+            "type": "function"
+          }
+        ],
+        functionName: 'decimals',
+      }) as number;
+
+      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+
+      // Step 2: Convert amount using proper decimals
+      const amountWei = parseUnits(amount, decimals);
+      console.log(`💰 Amount in wei:`, amountWei.toString());
+
+      // Step 3: Send approval transaction
       console.log(`🔐 Sending approval transaction for ${tokenSymbol}...`);
       
       await writeVaultContract({
@@ -1059,7 +1122,7 @@ export const useVault = () => {
         functionName: 'approve',
         args: [
           WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
-          amount
+          amountWei // Use proper amount
         ],
         chain: sepolia,
         account: address,
@@ -1069,10 +1132,10 @@ export const useVault = () => {
       
       toast({
         title: "Token Approval Sent",
-        description: `Approving ${formatEther(amount)} ${tokenSymbol} for vault...`,
+        description: `Approving ${amount} ${tokenSymbol} for vault...`,
       });
 
-      // Step 2: Wait 3 seconds then send deposit
+      // Step 4: Wait 3 seconds then send deposit
       setTimeout(async () => {
         try {
           console.log(`⏰ 3 seconds elapsed, sending deposit transaction for ${tokenSymbol}...`);
@@ -1090,7 +1153,7 @@ export const useVault = () => {
             address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
             abi: VAULT_ABI,
             functionName: 'depositToken',
-            args: [tokenAddress, amount],
+            args: [tokenAddress, amountWei], // Use proper amount
             chain: sepolia,
             account: address,
             value: feeWei, // Send ETH fee along with token deposit
@@ -1100,7 +1163,7 @@ export const useVault = () => {
           
           toast({
             title: "Token Deposit Sent",
-            description: `Depositing ${formatEther(amount)} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
+            description: `Depositing ${amount} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
           });
           
           // DON'T refresh here - let the transaction confirmation system handle it
@@ -1122,7 +1185,7 @@ export const useVault = () => {
     } catch (error) {
       console.error('❌ Approval transaction error:', error);
       toast({
-        title: "Approval Failed",
+        title: "Error",
         description: `Failed to approve ${tokenSymbol}`,
         variant: "destructive",
       });
@@ -1254,8 +1317,26 @@ export const useVault = () => {
       setIsLoading(true);
       console.log(`💰 Withdrawing ${amount} ${tokenSymbol} from vault`);
 
-      // Convert amount to bigint
-      const amountBigInt = parseEther(amount);
+      // Step 1: Get token decimals (like transferInternalToken)
+      const decimals = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": true,
+            "inputs": [],
+            "name": "decimals",
+            "outputs": [{"name": "", "type": "uint8"}],
+            "type": "function"
+          }
+        ],
+        functionName: 'decimals',
+      }) as number;
+
+      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+
+      // Step 2: Convert amount using proper decimals
+      const amountWei = parseUnits(amount, decimals);
+      console.log(`💰 Amount in wei:`, amountWei.toString());
       
       // Get current fee for the transaction
       if (!currentFee) {
@@ -1284,7 +1365,7 @@ export const useVault = () => {
         address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'withdrawToken',
-        args: [tokenAddress, amountBigInt],
+        args: [tokenAddress, amountWei],
         chain: sepolia,
         account: address,
         value: feeWei, // Send ETH fee along with token withdrawal
@@ -1305,6 +1386,108 @@ export const useVault = () => {
       toast({
         title: "Error",
         description: `Failed to withdraw ${tokenSymbol}`,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
+  // Token Transfer Function
+  const transferInternalToken = async (
+    tokenAddress: string,
+    to: string,
+    amount: string,
+    tokenSymbol: string
+  ) => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log(`🔄 Transferring ${amount} ${tokenSymbol} to ${to}`);
+
+      // Step 1: Get token decimals (like your working project)
+      const decimals = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            "constant": true,
+            "inputs": [],
+            "name": "decimals",
+            "outputs": [{"name": "", "type": "uint8"}],
+            "type": "function"
+          }
+        ],
+        functionName: 'decimals',
+      }) as number;
+
+      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+
+      // Step 2: Convert amount using proper decimals (like your working project)
+      const amountWei = parseUnits(amount, decimals);
+      console.log(`💰 Amount in wei:`, amountWei.toString());
+      
+      // Step 3: Get current fee
+      if (!currentFee) {
+        throw new Error('Current fee not available');
+      }
+      
+      const feeWei = currentFee as bigint;
+      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+
+      // Step 4: Check wallet ETH balance for fee
+      if (walletBalance && walletBalance.value < feeWei) {
+        const feeRequired = formatEther(feeWei);
+        const available = formatEther(walletBalance.value);
+        console.log('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the transfer fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 5: Execute token transfer (like your working project)
+      console.log(`🚀 Calling transferInternalToken with:`, {
+        tokenAddress,
+        to,
+        amountWei: amountWei.toString(),
+        feeWei: feeWei.toString()
+      });
+
+      const result = await writeVaultContract({
+        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'transferInternalToken',
+        args: [tokenAddress, to, amountWei],
+        chain: sepolia,
+        account: address,
+        value: feeWei,
+      });
+
+      console.log(`📝 Token transfer transaction result:`, result);
+      
+      toast({
+        title: "Token Transfer Initiated",
+        description: `Transferring ${amount} ${tokenSymbol} to ${to.slice(0, 6)}...${to.slice(-4)} + ${formatEther(feeWei)} ETH fee...`,
+      });
+      
+      // DON'T refresh here - let the transaction confirmation system handle it
+      // DON'T set isLoading(false) here - let the transaction confirmation system handle it
+      
+    } catch (error) {
+      console.error('❌ Token transfer error:', error);
+      toast({
+        title: "Transfer Failed",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
         variant: "destructive",
       });
       setIsLoading(false);
@@ -1402,6 +1585,7 @@ export const useVault = () => {
     depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
     depositTokenWithDelay, // SIMPLE: 3-second delay approach
     withdrawToken, // NEW: Token withdrawal function with approval
+    transferInternalToken, // NEW: Token transfer function
     // Transaction status for UI feedback
     isPending: isWritePending,
     isConfirming,
