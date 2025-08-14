@@ -68,7 +68,7 @@ export const useVault = () => {
     },
   });
 
-  // Get vault tokens for the connected user
+  // Get vault tokens for the connected user - using signed call since it's private
   const { data: vaultTokensData, refetch: refetchVaultTokens } = useReadContract({
     address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
     abi: VAULT_ABI,
@@ -82,6 +82,116 @@ export const useVault = () => {
     },
   });
 
+  // Get the public client and wallet client at the top level
+  const publicClient = usePublicClient();
+  const walletClient = useWalletClient();
+
+  // NEW: Signed call for vault tokens since getMyVaultedTokens is private
+  const fetchVaultTokensSigned = async () => {
+    if (!address || !isConnected) return;
+    
+    try {
+      console.log('🔐 Fetching vault tokens with signed call...');
+      
+      if (!publicClient || !walletClient) {
+        console.error('❌ Public client or wallet client not available');
+        return;
+      }
+      
+      // Make a direct call to the private function
+      const result = await publicClient.readContract({
+        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'getMyVaultedTokens',
+        args: [],
+        account: address,
+      });
+      
+      console.log('✅ Vault tokens fetched with signed call:', result);
+      
+      // Process the result directly
+      if (result && Array.isArray(result)) {
+        const [tokenAddresses, tokenBalances] = result;
+        console.log('🔍 Raw vault tokens result:', { tokenAddresses, tokenBalances });
+        
+        // Process tokens with real metadata
+        const processVaultTokens = async () => {
+          console.log('🔄 Starting vault token processing from signed call...');
+          const processedTokens = [];
+          
+          for (let i = 0; i < tokenAddresses.length; i++) {
+            const tokenAddr = tokenAddresses[i];
+            const tokenBalance = tokenBalances[i];
+            
+            console.log(`🔄 Processing token ${i}:`, { address: tokenAddr, balance: tokenBalance });
+            
+            try {
+              // Fetch token metadata (symbol, decimals) from the token contract
+              const metadataResponse = await fetch(`https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 1,
+                  method: 'alchemy_getTokenMetadata',
+                  params: [tokenAddr]
+                })
+              });
+
+              if (metadataResponse.ok) {
+                const metadata = await metadataResponse.json();
+                console.log(`📡 Token metadata for ${tokenAddr}:`, metadata);
+                
+                if (metadata.result) {
+                  const processedToken = {
+                    address: tokenAddr,
+                    symbol: metadata.result.symbol || 'UNKNOWN',
+                    balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+                    decimals: metadata.result.decimals || 18
+                  };
+                  
+                  processedTokens.push(processedToken);
+                  console.log(`✅ Token processed:`, processedToken);
+                }
+              } else {
+                // Fallback if metadata fetch fails
+                const fallbackToken = {
+                  address: tokenAddr,
+                  symbol: 'UNKNOWN',
+                  balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+                  decimals: 18
+                };
+                processedTokens.push(fallbackToken);
+                console.log(`⚠️ Token fallback:`, fallbackToken);
+              }
+            } catch (error) {
+              console.error(`❌ Error fetching metadata for token ${tokenAddr}:`, error);
+              // Fallback on error
+              const errorToken = {
+                address: tokenAddr,
+                symbol: 'UNKNOWN',
+                balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+                decimals: 18
+              };
+              processedTokens.push(errorToken);
+              console.log(`❌ Token error fallback:`, errorToken);
+            }
+          }
+          
+          console.log('✅ Final processed vault tokens from signed call:', processedTokens);
+          setVaultTokens(processedTokens);
+        };
+        
+        processVaultTokens();
+      }
+      
+    } catch (error) {
+      console.error('❌ Error fetching vault tokens with signed call:', error);
+    }
+  };
+
   // Contract write hooks for real transactions
   const { writeContract: writeVaultContract, data: hash, isPending: isWritePending } = useWriteContract();
   
@@ -92,6 +202,7 @@ export const useVault = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [hasRefreshedAfterConfirmation, setHasRefreshedAfterConfirmation] = useState(false);
   
   // Token detection state
   const [walletTokens, setWalletTokens] = useState<Array<{address: string, symbol: string, balance: string, decimals: number}>>([]);
@@ -255,20 +366,32 @@ export const useVault = () => {
 
   // Process vault tokens data from contract
   React.useEffect(() => {
+    console.log('🔍 Vault tokens effect triggered with data:', vaultTokensData);
+    console.log('🔍 Vault tokens data type:', typeof vaultTokensData);
+    console.log('🔍 Vault tokens data is array:', Array.isArray(vaultTokensData));
+    
     if (vaultTokensData && Array.isArray(vaultTokensData)) {
       console.log('🔍 Processing vault tokens data:', vaultTokensData);
       
       // The contract returns [address[] tokens, uint256[] balances]
       const [tokenAddresses, tokenBalances] = vaultTokensData;
       
+      console.log('🔍 Token addresses:', tokenAddresses);
+      console.log('🔍 Token balances:', tokenBalances);
+      console.log('🔍 Addresses is array:', Array.isArray(tokenAddresses));
+      console.log('🔍 Balances is array:', Array.isArray(tokenBalances));
+      
       if (Array.isArray(tokenAddresses) && Array.isArray(tokenBalances)) {
         // Process tokens with real metadata
         const processVaultTokens = async () => {
+          console.log('🔄 Starting vault token processing...');
           const processedTokens = [];
           
           for (let i = 0; i < tokenAddresses.length; i++) {
             const tokenAddr = tokenAddresses[i];
             const tokenBalance = tokenBalances[i];
+            
+            console.log(`🔄 Processing token ${i}:`, { address: tokenAddr, balance: tokenBalance });
             
             try {
               // Fetch token metadata (symbol, decimals) from the token contract
@@ -290,39 +413,49 @@ export const useVault = () => {
                 console.log(`📡 Token metadata for ${tokenAddr}:`, metadata);
                 
                 if (metadata.result) {
-                  processedTokens.push({
+                  const processedToken = {
                     address: tokenAddr,
                     symbol: metadata.result.symbol || 'UNKNOWN',
                     balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
                     decimals: metadata.result.decimals || 18
-                  });
+                  };
+                  
+                  processedTokens.push(processedToken);
+                  console.log(`✅ Token processed:`, processedToken);
                 }
               } else {
                 // Fallback if metadata fetch fails
-                processedTokens.push({
+                const fallbackToken = {
                   address: tokenAddr,
                   symbol: 'UNKNOWN',
                   balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
                   decimals: 18
-                });
+                };
+                processedTokens.push(fallbackToken);
+                console.log(`⚠️ Token fallback:`, fallbackToken);
               }
             } catch (error) {
               console.error(`❌ Error fetching metadata for token ${tokenAddr}:`, error);
               // Fallback on error
-              processedTokens.push({
+              const errorToken = {
                 address: tokenAddr,
                 symbol: 'UNKNOWN',
                 balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
                 decimals: 18
-              });
+              };
+              processedTokens.push(errorToken);
+              console.log(`❌ Token error fallback:`, errorToken);
             }
           }
           
+          console.log('✅ Final processed vault tokens:', processedTokens);
           setVaultTokens(processedTokens);
-          console.log('✅ Vault tokens processed with real metadata:', processedTokens);
         };
         
         processVaultTokens();
+      } else {
+        console.log('❌ Vault tokens data structure invalid:', { tokenAddresses, tokenBalances });
+        setVaultTokens([]);
       }
     } else {
       // No vault tokens data available
@@ -335,6 +468,7 @@ export const useVault = () => {
   React.useEffect(() => {
     if (address && isConnected) {
       fetchWalletTokens();
+      fetchVaultTokensSigned(); // Also fetch vault tokens on connect
     }
   }, [address, isConnected]);
 
@@ -354,12 +488,30 @@ export const useVault = () => {
       }
     };
 
+    // Add vault tokens test function
+    (window as any).testVaultTokens = () => {
+      console.log('🧪 Manual vault tokens test...');
+      console.log('📍 Current address:', address);
+      console.log('🏦 Vault contract address:', WEB3_CONFIG.CROSSCHAINBANK_ADDRESS);
+      console.log('📊 Current vault tokens data:', vaultTokensData);
+      console.log('🪙 Current vault tokens state:', vaultTokens);
+      
+      if (address) {
+        console.log('🔄 Manually calling fetchVaultTokensSigned...');
+        fetchVaultTokensSigned();
+      } else {
+        console.log('❌ No wallet address available');
+      }
+    };
+
     console.log('🧪 Token fetching test function available: window.testTokenFetching()');
+    console.log('🧪 Vault tokens test function available: window.testVaultTokens()');
 
     return () => {
       delete (window as any).testTokenFetching;
+      delete (window as any).testVaultTokens;
     };
-  }, [address]);
+  }, [address, vaultTokensData, vaultTokens]);
 
   // Real ETH deposit function
   const depositETH = async (amount: string) => {
@@ -745,25 +897,39 @@ export const useVault = () => {
       }
 
       // Then deposit to vault (this would call your vault contract)
-      // For now, we'll simulate the deposit
       console.log(`✅ Token approved, proceeding with deposit...`);
       
-      // TODO: Implement actual vault deposit call
-      // const hash = await writeVaultContract({
-      //   address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
-      //   abi: VAULT_ABI,
-      //   functionName: 'depositToken',
-      //   args: [tokenAddress, amount],
-      // });
+      // Get current fee for the transaction
+      if (!currentFee) {
+        throw new Error('Current fee not available');
+      }
       
-      toast({
-        title: "Success",
-        description: `${tokenSymbol} deposit initiated!`,
+      const feeWei = currentFee as bigint;
+      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+      
+      // Call the actual vault deposit function WITH ETH fee
+      await writeVaultContract({
+        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'depositToken',
+        args: [tokenAddress, amount],
+        chain: sepolia,
+        account: address,
+        value: feeWei, // Send ETH fee along with token deposit
       });
       
-      // Refresh token balances
-      await fetchWalletTokens();
-      // Note: refetchVaultTokens is already available from the hook
+      console.log(`📝 Token deposit transaction initiated with ETH fee`);
+      
+      toast({
+        title: "Token Deposit Initiated",
+        description: `Depositing ${formatEther(amount)} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
+      });
+      
+      // DON'T refresh here - let the transaction confirmation system handle it
+      // This matches the ETH deposit flow exactly
+      
+      // DON'T set isLoading(false) here - let the transaction confirmation system handle it
+      // This matches the ETH deposit flow exactly
       
     } catch (error) {
       console.error('❌ Token deposit error:', error);
@@ -772,15 +938,18 @@ export const useVault = () => {
         description: `Failed to deposit ${tokenSymbol}`,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Only reset loading on error
     }
+    // Remove the finally block - let transaction confirmation handle loading state
   };
 
   // Handle transaction state changes
   React.useEffect(() => {
-    if (isConfirmed) {
+    if (isConfirmed && !hasRefreshedAfterConfirmation) {
       console.log('🔄 Transaction confirmed! Starting smart refetch...');
+      
+      // Set flag to prevent multiple refreshes
+      setHasRefreshedAfterConfirmation(true);
       
       toast({
         title: "Transaction Confirmed!",
@@ -799,9 +968,17 @@ export const useVault = () => {
       console.log('💸 Refetching current fee...');
       refetchFee();
       
+      // NEW: Refresh token balances after transaction confirmation
+      console.log('🪙 Refreshing token balances after confirmation...');
+      console.log('🪙 Calling fetchWalletTokens...');
+      fetchWalletTokens();
+      console.log('🪙 Calling fetchVaultTokensSigned...');
+      fetchVaultTokensSigned();
+      console.log('🪙 Token refresh calls completed');
+      
       console.log('✅ Smart refetch completed!');
     }
-  }, [isConfirmed, toast, refetchVaultBalance, refetchWalletBalance, refetchFee]);
+  }, [isConfirmed, hasRefreshedAfterConfirmation, toast, refetchVaultBalance, refetchWalletBalance, refetchFee]);
 
   // FIX: Reset loading state when transaction is cancelled or fails
   React.useEffect(() => {
@@ -810,6 +987,13 @@ export const useVault = () => {
       setIsLoading(false);
     }
   }, [isWritePending, isLoading]);
+
+  // Reset refresh flag when new transaction starts
+  React.useEffect(() => {
+    if (isWritePending) {
+      setHasRefreshedAfterConfirmation(false);
+    }
+  }, [isWritePending]);
 
   // Combined loading state
   const isTransactionLoading = isLoading || isWritePending || isConfirming;

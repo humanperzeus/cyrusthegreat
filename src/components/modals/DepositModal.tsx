@@ -10,23 +10,34 @@ interface DepositModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeposit: (amount: string) => void;
+  onTokenDeposit?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
   isLoading: boolean;
-  isSimulating?: boolean; // Add simulation state
+  isSimulating?: boolean;
   walletBalance: string;
   currentFee?: string;
-  isTransactionConfirmed?: boolean; // Add this prop
+  isTransactionConfirmed?: boolean;
+  // Token-specific props
+  isTokenDeposit?: boolean;
+  tokenSymbol?: string;
+  tokenAddress?: string;
+  tokenBalance?: string;
 }
 
-export const DepositModal = ({ 
-  open, 
-  onOpenChange, 
-  onDeposit, 
-  isLoading, 
-  isSimulating = false, // Add simulation state
+export function DepositModal({
+  open,
+  onOpenChange,
+  onDeposit,
+  onTokenDeposit,
+  isLoading,
+  isSimulating = false,
   walletBalance,
   currentFee = "0.00",
-  isTransactionConfirmed = false
-}: DepositModalProps) => {
+  isTransactionConfirmed = false,
+  isTokenDeposit,
+  tokenSymbol,
+  tokenAddress,
+  tokenBalance
+}: DepositModalProps) {
   const [amount, setAmount] = useState("");
 
   // Auto-close modal after successful transaction
@@ -59,12 +70,36 @@ export const DepositModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Deposit ETH to Vault</DialogTitle>
+          <DialogTitle>
+            {isTokenDeposit ? `Deposit ${tokenSymbol} to Vault` : 'Deposit ETH to Vault'}
+          </DialogTitle>
         </DialogHeader>
         
         <div className="grid gap-4 py-4">
+          {/* Token Contract Display for Token Deposits */}
+          {isTokenDeposit && tokenAddress && (
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Token Contract</Label>
+              <div className="flex items-center gap-2 p-2 bg-background/20 rounded border">
+                <span className="text-xs font-mono text-foreground">
+                  {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => window.open(`https://sepolia.etherscan.io/address/${tokenAddress}`, '_blank')}
+                >
+                  🔗
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-2">
-            <Label htmlFor="amount">Amount (ETH)</Label>
+            <Label htmlFor="amount">
+              Amount {isTokenDeposit ? `(${tokenSymbol})` : '(ETH)'}
+            </Label>
             <div className="flex gap-2">
               <Input
                 id="amount"
@@ -74,12 +109,12 @@ export const DepositModal = ({
                 onChange={(e) => setAmount(e.target.value)}
                 step="0.001"
                 min="0"
-                max={walletBalance}
+                max={isTokenDeposit ? tokenBalance : walletBalance}
                 disabled={isLoading}
               />
               <Button 
                 variant="outline" 
-                onClick={handleMaxDeposit}
+                onClick={isTokenDeposit ? () => setAmount(tokenBalance || "0") : handleMaxDeposit}
                 disabled={isLoading}
               >
                 Max
@@ -90,25 +125,39 @@ export const DepositModal = ({
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Wallet Balance:</span>
-              <span className="font-mono">{walletBalance} ETH</span>
+              <span className="font-mono">
+                {isTokenDeposit ? `${tokenBalance} ${tokenSymbol}` : `${walletBalance} ETH`}
+              </span>
             </div>
             
             <div className="flex justify-between text-sm text-amber-600">
               <span>Deposit Amount:</span>
-              <span className="font-mono">{amount || "0"} ETH</span>
+              <span className="font-mono">
+                {amount || "0"} {isTokenDeposit ? tokenSymbol : 'ETH'}
+              </span>
             </div>
             
+            {/* ETH Fee - Always shown for both ETH and token deposits */}
             <div className="flex justify-between text-sm text-amber-600">
-              <span>Fee:</span>
+              <span>ETH Fee:</span>
               <span className="font-mono">{currentFee} ETH</span>
             </div>
             
-            {amount && !isNaN(Number(amount)) && (
+            {/* Total calculation - Different for ETH vs Token deposits */}
+            {!isTokenDeposit && amount && !isNaN(Number(amount)) && (
               <div className="flex justify-between text-sm text-green-600 font-semibold">
-                <span>Total to Send:</span>
+                <span>Total ETH to Send:</span>
                 <span className="font-mono">
                   {(Number(amount) + Number(currentFee)).toFixed(6)} ETH
                 </span>
+              </div>
+            )}
+            
+            {/* For token deposits, show ETH fee requirement */}
+            {isTokenDeposit && (
+              <div className="flex justify-between text-sm text-green-600 font-semibold">
+                <span>ETH Fee Required:</span>
+                <span className="font-mono">{currentFee} ETH</span>
               </div>
             )}
           </div>
@@ -116,13 +165,22 @@ export const DepositModal = ({
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              The fee is sent on top of your deposit. You'll receive exactly {amount || "0"} ETH in the vault.
+              {isTokenDeposit 
+                ? `You'll receive exactly ${amount || "0"} ${tokenSymbol} in the vault. ETH fee (${currentFee} ETH) is paid separately.`
+                : `The fee is sent on top of your deposit. You'll receive exactly ${amount || "0"} ETH in the vault.`
+              }
             </AlertDescription>
           </Alert>
 
           <Button 
-            onClick={() => onDeposit(amount)} 
-            disabled={!amount || isLoading || isSimulating}
+            onClick={() => {
+              if (isTokenDeposit && tokenAddress && tokenSymbol && onTokenDeposit) {
+                onTokenDeposit(tokenAddress, amount, tokenSymbol);
+              } else {
+                onDeposit(amount);
+              }
+            }}
+            disabled={isLoading || !amount || Number(amount) <= 0}
             className="w-full"
           >
             {isSimulating ? (
@@ -136,7 +194,7 @@ export const DepositModal = ({
                 Depositing...
               </>
             ) : (
-              'Deposit ETH'
+              isTokenDeposit ? `Deposit ${tokenSymbol}` : 'Deposit ETH'
             )}
           </Button>
         </div>

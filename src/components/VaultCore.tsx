@@ -10,6 +10,10 @@ interface VaultCoreProps {
   walletBalance: string;
   vaultBalance: string;
   currentFee: string;
+  isLoading: boolean;
+  isSimulating?: boolean;
+  isTransactionConfirmed?: boolean;
+  // ETH operation handlers
   onDeposit: () => void;
   onWithdraw: () => void;
   onTransfer: () => void;
@@ -19,6 +23,8 @@ interface VaultCoreProps {
   isLoadingTokens: boolean;
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
+  // Token deposit handler
+  onTokenDeposit: (token: { symbol: string; address: string; balance: string }) => void;
 }
 
 export const VaultCore = ({ 
@@ -33,12 +39,27 @@ export const VaultCore = ({
   vaultTokens,
   isLoadingTokens,
   refetchWalletTokens,
-  refetchVaultTokens
+  refetchVaultTokens,
+  // Token deposit handler
+  onTokenDeposit
 }: VaultCoreProps) => {
   const { isConnected } = useAccount();
   
   // Display mode state
   const [displayMode, setDisplayMode] = useState<'tabs' | 'cards' | 'tabbed-cards'>('tabs');
+
+  // State for token deposit modal
+  const [tokenDepositInfo, setTokenDepositInfo] = useState<{
+    symbol: string;
+    address: string;
+    balance: string;
+  } | null>(null);
+
+  // Handle token deposit click
+  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string }) => {
+    // Pass token info to parent component for modal handling
+    onTokenDeposit(token);
+  };
 
   // Console switcher for testing different display modes
   useEffect(() => {
@@ -111,7 +132,7 @@ export const VaultCore = ({
                       <Button
                         size="sm"
                         className="bg-vault-warning hover:bg-vault-warning/80 text-white"
-                        onClick={() => console.log(`Deposit ${token.symbol}`)}
+                        onClick={() => handleTokenDeposit(token)}
                       >
                         Deposit
                       </Button>
@@ -267,7 +288,7 @@ export const VaultCore = ({
                   <Button
                     size="sm"
                     className="bg-vault-warning hover:bg-vault-warning/80 text-white"
-                    onClick={() => console.log(`Deposit ${token.symbol}`)}
+                    onClick={() => handleTokenDeposit(token)}
                   >
                     Deposit
                   </Button>
@@ -392,7 +413,7 @@ export const VaultCore = ({
                     <Button
                       size="sm"
                       className="w-full bg-vault-warning hover:bg-vault-warning/80 text-white"
-                      onClick={() => console.log(`Deposit ${token.symbol}`)}
+                      onClick={() => handleTokenDeposit(token)}
                     >
                       Deposit
                     </Button>
