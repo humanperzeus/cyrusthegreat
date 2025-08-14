@@ -1,0 +1,6 @@
+name = "cyrus-the-great-vault"
+main = "src/worker.js"
+compatibility_date = "2024-08-15"
+
+[site]
+bucket = "./dist"
