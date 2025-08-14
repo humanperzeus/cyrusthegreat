@@ -70,8 +70,8 @@ export const VaultCore = ({
 
   // CARDS Mode Component
   const CardsMode = () => (
-    <div className="w-full max-w-4xl">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="w-full">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Wallet Tokens Section */}
         <div className="space-y-4">
           <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
@@ -217,7 +217,7 @@ export const VaultCore = ({
 
   // TABS Mode Component
   const TabsMode = () => (
-    <div className="w-full max-w-md">
+    <div className="w-full">
       <Tabs defaultValue="wallet" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="wallet">Wallet Tokens ({walletTokens.length})</TabsTrigger>
@@ -343,7 +343,7 @@ export const VaultCore = ({
 
   // TABBED-CARDS Mode Component (Combines cards with tabs)
   const TabbedCardsMode = () => (
-    <div className="w-full max-w-4xl">
+    <div className="w-full">
       <Tabs defaultValue="wallet" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="wallet">Wallet Tokens ({walletTokens.length})</TabsTrigger>
@@ -531,8 +531,8 @@ export const VaultCore = ({
               </div>
             </div>
 
-            {/* Balance Display */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md">
+            {/* ETH Balances */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
               <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
                 <div className="text-sm text-muted-foreground">Wallet Balance</div>
                 <div className="text-lg sm:text-xl font-bold text-vault-warning break-all">
@@ -547,14 +547,61 @@ export const VaultCore = ({
               </div>
             </div>
 
+            {/* Display Mode Switcher */}
+            <div className="w-full">
+              <div className="text-center space-y-3 p-4 bg-background/20 rounded-lg border border-border/30">
+                <div className="text-sm text-muted-foreground">Display Mode</div>
+                <div className="flex justify-center space-x-2">
+                  <Button
+                    variant={displayMode === 'tabs' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`transition-all duration-200 ${
+                      displayMode === 'tabs' 
+                        ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
+                        : 'hover:bg-background/40'
+                    }`}
+                    onClick={() => setDisplayMode('tabs')}
+                  >
+                    📋 Tabs
+                  </Button>
+                  <Button
+                    variant={displayMode === 'cards' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`transition-all duration-200 ${
+                      displayMode === 'cards' 
+                        ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
+                        : 'hover:bg-background/40'
+                    }`}
+                    onClick={() => setDisplayMode('cards')}
+                  >
+                    🎴 Cards
+                  </Button>
+                  <Button
+                    variant={displayMode === 'tabbed-cards' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`transition-all duration-200 ${
+                      displayMode === 'tabbed-cards' 
+                        ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
+                        : 'hover:bg-background/40'
+                    }`}
+                    onClick={() => setDisplayMode('tabbed-cards')}
+                  >
+                    🎯 Tabbed-Cards
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             {/* Dynamic Token Display Section */}
-            {isConnected && (
-              <>
-                {displayMode === 'tabs' && <TabsMode />}
-                {displayMode === 'cards' && <CardsMode />}
-                {displayMode === 'tabbed-cards' && <TabbedCardsMode />}
-              </>
-            )}
+            <div className="w-full max-w-4xl">
+              {isConnected && (
+                <>
+                  {displayMode === 'tabs' && <TabsMode />}
+                  {displayMode === 'cards' && <CardsMode />}
+                  {displayMode === 'tabbed-cards' && <TabbedCardsMode />}
+                </>
+              )}
+            </div>
 
             {/* Fee Info */}
             <div className="text-center px-4">
@@ -633,7 +680,7 @@ export const VaultCore = ({
 
       {/* Console Instructions */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-        💡 Console Switcher: <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+1</kbd> for Tabs, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+2</kbd> for Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+3</kbd> for Tabbed-Cards
+        💡 Switch modes: Use buttons above or <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+1</kbd> for Tabs, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+2</kbd> for Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+3</kbd> for Tabbed-Cards
       </div>
     </div>
   );

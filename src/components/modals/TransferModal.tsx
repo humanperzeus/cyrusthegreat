@@ -62,7 +62,7 @@ export const TransferModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
             <Shield className="w-6 h-6 text-vault-secondary" />
-            Anonymous Transfer
+            Anonymous ETH Transfer
           </DialogTitle>
         </DialogHeader>
         
@@ -169,7 +169,7 @@ export const TransferModal = ({
                   Transferring...
                 </>
               ) : (
-                'Transfer'
+                'Transfer ETH'
               )}
             </Button>
           </div>
