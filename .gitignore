@@ -26,3 +26,11 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Test files (don't deploy to production)
+tests/
+test-*.js
+
+# AI and development files (don't deploy to production)
+AI_PROJECT_GUIDE.md
+*.md

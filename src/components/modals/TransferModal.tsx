@@ -11,16 +11,18 @@ interface TransferModalProps {
   onOpenChange: (open: boolean) => void;
   onTransfer: (to: string, amount: string) => void;
   isLoading: boolean;
+  isSimulating?: boolean; // Add simulation state
   vaultBalance: string;
-  currentFee?: string; // Add current fee prop
-  isTransactionConfirmed?: boolean; // Add transaction confirmation prop
+  currentFee?: string;
+  isTransactionConfirmed?: boolean;
 }
 
 export const TransferModal = ({ 
   open, 
   onOpenChange, 
   onTransfer, 
-  isLoading,
+  isLoading, 
+  isSimulating = false, // Add simulation state
   vaultBalance,
   currentFee = "0.00",
   isTransactionConfirmed = false
@@ -151,21 +153,23 @@ export const TransferModal = ({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="flex-1 bg-vault-secondary hover:bg-vault-secondary/90 text-primary-foreground"
-              disabled={!to || !amount || isLoading || parseFloat(amount) <= 0}
+            <Button 
+              onClick={() => onTransfer(to, amount)} 
+              disabled={!to || !amount || isLoading || isSimulating}
+              className="w-full"
             >
-              {isLoading ? (
+              {isSimulating ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isTransactionConfirmed ? "Transaction Confirmed!" : "Transferring..."}
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Checking...
+                </>
+              ) : isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Transferring...
                 </>
               ) : (
-                <>
-                  <ArrowUpDown className="w-4 h-4 mr-2" />
-                  Transfer {amount || "0"} ETH
-                </>
+                'Transfer'
               )}
             </Button>
           </div>

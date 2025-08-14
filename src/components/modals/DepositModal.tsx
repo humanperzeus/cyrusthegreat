@@ -11,6 +11,7 @@ interface DepositModalProps {
   onOpenChange: (open: boolean) => void;
   onDeposit: (amount: string) => void;
   isLoading: boolean;
+  isSimulating?: boolean; // Add simulation state
   walletBalance: string;
   currentFee?: string;
   isTransactionConfirmed?: boolean; // Add this prop
@@ -21,6 +22,7 @@ export const DepositModal = ({
   onOpenChange, 
   onDeposit, 
   isLoading, 
+  isSimulating = false, // Add simulation state
   walletBalance,
   currentFee = "0.00",
   isTransactionConfirmed = false
@@ -119,17 +121,22 @@ export const DepositModal = ({
           </Alert>
 
           <Button 
-            onClick={handleDeposit} 
-            disabled={!amount || isNaN(Number(amount)) || Number(amount) <= 0 || isLoading}
+            onClick={() => onDeposit(amount)} 
+            disabled={!amount || isLoading || isSimulating}
             className="w-full"
           >
-            {isLoading ? (
+            {isSimulating ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {isTransactionConfirmed ? "Transaction Confirmed!" : "Depositing..."}
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Checking...
+              </>
+            ) : isLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Depositing...
               </>
             ) : (
-              `Deposit ${amount || "0"} ETH`
+              'Deposit'
             )}
           </Button>
         </div>

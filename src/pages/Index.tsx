@@ -9,12 +9,13 @@ const Index = () => {
   const { 
     walletBalance, 
     vaultBalance, 
-    currentFee,
+    currentFee, 
     isLoading, 
     depositETH, 
     withdrawETH, 
     transferETH,
     isConnected,
+    isSimulating, // Add simulation state
     isConfirmed // Add transaction confirmation state
   } = useVault();
 
@@ -41,6 +42,7 @@ const Index = () => {
         walletBalance={walletBalance}
         currentFee={currentFee}
         isTransactionConfirmed={isConfirmed}
+        isSimulating={isSimulating}
       />
 
       <WithdrawModal
@@ -51,6 +53,7 @@ const Index = () => {
         vaultBalance={vaultBalance}
         currentFee={currentFee}
         isTransactionConfirmed={isConfirmed}
+        isSimulating={isSimulating}
       />
 
       <TransferModal
@@ -61,6 +64,7 @@ const Index = () => {
         vaultBalance={vaultBalance}
         currentFee={currentFee}
         isTransactionConfirmed={isConfirmed}
+        isSimulating={isSimulating}
       />
     </>
   );

@@ -66,6 +66,19 @@ export const VaultCore = ({
             <div className="text-center space-y-2">
               <h2 className="text-2xl font-bold text-foreground">Secure Vault</h2>
               <p className="text-sm text-muted-foreground">Anonymous • Secure • Decentralized</p>
+              
+              {/* Contract Link */}
+              <div className="pt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-foreground hover:bg-background/20"
+                  onClick={() => window.open(`https://sepolia.etherscan.io/address/0x3d6e43cbf157110015edF062173BbeBF78De61B4`, '_blank')}
+                >
+                  <Shield className="w-3 h-3 mr-1" />
+                  View Contract on Etherscan
+                </Button>
+              </div>
             </div>
 
             {/* Balance Display */}

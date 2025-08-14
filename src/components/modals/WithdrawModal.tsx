@@ -11,16 +11,18 @@ interface WithdrawModalProps {
   onOpenChange: (open: boolean) => void;
   onWithdraw: (amount: string) => void;
   isLoading: boolean;
+  isSimulating?: boolean; // Add simulation state
   vaultBalance: string;
-  currentFee?: string; // Add current fee prop
-  isTransactionConfirmed?: boolean; // Add transaction confirmation prop
+  currentFee?: string;
+  isTransactionConfirmed?: boolean;
 }
 
 export const WithdrawModal = ({ 
   open, 
   onOpenChange, 
   onWithdraw, 
-  isLoading,
+  isLoading, 
+  isSimulating = false, // Add simulation state
   vaultBalance,
   currentFee = "0.00",
   isTransactionConfirmed = false
@@ -127,21 +129,23 @@ export const WithdrawModal = ({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="flex-1 bg-vault-success hover:bg-vault-success/90 text-primary-foreground"
-              disabled={!amount || isLoading || parseFloat(amount) <= 0}
+            <Button 
+              onClick={() => onWithdraw(amount)} 
+              disabled={!amount || isLoading || isSimulating}
+              className="w-full"
             >
-              {isLoading ? (
+              {isSimulating ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isTransactionConfirmed ? "Transaction Confirmed!" : "Withdrawing..."}
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Checking...
+                </>
+              ) : isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Withdrawing...
                 </>
               ) : (
-                <>
-                  <ArrowUpDown className="w-4 h-4 mr-2" />
-                  Withdraw {amount || "0"} ETH
-                </>
+                'Withdraw'
               )}
             </Button>
           </div>
