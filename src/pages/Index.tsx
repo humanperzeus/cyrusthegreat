@@ -16,7 +16,12 @@ const Index = () => {
     transferETH,
     isConnected,
     isSimulating, // Add simulation state
-    isConfirmed // Add transaction confirmation state
+    isConfirmed, // Add transaction confirmation state
+    walletTokens,
+    vaultTokens,
+    isLoadingTokens,
+    refetchWalletTokens,
+    refetchVaultTokens
   } = useVault();
 
   const [depositModalOpen, setDepositModalOpen] = useState(false);
@@ -26,12 +31,18 @@ const Index = () => {
   return (
     <>
       <VaultCore
-        walletBalance={walletBalance}
-        vaultBalance={vaultBalance}
-        currentFee={currentFee}
         onDeposit={() => setDepositModalOpen(true)}
         onWithdraw={() => setWithdrawModalOpen(true)}
         onTransfer={() => setTransferModalOpen(true)}
+        walletBalance={walletBalance}
+        vaultBalance={vaultBalance}
+        currentFee={currentFee}
+        // Token display props
+        walletTokens={walletTokens}
+        vaultTokens={vaultTokens}
+        isLoadingTokens={isLoadingTokens}
+        refetchWalletTokens={refetchWalletTokens}
+        refetchVaultTokens={refetchVaultTokens}
       />
 
       <DepositModal
