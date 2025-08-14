@@ -925,7 +925,7 @@ export const VaultCore = ({
 
       {/* Alpha 0.25 Information */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-        🚀 <strong>Alpha 0.25</strong> - Cyrus The Great Rebranding & Multi-Chain Preparation
+        🚀 <strong>Alpha 0.25</strong> - Cyrus The Great Branding & Multi-Chain Foundation
       </div>
 
       {/* Made by humanperzeus */}
