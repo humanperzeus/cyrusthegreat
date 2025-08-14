@@ -52,7 +52,7 @@ export const VaultCore = ({
   const { isConnected } = useAccount();
   
   // Display mode state
-  const [displayMode, setDisplayMode] = useState<'tabs' | 'cards' | 'tabbed-cards'>('tabs');
+  const [displayMode, setDisplayMode] = useState<'tabs' | 'cards' | 'tabbed-cards' | 'native-tokens'>('tabs');
 
   // State for token deposit modal
   const [tokenDepositInfo, setTokenDepositInfo] = useState<{
@@ -71,33 +71,183 @@ export const VaultCore = ({
     onTokenWithdraw(token);
   };
 
-  // Console switcher for testing different display modes
-  useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey) {
-        switch (event.key) {
-          case '1':
-            event.preventDefault();
-            setDisplayMode('tabs');
-            console.log('🎯 Switched to TABS mode');
-            break;
-          case '2':
-            event.preventDefault();
-            setDisplayMode('cards');
-            console.log('🎯 Switched to CARDS mode');
-            break;
-          case '3':
-            event.preventDefault();
-            setDisplayMode('tabbed-cards');
-            console.log('🎯 Switched to TABBED-CARDS mode');
-            break;
-        }
-      }
-    };
+  // Handle token transfer click
+  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string }) => {
+    onTokenTransfer(token);
+  };
 
-    document.addEventListener('keydown', handleKeyPress);
-    return () => document.removeEventListener('keydown', handleKeyPress);
-  }, []);
+  // NativeTokensMode Component
+  const NativeTokensMode = () => (
+    <div className="w-full">
+      <Tabs defaultValue="native" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="native">Native</TabsTrigger>
+          <TabsTrigger value="tokens">Tokens</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="native" className="mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+            <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
+              <div className="text-sm text-muted-foreground">Native Wallet Balance</div>
+              <div className="text-lg sm:text-xl font-bold text-vault-warning break-all">
+                {walletBalance} ETH
+              </div>
+            </div>
+            <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
+              <div className="text-sm text-muted-foreground">Native Vault Balance</div>
+              <div className="text-lg sm:text-xl font-bold text-vault-success break-all">
+                {vaultBalance} ETH
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="tokens" className="mt-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {/* Wallet Tokens Section */}
+            <div className="space-y-4">
+              <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
+                <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                  Wallet Tokens ({walletTokens.length})
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-background/40"
+                    onClick={refetchWalletTokens}
+                    disabled={isLoadingTokens}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Scrollable Wallet Tokens Container */}
+              <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
+                {isLoadingTokens ? (
+                  <div className="text-center p-4 text-muted-foreground">Loading tokens...</div>
+                ) : walletTokens.length > 0 ? (
+                  walletTokens.map((token, index) => (
+                    <div key={index} className="p-4 bg-background/20 rounded-lg border border-border/30 hover:bg-background/40 transition-colors">
+                      <div className="space-y-3">
+                        {/* Token Header */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-vault-warning/20 rounded-full flex items-center justify-center">
+                              <span className="text-sm font-medium text-vault-warning">{token.symbol.charAt(0)}</span>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-foreground">{token.symbol}</div>
+                              <div className="text-sm text-vault-warning font-bold">{token.balance}</div>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="bg-vault-warning hover:bg-vault-warning/80 text-white"
+                            onClick={() => handleTokenDeposit(token)}
+                          >
+                            Deposit
+                          </Button>
+                        </div>
+                        
+                        {/* Contract Address - Clickable */}
+                        <div className="text-center">
+                          <a
+                            href={`https://sepolia.etherscan.io/address/${token.address}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            {token.address.slice(0, 6)}...{token.address.slice(-4)}
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center p-4 text-muted-foreground">No tokens found</div>
+                )}
+              </div>
+            </div>
+
+            {/* Vault Tokens Section */}
+            <div className="space-y-4">
+              <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
+                <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                  Vault Tokens ({vaultTokens.length})
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-background/40"
+                    onClick={refetchVaultTokens}
+                    disabled={isLoadingTokens}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Scrollable Vault Tokens Container */}
+              <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
+                {isLoadingTokens ? (
+                  <div className="text-center p-4 text-muted-foreground">Loading tokens...</div>
+                ) : vaultTokens.length > 0 ? (
+                  vaultTokens.map((token, index) => (
+                    <div key={index} className="p-4 bg-background/20 rounded-lg border border-border/30 hover:bg-background/40 transition-colors">
+                      <div className="space-y-3">
+                        {/* Token Header */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-vault-success/20 rounded-full flex items-center justify-center">
+                              <span className="text-sm font-medium text-vault-success">{token.symbol.charAt(0)}</span>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-foreground">{token.symbol}</div>
+                              <div className="text-sm text-vault-success font-bold">{token.balance}</div>
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-vault-success text-vault-success hover:bg-vault-success hover:text-white"
+                              onClick={() => handleTokenWithdraw(token)}
+                            >
+                              Withdraw
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="bg-vault-success hover:bg-vault-success/80 text-white"
+                              onClick={() => onTokenTransfer(token)}
+                            >
+                              Transfer
+                            </Button>
+                                                   </div>
+                        </div>
+                        
+                        {/* Contract Address - Clickable */}
+                        <div className="text-center">
+                          <a
+                            href={`https://sepolia.etherscan.io/address/${token.address}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            {token.address.slice(0, 6)}...{token.address.slice(-4)}
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center p-4 text-muted-foreground">No tokens in vault</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 
   // CARDS Mode Component
   const CardsMode = () => (
@@ -504,6 +654,39 @@ export const VaultCore = ({
     </div>
   );
 
+  // Console switcher for testing different display modes
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        switch (event.key) {
+          case '1':
+            event.preventDefault();
+            setDisplayMode('tabs');
+            console.log('🎯 Switched to TABS mode');
+            break;
+          case '2':
+            event.preventDefault();
+            setDisplayMode('cards');
+            console.log('🎯 Switched to CARDS mode');
+            break;
+          case '3':
+            event.preventDefault();
+            setDisplayMode('tabbed-cards');
+            console.log('🎯 Switched to TABBED-CARDS mode');
+            break;
+          case '4':
+            event.preventDefault();
+            setDisplayMode('native-tokens');
+            console.log('🎯 Switched to NATIVE/TOKENS mode');
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 space-y-8">
       {/* Header */}
@@ -559,6 +742,55 @@ export const VaultCore = ({
               >
                 🎯
               </Button>
+              <Button
+                variant={displayMode === 'native-tokens' ? 'default' : 'outline'}
+                size="sm"
+                className={`w-10 h-10 p-0 transition-all duration-200 ${
+                  displayMode === 'native-tokens' 
+                    ? 'bg-vault-warning hover:bg-vault-warning/80 text-white' 
+                    : 'hover:bg-background/40'
+                }`}
+                onClick={() => setDisplayMode('native-tokens')}
+                title="Native/Tokens Mode"
+              >
+                ⚡
+              </Button>
+            </div>
+
+            {/* Chain Switcher - Icons Only */}
+            <div className="flex justify-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
+                title="Ethereum (Current)"
+              >
+                🔵
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
+                title="Binance Chain"
+              >
+                🟡
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
+                title="Base"
+              >
+                🔷
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-8 h-8 p-0 hover:bg-background/40 border-vault-primary/50"
+                title="Solana"
+              >
+                🟣
+              </Button>
             </div>
           </div>
         )}
@@ -605,21 +837,23 @@ export const VaultCore = ({
               </div>
             </div>
 
-            {/* ETH Balances */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-              <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
-                <div className="text-sm text-muted-foreground">Wallet Balance</div>
-                <div className="text-lg sm:text-xl font-bold text-vault-warning break-all">
-                  {walletBalance} ETH
+            {/* ETH Balances - Only show when NOT in native-tokens mode */}
+            {displayMode !== 'native-tokens' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
+                  <div className="text-sm text-muted-foreground">Wallet Balance</div>
+                  <div className="text-lg sm:text-xl font-bold text-vault-warning break-all">
+                    {walletBalance} ETH
+                  </div>
+                </div>
+                <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
+                  <div className="text-sm text-muted-foreground">Vault Balance</div>
+                  <div className="text-lg sm:text-xl font-bold text-vault-success break-all">
+                    {vaultBalance} ETH
+                  </div>
                 </div>
               </div>
-              <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
-                <div className="text-sm text-muted-foreground">Vault Balance</div>
-                <div className="text-lg sm:text-xl font-bold text-vault-success break-all">
-                  {vaultBalance} ETH
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Dynamic Token Display Section */}
             <div className="w-full max-w-4xl">
@@ -628,6 +862,7 @@ export const VaultCore = ({
                   {displayMode === 'tabs' && <TabsMode />}
                   {displayMode === 'cards' && <CardsMode />}
                   {displayMode === 'tabbed-cards' && <TabbedCardsMode />}
+                  {displayMode === 'native-tokens' && <NativeTokensMode />}
                 </>
               )}
             </div>
@@ -712,7 +947,7 @@ export const VaultCore = ({
       {/* Console Instructions */}
       {isConnected && (
         <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-          💡 Switch modes: Use buttons above or <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+1</kbd> for Tabs, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+2</kbd> for Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+3</kbd> for Tabbed-Cards
+          💡 Switch modes: Use buttons above or <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+1</kbd> for Tabs, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+2</kbd> for Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+3</kbd> for Tabbed-Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+4</kbd> for Native/Tokens
         </div>
       )}
     </div>
