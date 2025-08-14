@@ -1239,6 +1239,78 @@ export const useVault = () => {
     }
   };
 
+  // Token withdrawal function with approval
+  const withdrawToken = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log(`💰 Withdrawing ${amount} ${tokenSymbol} from vault`);
+
+      // Convert amount to bigint
+      const amountBigInt = parseEther(amount);
+      
+      // Get current fee for the transaction
+      if (!currentFee) {
+        throw new Error('Current fee not available');
+      }
+      
+      const feeWei = currentFee as bigint;
+      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+
+      // Check if user has enough ETH for fee
+      if (walletBalance && walletBalance.value < feeWei) {
+        const feeRequired = formatEther(feeWei);
+        const available = formatEther(walletBalance.value);
+        console.log('❌ Insufficient wallet balance for withdrawal fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the withdrawal fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Call the vault withdraw function WITH ETH fee
+      await writeVaultContract({
+        address: WEB3_CONFIG.CROSSCHAINBANK_ADDRESS as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'withdrawToken',
+        args: [tokenAddress, amountBigInt],
+        chain: sepolia,
+        account: address,
+        value: feeWei, // Send ETH fee along with token withdrawal
+      });
+      
+      console.log(`📝 Token withdrawal transaction initiated with ETH fee`);
+      
+      toast({
+        title: "Token Withdrawal Initiated",
+        description: `Withdrawing ${amount} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee from vault...`,
+      });
+      
+      // DON'T refresh here - let the transaction confirmation system handle it
+      // DON'T set isLoading(false) here - let the transaction confirmation system handle it
+      
+    } catch (error) {
+      console.error('❌ Token withdrawal error:', error);
+      toast({
+        title: "Error",
+        description: `Failed to withdraw ${tokenSymbol}`,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+
   // Handle transaction state changes
   React.useEffect(() => {
     if (isConfirmed && !hasRefreshedAfterConfirmation) {
@@ -1329,6 +1401,7 @@ export const useVault = () => {
     depositToken,
     depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
     depositTokenWithDelay, // SIMPLE: 3-second delay approach
+    withdrawToken, // NEW: Token withdrawal function with approval
     // Transaction status for UI feedback
     isPending: isWritePending,
     isConfirming,

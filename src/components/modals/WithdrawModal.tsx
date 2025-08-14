@@ -10,23 +10,34 @@ interface WithdrawModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onWithdraw: (amount: string) => void;
-  isLoading: boolean;
-  isSimulating?: boolean; // Add simulation state
+  onTokenWithdraw?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
   vaultBalance: string;
   currentFee?: string;
+  isLoading: boolean;
+  isSimulating?: boolean;
   isTransactionConfirmed?: boolean;
+  // Token-specific props
+  isTokenWithdraw?: boolean;
+  tokenSymbol?: string;
+  tokenAddress?: string;
+  tokenBalance?: string;
 }
 
-export const WithdrawModal = ({ 
-  open, 
-  onOpenChange, 
-  onWithdraw, 
-  isLoading, 
-  isSimulating = false, // Add simulation state
+export function WithdrawModal({
+  open,
+  onOpenChange,
+  onWithdraw,
+  onTokenWithdraw,
   vaultBalance,
   currentFee = "0.00",
-  isTransactionConfirmed = false
-}: WithdrawModalProps) => {
+  isLoading,
+  isSimulating = false,
+  isTransactionConfirmed = false,
+  isTokenWithdraw,
+  tokenSymbol,
+  tokenAddress,
+  tokenBalance
+}: WithdrawModalProps) {
   const [amount, setAmount] = useState("");
 
   // Auto-close modal after successful transaction
@@ -51,7 +62,11 @@ export const WithdrawModal = ({
   };
 
   const setMaxAmount = () => {
-    setAmount(vaultBalance);
+    if (isTokenWithdraw && tokenBalance) {
+      setAmount(tokenBalance);
+    } else {
+      setAmount(vaultBalance);
+    }
   };
 
   return (
@@ -60,94 +75,125 @@ export const WithdrawModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
             <ArrowUpDown className="w-6 h-6 text-vault-success" />
-            Withdraw ETH from Vault
+            {isTokenWithdraw ? `Withdraw ${tokenSymbol} from Vault` : 'Withdraw ETH from Vault'}
           </DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="amount" className="text-foreground">
-              Amount (ETH)
-            </Label>
-            <div className="relative">
-              <Input
-                id="amount"
-                type="number"
-                step="0.000001"
-                placeholder="0.0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="bg-background/50 border-border text-foreground pr-16"
-                disabled={isLoading}
-              />
+          <div className="grid gap-4 py-4">
+            {/* Token Contract Display for Token Withdrawals */}
+            {isTokenWithdraw && tokenAddress && (
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Token Contract</Label>
+                <div className="flex items-center gap-2 p-2 bg-background/20 rounded border">
+                  <span className="text-xs font-mono text-foreground">
+                    {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => window.open(`https://sepolia.etherscan.io/address/${tokenAddress}`, '_blank')}
+                  >
+                    🔗
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="amount">
+                Amount {isTokenWithdraw ? `(${tokenSymbol})` : '(ETH)'}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.000001"
+                  placeholder="0.0"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="bg-background/50 border-border text-foreground pr-16"
+                  disabled={isLoading}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-6 px-2 text-xs"
+                  onClick={setMaxAmount}
+                  disabled={isLoading}
+                >
+                  MAX
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Available in vault: {isTokenWithdraw ? `${tokenBalance} ${tokenSymbol}` : `${vaultBalance} ETH`}
+              </p>
+            </div>
+
+            {/* Fee Information */}
+            {amount && !isNaN(Number(amount)) && (
+              <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="flex justify-between text-sm">
+                  <span className="text-amber-700 dark:text-amber-300">You will receive:</span>
+                  <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
+                    {amount} {isTokenWithdraw ? tokenSymbol : 'ETH'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm text-amber-600">
+                  <span>Fee (paid from wallet):</span>
+                  <span className="font-mono">{currentFee} ETH</span>
+                </div>
+              </div>
+            )}
+
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                {isTokenWithdraw 
+                  ? `You receive exactly ${amount || "0"} ${tokenSymbol} to your wallet. The ETH fee is paid separately from your wallet balance.`
+                  : `You receive exactly ${amount || "0"} ETH to your wallet. The fee is paid separately from your wallet balance.`
+                }
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex gap-3">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 px-2 text-xs"
-                onClick={setMaxAmount}
+                className="flex-1"
+                onClick={() => onOpenChange(false)}
                 disabled={isLoading}
               >
-                MAX
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
+                    onTokenWithdraw(tokenAddress, amount, tokenSymbol);
+                  } else {
+                    onWithdraw(amount);
+                  }
+                }} 
+                disabled={!amount || isLoading || isSimulating}
+                className="w-full"
+              >
+                {isSimulating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Checking...
+                  </>
+                ) : isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Withdrawing...
+                  </>
+                ) : (
+                  isTokenWithdraw ? `Withdraw ${tokenSymbol}` : 'Withdraw ETH'
+                )}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Available in vault: {vaultBalance} ETH
-            </p>
-          </div>
-
-          {/* Fee Information */}
-          {amount && !isNaN(Number(amount)) && (
-            <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-              <div className="flex justify-between text-sm">
-                <span className="text-amber-700 dark:text-amber-300">You will receive:</span>
-                <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
-                  {amount} ETH
-                </span>
-              </div>
-              <div className="flex justify-between text-sm text-amber-600">
-                <span>Fee (paid from wallet):</span>
-                <span className="font-mono">{currentFee} ETH</span>
-              </div>
-            </div>
-          )}
-
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              You receive exactly {amount || "0"} ETH to your wallet. The fee is paid separately from your wallet balance.
-            </AlertDescription>
-          </Alert>
-
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => onOpenChange(false)}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => onWithdraw(amount)} 
-              disabled={!amount || isLoading || isSimulating}
-              className="w-full"
-            >
-              {isSimulating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Checking...
-                </>
-              ) : isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Withdrawing...
-                </>
-              ) : (
-                'Withdraw ETH'
-              )}
-            </Button>
           </div>
         </form>
       </DialogContent>

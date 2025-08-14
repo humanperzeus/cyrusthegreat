@@ -24,7 +24,8 @@ const Index = () => {
     refetchWalletTokens,
     refetchVaultTokens,
     depositToken,
-    depositTokenWithDelay
+    depositTokenWithDelay,
+    withdrawToken
   } = useVault();
 
   const [depositModalOpen, setDepositModalOpen] = useState(false);
@@ -33,6 +34,13 @@ const Index = () => {
   
   // State for token deposit modal
   const [tokenDepositInfo, setTokenDepositInfo] = useState<{
+    symbol: string;
+    address: string;
+    balance: string;
+  } | null>(null);
+
+  // State for token withdraw modal
+  const [tokenWithdrawInfo, setTokenWithdrawInfo] = useState<{
     symbol: string;
     address: string;
     balance: string;
@@ -57,6 +65,18 @@ const Index = () => {
     depositTokenWithDelay(tokenAddress, amountBigInt, tokenSymbol);
   };
 
+  // Handle token withdraw click
+  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string }) => {
+    setTokenWithdrawInfo(token);
+    setWithdrawModalOpen(true);
+  };
+
+  // Handle token withdraw from modal
+  const handleTokenWithdrawFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
+    // Call the token withdraw function
+    withdrawToken(tokenAddress, amount, tokenSymbol);
+  };
+
   return (
     <>
       <VaultCore
@@ -75,6 +95,7 @@ const Index = () => {
         onWithdraw={() => setWithdrawModalOpen(true)}
         onTransfer={() => setTransferModalOpen(true)}
         onTokenDeposit={handleTokenDeposit}
+        onTokenWithdraw={handleTokenWithdraw}
       />
 
       <DepositModal
@@ -98,11 +119,16 @@ const Index = () => {
         open={withdrawModalOpen}
         onOpenChange={setWithdrawModalOpen}
         onWithdraw={withdrawETH}
+        onTokenWithdraw={handleTokenWithdrawFromModal}
         isLoading={isLoading}
         vaultBalance={vaultBalance}
         currentFee={currentFee}
         isTransactionConfirmed={isConfirmed}
         isSimulating={isSimulating}
+        isTokenWithdraw={!!tokenWithdrawInfo}
+        tokenSymbol={tokenWithdrawInfo?.symbol}
+        tokenAddress={tokenWithdrawInfo?.address}
+        tokenBalance={tokenWithdrawInfo?.balance}
       />
 
       <TransferModal

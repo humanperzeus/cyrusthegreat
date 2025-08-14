@@ -17,14 +17,15 @@ interface VaultCoreProps {
   onDeposit: () => void;
   onWithdraw: () => void;
   onTransfer: () => void;
+  // Token operation handlers
+  onTokenDeposit: (token: { symbol: string; address: string; balance: string }) => void;
+  onTokenWithdraw: (token: { symbol: string; address: string; balance: string }) => void;
   // Token display props
   walletTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
   vaultTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
   isLoadingTokens: boolean;
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
-  // Token deposit handler
-  onTokenDeposit: (token: { symbol: string; address: string; balance: string }) => void;
 }
 
 export const VaultCore = ({ 
@@ -41,7 +42,9 @@ export const VaultCore = ({
   refetchWalletTokens,
   refetchVaultTokens,
   // Token deposit handler
-  onTokenDeposit
+  onTokenDeposit,
+  // Token withdraw handler
+  onTokenWithdraw
 }: VaultCoreProps) => {
   const { isConnected } = useAccount();
   
@@ -57,8 +60,12 @@ export const VaultCore = ({
 
   // Handle token deposit click
   const handleTokenDeposit = (token: { symbol: string; address: string; balance: string }) => {
-    // Pass token info to parent component for modal handling
     onTokenDeposit(token);
+  };
+
+  // Handle token withdraw click
+  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string }) => {
+    onTokenWithdraw(token);
   };
 
   // Console switcher for testing different display modes
@@ -199,7 +206,7 @@ export const VaultCore = ({
                           size="sm"
                           variant="outline"
                           className="border-vault-success text-vault-success hover:bg-vault-success hover:text-white"
-                          onClick={() => console.log(`Withdraw ${token.symbol}`)}
+                          onClick={() => handleTokenWithdraw(token)}
                         >
                           Withdraw
                         </Button>
@@ -342,7 +349,7 @@ export const VaultCore = ({
                     size="sm"
                     variant="outline"
                     className="border-vault-success text-vault-success hover:bg-vault-success hover:text-white"
-                    onClick={() => console.log(`Withdraw ${token.symbol}`)}
+                    onClick={() => handleTokenWithdraw(token)}
                   >
                     Withdraw
                   </Button>
@@ -470,7 +477,7 @@ export const VaultCore = ({
                         size="sm"
                         variant="outline"
                         className="flex-1 border-vault-success text-vault-success hover:bg-vault-success hover:text-white"
-                        onClick={() => console.log(`Withdraw ${token.symbol}`)}
+                        onClick={() => handleTokenWithdraw(token)}
                       >
                         Withdraw
                       </Button>
