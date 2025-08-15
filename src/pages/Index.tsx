@@ -26,7 +26,11 @@ const Index = () => {
     depositToken,
     depositTokenWithDelay,
     withdrawToken,
-    transferInternalToken // Add transferInternalToken to the hook
+    transferInternalToken, // Add transferInternalToken to the hook
+    // Network switching functions
+    currentNetwork,
+    isSwitchingNetwork,
+    autoSwitchNetwork
   } = useVault();
 
   const [depositModalOpen, setDepositModalOpen] = useState(false);

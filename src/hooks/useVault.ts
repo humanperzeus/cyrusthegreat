@@ -1,15 +1,289 @@
 import React, { useState } from 'react';
-import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient } from 'wagmi';
-import { sepolia } from 'wagmi/chains';
+import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
+import { sepolia, mainnet, bsc, bscTestnet } from 'wagmi/chains';
 import { formatEther, parseEther, parseUnits } from 'viem';
 import { getContract } from 'viem';
 import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork } from '@/config/web3';
 import { useToast } from '@/hooks/use-toast';
 
+// Add window.ethereum type
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 export const useVault = () => {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { toast } = useToast();
+  const { switchChain } = useSwitchChain();
+  
+  // Get current network configuration
+  const currentNetwork = getCurrentNetwork();
+  
+  // State for network switching
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+  
+  // Function to get the target chain based on network mode
+  const getTargetChain = () => {
+    if (currentNetwork.mode === 'mainnet') {
+      return mainnet; // Ethereum mainnet
+    } else {
+      return sepolia; // Ethereum testnet (Sepolia)
+    }
+  };
+  
+  // Function to automatically switch to the correct network
+  const autoSwitchNetwork = async () => {
+    console.log('🔄 autoSwitchNetwork called with:', {
+      isConnected,
+      isSwitchingNetwork,
+      currentNetwork: currentNetwork.mode,
+      targetChain: getTargetChain()
+    });
+    
+    if (!isConnected || isSwitchingNetwork) {
+      console.log('❌ Cannot switch: not connected or already switching');
+      return;
+    }
+    
+    const targetChain = getTargetChain();
+    const currentChainId = chainId;
+    
+    console.log('🔍 Network switch details:', {
+      currentChainId,
+      targetChainId: targetChain.id,
+      targetChainName: targetChain.name,
+      currentNetworkMode: currentNetwork.mode
+    });
+    
+    // Check if we're already on the correct network
+    if (currentChainId === targetChain.id) {
+      console.log(`✅ Already on correct network: ${targetChain.name} (${targetChain.id})`);
+      return;
+    }
+    
+    console.log(`🔄 Switching from chain ${currentChainId} to ${targetChain.name} (${targetChain.id})`);
+    
+    try {
+      setIsSwitchingNetwork(true);
+      
+      // Skip Wagmi and go directly to MetaMask
+      if (window.ethereum) {
+        try {
+          console.log('🔄 Direct MetaMask network switch...');
+          
+          // First try to switch directly
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: `0x${targetChain.id.toString(16)}` }],
+            });
+            console.log('✅ Direct MetaMask switch successful');
+          } catch (switchError: any) {
+            console.log('⚠️ Direct switch failed, error code:', switchError.code);
+            
+            // If network doesn't exist (error code 4902), add it first
+            if (switchError.code === 4902) {
+              console.log('🔄 Network not found, adding to MetaMask...');
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: `0x${targetChain.id.toString(16)}`,
+                  chainName: targetChain.name,
+                  nativeCurrency: {
+                    name: targetChain.nativeCurrency.name,
+                    symbol: targetChain.nativeCurrency.symbol,
+                    decimals: targetChain.nativeCurrency.decimals,
+                  },
+                  rpcUrls: [targetChain.rpcUrls.default.http[0]],
+                  blockExplorerUrls: [targetChain.blockExplorers?.default?.url],
+                }],
+              });
+              console.log('✅ Network added to MetaMask');
+            } else {
+              throw switchError;
+            }
+          }
+          
+        } catch (metamaskError) {
+          console.error('❌ MetaMask network switch failed:', metamaskError);
+          throw metamaskError;
+        }
+      } else {
+        throw new Error('MetaMask not available');
+      }
+      
+      toast({
+        title: "Network Switched",
+        description: `Successfully switched to ${targetChain.name}`,
+        variant: "default",
+      });
+      
+      console.log(`✅ Successfully switched to ${targetChain.name}`);
+      
+      // Wait a moment for the switch to complete, then check if it worked
+      setTimeout(() => {
+        console.log('🔍 Checking if network switch actually worked...');
+        console.log('Current chainId:', chainId);
+        console.log('Target chainId:', targetChain.id);
+        
+        if (chainId !== targetChain.id) {
+          console.warn('⚠️ Network switch may not have worked - chainId still shows:', chainId);
+          toast({
+            title: "Network Switch Warning",
+            description: "Network may not have switched. Please check MetaMask manually.",
+            variant: "destructive",
+          });
+        }
+      }, 3000);
+      
+    } catch (error) {
+      console.error('❌ Failed to switch network:', error);
+      
+      toast({
+        title: "Network Switch Failed",
+        description: error instanceof Error ? error.message : "Failed to switch network. Please switch manually in MetaMask.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSwitchingNetwork(false);
+    }
+  };
+  
+  // Auto-switch network when component mounts or network mode changes
+  React.useEffect(() => {
+    // Only auto-switch once when component mounts and wallet connects
+    if (isConnected && !isSwitchingNetwork && chainId !== getTargetChain().id) {
+      console.log('🚀 Auto-switching network on mount...');
+      autoSwitchNetwork();
+    }
+  }, [isConnected]); // Only depend on isConnected, not currentNetwork.mode
+  
+  // Debug logging for network switching
+  React.useEffect(() => {
+    console.log('🌐 Network Configuration Debug:', {
+      networkMode: currentNetwork.mode,
+      isMainnet: currentNetwork.isMainnet,
+      isTestnet: currentNetwork.isTestnet,
+      targetChainId: getTargetChain().id,
+      currentChainId: chainId,
+      isConnected,
+      isSwitchingNetwork
+    });
+    
+    // Add comprehensive debugging for contract addresses and RPC URLs
+    console.log('🏗️ Contract & RPC Configuration Debug:', {
+      // Environment variables
+      VITE_NETWORK_MODE: import.meta.env.VITE_NETWORK_MODE,
+      VITE_CTGVAULT_ETH_MAINNET_CONTRACT: import.meta.env.VITE_CTGVAULT_ETH_MAINNET_CONTRACT,
+      VITE_CTGVAULT_ETH_TESTNET_CONTRACT: import.meta.env.VITE_CTGVAULT_ETH_TESTNET_CONTRACT,
+      VITE_ALCHEMY_ETH_MAINNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_MAINNET_RPC_URL,
+      VITE_ALCHEMY_ETH_TESTNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_TESTNET_RPC_URL,
+      
+      // Computed values
+      computedContractAddress: getContractAddress('ETH'),
+      
+      // Current network state
+      currentNetworkMode: currentNetwork.mode,
+      targetChain: getTargetChain(),
+      actualChainId: chainId
+    });
+    
+    // Add manual test function to window for debugging
+    (window as any).testNetworkSwitch = () => {
+      console.log('🧪 Manual network switch test triggered');
+      console.log('Current state:', {
+        isConnected,
+        isSwitchingNetwork,
+        currentNetwork: currentNetwork.mode,
+        chainId,
+        targetChain: getTargetChain()
+      });
+      autoSwitchNetwork();
+    };
+    
+    (window as any).getNetworkInfo = () => {
+      return {
+        networkMode: currentNetwork.mode,
+        isMainnet: currentNetwork.isMainnet,
+        isTestnet: currentNetwork.isTestnet,
+        targetChain: getTargetChain(),
+        currentChainId: chainId,
+        isConnected,
+        isSwitchingNetwork
+      };
+    };
+    
+    // Test if switchChain function exists and works
+    (window as any).testSwitchChain = async () => {
+      console.log('🧪 Testing switchChain function...');
+      console.log('switchChain function:', switchChain);
+      console.log('isConnected:', isConnected);
+      console.log('chainId:', chainId);
+      
+      if (!switchChain) {
+        console.error('❌ switchChain function is not available');
+        return;
+      }
+      
+      try {
+        // Try to switch to Sepolia (testnet) as a test
+        console.log('🔄 Testing switch to Sepolia...');
+        const result = await switchChain({ chainId: 11155111 }); // Sepolia
+        console.log('✅ Test switch result:', result);
+      } catch (error) {
+        console.error('❌ Test switch failed:', error);
+      }
+    };
+    
+    // Force refresh function to test network switching
+    (window as any).forceNetworkSwitch = async () => {
+      console.log('🧪 Force network switch test...');
+      console.log('Current state before switch:', {
+        isConnected,
+        isSwitchingNetwork,
+        currentNetwork: currentNetwork.mode,
+        chainId,
+        targetChain: getTargetChain()
+      });
+      
+      // Force the network switch
+      await autoSwitchNetwork();
+      
+      // Wait and check result
+      setTimeout(() => {
+        console.log('Current state after switch:', {
+          isConnected,
+          isSwitchingNetwork,
+          currentNetwork: currentNetwork.mode,
+          chainId,
+          targetChain: getTargetChain()
+        });
+      }, 2000);
+    };
+    
+    // Debug contract and RPC configuration
+    (window as any).debugConfig = () => {
+      console.log('🔧 Full Configuration Debug:', {
+        // Environment variables
+        VITE_NETWORK_MODE: import.meta.env.VITE_NETWORK_MODE,
+        VITE_CTGVAULT_ETH_MAINNET_CONTRACT: import.meta.env.VITE_CTGVAULT_ETH_MAINNET_CONTRACT,
+        VITE_CTGVAULT_ETH_TESTNET_CONTRACT: import.meta.env.VITE_CTGVAULT_ETH_TESTNET_CONTRACT,
+        VITE_ALCHEMY_ETH_MAINNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_MAINNET_RPC_URL,
+        VITE_ALCHEMY_ETH_TESTNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_TESTNET_RPC_URL,
+        
+        // Computed values
+        computedContractAddress: getContractAddress('ETH'),
+        
+        // Current network state
+        currentNetworkMode: currentNetwork.mode,
+        targetChain: getTargetChain(),
+        actualChainId: chainId
+      });
+    };
+  }, [currentNetwork.mode, chainId, isConnected, isSwitchingNetwork]);
   
   // Get wallet ETH balance with smart refetch (no constant polling)
   const { data: walletBalance, refetch: refetchWalletBalance } = useBalance({
@@ -133,7 +407,7 @@ export const useVault = () => {
             
             try {
               // Fetch token metadata (symbol, decimals) from the token contract
-              const metadataResponse = await fetch(`https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`, {
+              const metadataResponse = await fetch(getAlchemyUrl(), {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -256,7 +530,14 @@ export const useVault = () => {
     }
   }, [currentFee]);
 
-  // Fetch wallet tokens via RPC
+  // Helper function to get the correct Alchemy URL based on network mode
+  const getAlchemyUrl = () => {
+    return currentNetwork.isMainnet 
+      ? `https://eth-mainnet.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`
+      : `https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`;
+  };
+  
+  // Function to get wallet tokens from Alchemy API
   const fetchWalletTokens = async () => {
     if (!address) return;
     
@@ -265,8 +546,13 @@ export const useVault = () => {
       console.log('🔍 Fetching wallet tokens for address:', address);
       console.log('🔑 Using Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
       
+      // Get the correct Alchemy URL based on network mode
+      const alchemyUrl = getAlchemyUrl();
+      
+      console.log('🌐 Using Alchemy URL:', alchemyUrl);
+      
       // Use Alchemy API to get token balances
-      const response = await fetch(`https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`, {
+      const response = await fetch(alchemyUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -316,7 +602,7 @@ export const useVault = () => {
               // Only process tokens with balance > 0
               if (balanceDecimal > 0) {
                 // Fetch token metadata (symbol, decimals)
-                const metadataResponse = await fetch(`https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`, {
+                const metadataResponse = await fetch(alchemyUrl, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
@@ -413,7 +699,7 @@ export const useVault = () => {
             
             try {
               // Fetch token metadata (symbol, decimals) from the token contract
-              const metadataResponse = await fetch(`https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`, {
+              const metadataResponse = await fetch(getAlchemyUrl(), {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -497,7 +783,7 @@ export const useVault = () => {
       console.log('🧪 Manual token fetching test...');
       console.log('📍 Current address:', address);
       console.log('🔑 Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
-      console.log('🌐 API URL:', `https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`);
+      console.log('🌐 API URL:', getAlchemyUrl());
       
       if (address) {
         fetchWalletTokens();
@@ -1597,5 +1883,10 @@ export const useVault = () => {
     isLoadingTokens,
     refetchWalletTokens: fetchWalletTokens,
     refetchVaultTokens,
+    // Network switching functions
+    currentNetwork,
+    isSwitchingNetwork,
+    autoSwitchNetwork,
+    getTargetChain: getTargetChain,
   };
 };
