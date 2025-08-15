@@ -1,18 +1,25 @@
 import { http, createConfig } from 'wagmi'
-import { sepolia, mainnet } from 'wagmi/chains'
+import { sepolia, mainnet, bsc, bscTestnet } from 'wagmi/chains'
 import { walletConnect } from 'wagmi/connectors'
-import { WEB3_CONFIG, getCurrentNetwork } from '@/config/web3'
+import { WEB3_CONFIG, getCurrentNetwork, getBestRpcUrl } from '@/config/web3'
 
 // Get current network configuration
 const currentNetwork = getCurrentNetwork();
 
-// Dynamic chain configuration based on network mode
-const chains = currentNetwork.isMainnet ? [mainnet] as const : [sepolia] as const;
+// Support both ETH and BSC chains
+const chains = currentNetwork.isMainnet 
+  ? [mainnet, bsc] as const 
+  : [sepolia, bscTestnet] as const;
 
-// Dynamic transport configuration
-const transports = currentNetwork.isMainnet 
-  ? { [mainnet.id]: http(WEB3_CONFIG.ALCHEMY_ETH_RPC_URL) }
-  : { [sepolia.id]: http(WEB3_CONFIG.ALCHEMY_ETH_RPC_URL) };
+// Dynamic transport configuration for all supported chains
+const transports = {
+  // ETH chains
+  [mainnet.id]: http(getBestRpcUrl('ETH')),
+  [sepolia.id]: http(getBestRpcUrl('ETH')),
+  // BSC chains
+  [bsc.id]: http(getBestRpcUrl('BSC')),
+  [bscTestnet.id]: http(getBestRpcUrl('BSC')),
+} as const;
 
 export const config = createConfig({
   chains,

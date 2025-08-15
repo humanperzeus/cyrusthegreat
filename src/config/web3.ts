@@ -93,13 +93,51 @@ export const getRpcUrl = (chain: 'ETH' | 'BSC', provider: 'ALCHEMY' | 'ANKR') =>
   throw new Error(`Unsupported chain: ${chain}`);
 };
 
-// Helper function to get Etherscan URL for specific chain
-export const getEtherscanUrl = (chain: 'ETH' | 'BSC') => {
+// Helper function to get the best available RPC URL for a chain
+export const getBestRpcUrl = (chain: 'ETH' | 'BSC') => {
+  // Try Alchemy first, then Ankr as fallback
+  try {
+    const alchemyUrl = getRpcUrl(chain, 'ALCHEMY');
+    if (alchemyUrl) return alchemyUrl;
+  } catch (error) {
+    console.log(`Alchemy RPC not available for ${chain}`);
+  }
+  
+  try {
+    const ankrUrl = getRpcUrl(chain, 'ANKR');
+    if (ankrUrl) return ankrUrl;
+  } catch (error) {
+    console.log(`Ankr RPC not available for ${chain}`);
+  }
+  
+  // Fallback RPCs
   if (chain === 'ETH') {
-    return WEB3_CONFIG.ETHERSCAN_ETH_URL;
+    return WEB3_CONFIG.NETWORK_MODE === 'mainnet' 
+      ? 'https://rpc.ankr.com/eth'
+      : 'https://rpc.sepolia.org';
   }
   if (chain === 'BSC') {
-    return WEB3_CONFIG.ETHERSCAN_BSC_URL;
+    return WEB3_CONFIG.NETWORK_MODE === 'mainnet'
+      ? 'https://bsc-dataseed.binance.org'
+      : 'https://data-seed-prebsc-1-s1.binance.org:8545';
+  }
+  
+  throw new Error(`No RPC URL available for ${chain}`);
+};
+
+// Helper function to get Etherscan URL for specific chain
+export const getEtherscanUrl = (chain: 'ETH' | 'BSC') => {
+  const networkMode = WEB3_CONFIG.NETWORK_MODE;
+  
+  if (chain === 'ETH') {
+    return networkMode === 'mainnet' 
+      ? 'https://etherscan.io'
+      : 'https://sepolia.etherscan.io';
+  }
+  if (chain === 'BSC') {
+    return networkMode === 'mainnet'
+      ? 'https://bscscan.com'
+      : 'https://testnet.bscscan.com';
   }
   throw new Error(`Unsupported chain: ${chain}`);
 };
@@ -141,4 +179,47 @@ export const getActiveChainInfo = () => {
     ethChainId: networkMode === 'mainnet' ? 1 : 11155111, // ETH mainnet vs Sepolia
     bscChainId: networkMode === 'mainnet' ? 56 : 97, // BSC mainnet vs testnet
   };
+};
+
+// Get comprehensive chain configuration for a specific chain
+export const getChainConfig = (chain: 'ETH' | 'BSC') => {
+  const networkMode = WEB3_CONFIG.NETWORK_MODE;
+  
+  if (chain === 'ETH') {
+    return {
+      chain,
+      networkMode,
+      isMainnet: networkMode === 'mainnet',
+      isTestnet: networkMode === 'testnet',
+      chainId: networkMode === 'mainnet' ? 1 : 11155111,
+      contractAddress: getContractAddress('ETH'),
+      rpcUrl: getBestRpcUrl('ETH'),
+      etherscanUrl: getEtherscanUrl('ETH'),
+      nativeCurrency: {
+        name: networkMode === 'mainnet' ? 'Ether' : 'Sepolia ETH',
+        symbol: 'ETH',
+        decimals: 18
+      }
+    };
+  }
+  
+  if (chain === 'BSC') {
+    return {
+      chain,
+      networkMode,
+      isMainnet: networkMode === 'mainnet',
+      isTestnet: networkMode === 'testnet',
+      chainId: networkMode === 'mainnet' ? 56 : 97,
+      contractAddress: getContractAddress('BSC'),
+      rpcUrl: getBestRpcUrl('BSC'),
+      etherscanUrl: getEtherscanUrl('BSC'),
+      nativeCurrency: {
+        name: networkMode === 'mainnet' ? 'BNB' : 'tBNB',
+        symbol: networkMode === 'mainnet' ? 'BNB' : 'tBNB',
+        decimals: 18
+      }
+    };
+  }
+  
+  throw new Error(`Unsupported chain: ${chain}`);
 };

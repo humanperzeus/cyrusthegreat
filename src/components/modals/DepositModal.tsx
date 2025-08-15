@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info, Loader2 } from "lucide-react";
+import { getChainConfig } from "@/config/web3";
 
 interface DepositModalProps {
   open: boolean;
@@ -21,6 +22,8 @@ interface DepositModalProps {
   tokenSymbol?: string;
   tokenAddress?: string;
   tokenBalance?: string;
+  // Chain-aware props
+  activeChain?: 'ETH' | 'BSC';
 }
 
 export function DepositModal({
@@ -36,7 +39,8 @@ export function DepositModal({
   isTokenDeposit,
   tokenSymbol,
   tokenAddress,
-  tokenBalance
+  tokenBalance,
+  activeChain
 }: DepositModalProps) {
   const [amount, setAmount] = useState("");
 
@@ -71,7 +75,10 @@ export function DepositModal({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
-            {isTokenDeposit ? `Deposit ${tokenSymbol} to Vault` : 'Deposit ETH to Vault'}
+            {isTokenDeposit 
+              ? `Deposit ${tokenSymbol} to Vault` 
+              : `Deposit ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to Vault`
+            }
           </DialogTitle>
         </DialogHeader>
         
@@ -98,7 +105,10 @@ export function DepositModal({
 
           <div className="grid gap-2">
             <Label htmlFor="amount">
-              Amount {isTokenDeposit ? `(${tokenSymbol})` : '(ETH)'}
+              Amount {isTokenDeposit 
+                ? `(${tokenSymbol})` 
+                : `(${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'})`
+              }
             </Label>
             <div className="flex gap-2">
               <Input
@@ -126,29 +136,35 @@ export function DepositModal({
             <div className="flex justify-between text-sm">
               <span>Wallet Balance:</span>
               <span className="font-mono">
-                {isTokenDeposit ? `${tokenBalance} ${tokenSymbol}` : `${walletBalance} ETH`}
+                {isTokenDeposit 
+                  ? `${tokenBalance} ${tokenSymbol}` 
+                  : `${walletBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                }
               </span>
             </div>
             
             <div className="flex justify-between text-sm text-amber-600">
               <span>Deposit Amount:</span>
               <span className="font-mono">
-                {amount || "0"} {isTokenDeposit ? tokenSymbol : 'ETH'}
+                {amount || "0"} {isTokenDeposit 
+                  ? tokenSymbol 
+                  : (activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH')
+                }
               </span>
             </div>
             
             {/* ETH Fee - Always shown for both ETH and token deposits */}
             <div className="flex justify-between text-sm text-amber-600">
-              <span>ETH Fee:</span>
-              <span className="font-mono">{currentFee} ETH</span>
+              <span>{activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} Fee:</span>
+              <span className="font-mono">{currentFee} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}</span>
             </div>
             
             {/* Total calculation - Different for ETH vs Token deposits */}
             {!isTokenDeposit && amount && !isNaN(Number(amount)) && (
               <div className="flex justify-between text-sm text-green-600 font-semibold">
-                <span>Total ETH to Send:</span>
+                <span>Total {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to Send:</span>
                 <span className="font-mono">
-                  {(Number(amount) + Number(currentFee)).toFixed(6)} ETH
+                  {(Number(amount) + Number(currentFee)).toFixed(6)} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}
                 </span>
               </div>
             )}
@@ -156,8 +172,8 @@ export function DepositModal({
             {/* For token deposits, show ETH fee requirement */}
             {isTokenDeposit && (
               <div className="flex justify-between text-sm text-green-600 font-semibold">
-                <span>ETH Fee Required:</span>
-                <span className="font-mono">{currentFee} ETH</span>
+                <span>{activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} Fee Required:</span>
+                <span className="font-mono">{currentFee} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}</span>
               </div>
             )}
           </div>
@@ -166,8 +182,8 @@ export function DepositModal({
             <Info className="h-4 w-4" />
             <AlertDescription>
               {isTokenDeposit 
-                ? `You'll receive exactly ${amount || "0"} ${tokenSymbol} in the vault. ETH fee (${currentFee} ETH) is paid separately.`
-                : `The fee is sent on top of your deposit. You'll receive exactly ${amount || "0"} ETH in the vault.`
+                ? `You'll receive exactly ${amount || "0"} ${tokenSymbol} in the vault. ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} fee (${currentFee} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}) is paid separately.`
+                : `The fee is sent on top of your deposit. You'll receive exactly ${amount || "0"} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} in the vault.`
               }
             </AlertDescription>
           </Alert>
@@ -194,7 +210,9 @@ export function DepositModal({
                 Depositing...
               </>
             ) : (
-              isTokenDeposit ? `Deposit ${tokenSymbol}` : 'Deposit ETH'
+              isTokenDeposit 
+                ? `Deposit ${tokenSymbol}` 
+                : `Deposit ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
             )}
           </Button>
         </div>

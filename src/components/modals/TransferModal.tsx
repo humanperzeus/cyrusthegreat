@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowUpDown, Loader2, Shield, Info } from "lucide-react";
+import { getChainConfig } from "@/config/web3";
 
 interface TransferModalProps {
   open: boolean;
@@ -21,6 +22,8 @@ interface TransferModalProps {
   tokenSymbol?: string;
   tokenAddress?: string;
   tokenBalance?: string;
+  // Chain-aware props
+  activeChain?: 'ETH' | 'BSC';
 }
 
 export function TransferModal({
@@ -36,7 +39,8 @@ export function TransferModal({
   isTokenTransfer,
   tokenSymbol,
   tokenAddress,
-  tokenBalance
+  tokenBalance,
+  activeChain
 }: TransferModalProps) {
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -77,7 +81,10 @@ export function TransferModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
             <Shield className="w-6 h-6 text-vault-secondary" />
-            {isTokenTransfer ? `Anonymous ${tokenSymbol} Transfer` : 'Anonymous ETH Transfer'}
+            {isTokenTransfer 
+              ? `Anonymous ${tokenSymbol} Transfer` 
+              : `Anonymous ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} Transfer`
+            }
           </DialogTitle>
         </DialogHeader>
         
@@ -126,7 +133,10 @@ export function TransferModal({
 
           <div className="space-y-2">
             <Label htmlFor="amount" className="text-foreground">
-              Amount {isTokenTransfer ? `(${tokenSymbol})` : '(ETH)'}
+              Amount {isTokenTransfer 
+                ? `(${tokenSymbol})` 
+                : `(${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'})`
+              }
             </Label>
             <div className="relative">
               <Input
@@ -151,7 +161,10 @@ export function TransferModal({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Available in vault: {isTokenTransfer ? `${tokenBalance} ${tokenSymbol}` : `${vaultBalance} ETH`}
+              Available in vault: {isTokenTransfer 
+                ? `${tokenBalance} ${tokenSymbol}` 
+                : `${vaultBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+              }
             </p>
           </div>
 
@@ -161,12 +174,15 @@ export function TransferModal({
               <div className="flex justify-between text-sm">
                 <span className="text-amber-700 dark:text-amber-300">Recipient receives:</span>
                 <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
-                  {amount} {isTokenTransfer ? tokenSymbol : 'ETH'}
+                  {amount} {isTokenTransfer 
+                    ? tokenSymbol 
+                    : (activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH')
+                  }
                 </span>
               </div>
               <div className="flex justify-between text-sm text-amber-600">
                 <span>Fee (paid from wallet):</span>
-                <span className="font-mono">{currentFee} ETH</span>
+                <span className="font-mono">{currentFee} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}</span>
               </div>
             </div>
           )}
@@ -175,8 +191,8 @@ export function TransferModal({
             <Info className="h-4 w-4" />
             <AlertDescription>
               {isTokenTransfer 
-                ? `The recipient receives exactly ${amount || "0"} ${tokenSymbol}. The ETH fee is paid separately from your wallet balance.`
-                : `The recipient receives exactly ${amount || "0"} ETH. The fee is paid separately from your wallet balance.`
+                ? `The recipient receives exactly ${amount || "0"} ${tokenSymbol}. The ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} fee is paid separately from your wallet balance.`
+                : `The recipient receives exactly ${amount || "0"} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}. The fee is paid separately from your wallet balance.`
               }
             </AlertDescription>
           </Alert>
@@ -213,7 +229,9 @@ export function TransferModal({
                   Transferring...
                 </>
               ) : (
-                isTokenTransfer ? `Transfer ${tokenSymbol}` : 'Transfer ETH'
+                isTokenTransfer 
+                  ? `Transfer ${tokenSymbol}` 
+                  : `Transfer ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
               )}
             </Button>
           </div>

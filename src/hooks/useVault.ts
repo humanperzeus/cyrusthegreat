@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
 import { sepolia, mainnet, bsc, bscTestnet } from 'wagmi/chains';
 import { formatEther, parseEther, parseUnits } from 'viem';
 import { getContract } from 'viem';
-import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl } from '@/config/web3';
+import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl } from '@/config/web3';
 import { useToast } from '@/hooks/use-toast';
+import { decodeFunctionResult, encodeFunctionData } from 'viem';
 
 // Add window.ethereum type
 declare global {
@@ -25,6 +26,73 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   // State for network switching
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   
+  // Chain switching state
+  const [isSwitchingChain, setIsSwitchingChain] = useState(false);
+  
+  // Clear vault tokens when switching chains to prevent stale data
+  const clearVaultTokens = useCallback(() => {
+    console.log('🧹 Clearing vault tokens due to chain switch');
+    setVaultTokens([]);
+  }, []);
+  
+  // Clear vault tokens whenever activeChain changes
+  useEffect(() => {
+    console.log(`🔄 Active chain changed to: ${activeChain}`);
+    // Force clear vault tokens immediately
+    setVaultTokens([]);
+    console.log(`🧹 Vault tokens cleared for chain switch to ${activeChain}`);
+  }, [activeChain]);
+  
+  // Additional safety: clear vault tokens when chainId changes
+  useEffect(() => {
+    if (chainId && activeChain) {
+      const expectedChainId = activeChain === 'ETH' 
+        ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)
+        : (currentNetwork.mode === 'mainnet' ? 56 : 97);
+      
+      if (chainId !== expectedChainId) {
+        console.log(`🔄 Chain ID changed from ${expectedChainId} to ${chainId}, clearing vault tokens`);
+        setVaultTokens([]);
+      }
+    }
+  }, [chainId, activeChain, currentNetwork.mode]);
+  
+  // Debounced vault token fetch to prevent race conditions
+  const [vaultTokenFetchTimeout, setVaultTokenFetchTimeout] = useState<NodeJS.Timeout | null>(null);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (vaultTokenFetchTimeout) {
+        clearTimeout(vaultTokenFetchTimeout);
+      }
+    };
+  }, [vaultTokenFetchTimeout]);
+  
+  const debouncedFetchVaultTokens = useCallback(() => {
+    // Clear any existing timeout
+    if (vaultTokenFetchTimeout) {
+      clearTimeout(vaultTokenFetchTimeout);
+    }
+    
+    // Capture current chain to prevent race conditions
+    const currentChain = activeChain;
+    
+    // Set new timeout for 500ms delay
+    const timeout = setTimeout(() => {
+      console.log(`⏰ Debounced vault token fetch triggered for ${currentChain}`);
+      
+      // Only fetch if we're still on the same chain
+      if (activeChain === currentChain) {
+        fetchVaultTokensSigned();
+      } else {
+        console.log(`⚠️ Chain changed during debounce from ${currentChain} to ${activeChain}, aborting fetch`);
+      }
+    }, 500);
+    
+    setVaultTokenFetchTimeout(timeout);
+  }, [vaultTokenFetchTimeout, activeChain]);
+  
   // Get contract address based on active chain
   const getActiveContractAddress = () => {
     return getContractAddress(activeChain);
@@ -32,135 +100,160 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   
   // Get RPC URL based on active chain
   const getActiveRpcUrl = () => {
-    return getRpcUrl(activeChain, 'ALCHEMY');
+    return getBestRpcUrl(activeChain);
   };
   
-  // Function to get the target chain based on network mode
+  // Get current chain configuration
+  const getCurrentChainConfig = () => {
+    return getChainConfig(activeChain);
+  };
+  
+  // Function to get the target chain based on active chain and network mode
   const getTargetChain = () => {
-    if (currentNetwork.mode === 'mainnet') {
-      return mainnet; // Ethereum mainnet
-    } else {
-      return sepolia; // Ethereum testnet (Sepolia)
+    if (activeChain === 'ETH') {
+      if (currentNetwork.mode === 'mainnet') {
+        return mainnet; // Ethereum mainnet
+      } else {
+        return sepolia; // Ethereum testnet (Sepolia)
+      }
+    } else if (activeChain === 'BSC') {
+      if (currentNetwork.mode === 'mainnet') {
+        return bsc; // BSC mainnet
+      } else {
+        return bscTestnet; // BSC testnet
+      }
     }
+    
+    // Fallback to ETH if activeChain is not recognized
+    console.warn(`⚠️ Unknown activeChain: ${activeChain}, falling back to ETH`);
+    return currentNetwork.mode === 'mainnet' ? mainnet : sepolia;
   };
   
   // Function to automatically switch to the correct network
-  const autoSwitchNetwork = async () => {
-    console.log('🔄 autoSwitchNetwork called with:', {
-      isConnected,
-      isSwitchingNetwork,
-      currentNetwork: currentNetwork.mode,
-      targetChain: getTargetChain()
-    });
-    
-    if (!isConnected || isSwitchingNetwork) {
-      console.log('❌ Cannot switch: not connected or already switching');
-      return;
-    }
-    
-    const targetChain = getTargetChain();
-    const currentChainId = chainId;
-    
-    console.log('🔍 Network switch details:', {
-      currentChainId,
-      targetChainId: targetChain.id,
-      targetChainName: targetChain.name,
-      currentNetworkMode: currentNetwork.mode
-    });
-    
-    // Check if we're already on the correct network
-    if (currentChainId === targetChain.id) {
-      console.log(`✅ Already on correct network: ${targetChain.name} (${targetChain.id})`);
-      return;
-    }
-    
-    console.log(`🔄 Switching from chain ${currentChainId} to ${targetChain.name} (${targetChain.id})`);
+  const autoSwitchNetwork = useCallback(async () => {
+    if (!isConnected || !address) return;
     
     try {
-      setIsSwitchingNetwork(true);
+      console.log('🔄 Auto-switching network...');
+      setIsSwitchingChain(true);
       
-      // Skip Wagmi and go directly to MetaMask
-      if (window.ethereum) {
-        try {
-          console.log('🔄 Direct MetaMask network switch...');
-          
-          // First try to switch directly
-          try {
-            await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: `0x${targetChain.id.toString(16)}` }],
-            });
-            console.log('✅ Direct MetaMask switch successful');
-          } catch (switchError: any) {
-            console.log('⚠️ Direct switch failed, error code:', switchError.code);
-            
-            // If network doesn't exist (error code 4902), add it first
-            if (switchError.code === 4902) {
-              console.log('🔄 Network not found, adding to MetaMask...');
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: `0x${targetChain.id.toString(16)}`,
-                  chainName: targetChain.name,
-                  nativeCurrency: {
-                    name: targetChain.nativeCurrency.name,
-                    symbol: targetChain.nativeCurrency.symbol,
-                    decimals: targetChain.nativeCurrency.decimals,
-                  },
-                  rpcUrls: [targetChain.rpcUrls.default.http[0]],
-                  blockExplorerUrls: [targetChain.blockExplorers?.default?.url],
-                }],
-              });
-              console.log('✅ Network added to MetaMask');
-            } else {
-              throw switchError;
-            }
-          }
-          
-        } catch (metamaskError) {
-          console.error('❌ MetaMask network switch failed:', metamaskError);
-          throw metamaskError;
-        }
-      } else {
-        throw new Error('MetaMask not available');
+      // Clear any existing vault tokens before switching
+      clearVaultTokens();
+      
+      const targetChain = getTargetChain();
+      console.log(`🎯 Target chain: ${targetChain.name} (ID: ${targetChain.id})`);
+      
+      console.log('🔍 Network switch details:', {
+        currentChainId: chainId,
+        targetChainId: targetChain.id,
+        targetChainName: targetChain.name,
+        currentNetworkMode: currentNetwork.mode
+      });
+      
+      // Check if we're already on the correct network
+      if (chainId === targetChain.id) {
+        console.log(`✅ Already on correct network: ${targetChain.name} (${targetChain.id})`);
+        return;
       }
       
-      toast({
-        title: "Network Switched",
-        description: `Successfully switched to ${targetChain.name}`,
-        variant: "default",
-      });
+      console.log(`🔄 Switching from chain ${chainId} to ${targetChain.name} (${targetChain.id})`);
       
-      console.log(`✅ Successfully switched to ${targetChain.name}`);
-      
-      // Wait a moment for the switch to complete, then check if it worked
-      setTimeout(() => {
-        console.log('🔍 Checking if network switch actually worked...');
-        console.log('Current chainId:', chainId);
-        console.log('Target chainId:', targetChain.id);
+      try {
+        setIsSwitchingNetwork(true);
         
-        if (chainId !== targetChain.id) {
-          console.warn('⚠️ Network switch may not have worked - chainId still shows:', chainId);
-          toast({
-            title: "Network Switch Warning",
-            description: "Network may not have switched. Please check MetaMask manually.",
-            variant: "destructive",
-          });
+        // Skip Wagmi and go directly to MetaMask
+        if (window.ethereum) {
+          try {
+            console.log('🔄 Direct MetaMask network switch...');
+            
+            // First try to switch directly
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: `0x${targetChain.id.toString(16)}` }],
+              });
+              console.log('✅ Direct MetaMask switch successful');
+            } catch (switchError: any) {
+              console.log('⚠️ Direct switch failed, error code:', switchError.code);
+              
+              // If network doesn't exist (error code 4902), add it first
+              if (switchError.code === 4902) {
+                console.log('🔄 Network not found, adding to MetaMask...');
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: `0x${targetChain.id.toString(16)}`,
+                    chainName: targetChain.name,
+                    nativeCurrency: {
+                      name: targetChain.nativeCurrency.name,
+                      symbol: targetChain.nativeCurrency.symbol,
+                      decimals: targetChain.nativeCurrency.decimals,
+                    },
+                    rpcUrls: [targetChain.rpcUrls.default.http[0]],
+                    blockExplorerUrls: [targetChain.blockExplorers?.default?.url],
+                  }],
+                });
+                console.log('✅ Network added to MetaMask');
+              } else {
+                throw switchError;
+              }
+            }
+            
+          } catch (metamaskError) {
+            console.error('❌ MetaMask network switch failed:', metamaskError);
+            throw metamaskError;
+          }
+        } else {
+          throw new Error('MetaMask not available');
         }
-      }, 3000);
-      
+        
+        toast({
+          title: "Network Switched",
+          description: `Successfully switched to ${targetChain.name}`,
+          variant: "default",
+        });
+        
+        console.log(`✅ Successfully switched to ${targetChain.name}`);
+        
+        // Wait a moment for the switch to complete, then check if it worked
+        setTimeout(() => {
+          console.log('🔍 Checking if network switch actually worked...');
+          console.log('Current chainId:', chainId);
+          console.log('Target chainId:', targetChain.id);
+          
+          if (chainId !== targetChain.id) {
+            console.warn('⚠️ Network switch may not have worked - chainId still shows:', chainId);
+            toast({
+              title: "Network Switch Warning",
+              description: "Network may not have switched. Please check MetaMask manually.",
+              variant: "destructive",
+            });
+          }
+        }, 3000);
+        
+      } catch (error) {
+        console.error('❌ Failed to switch network:', error);
+        
+        toast({
+          title: "Network Switch Failed",
+          description: error instanceof Error ? error.message : "Failed to switch network. Please switch manually in MetaMask.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsSwitchingNetwork(false);
+        setIsSwitchingChain(false);
+      }
     } catch (error) {
-      console.error('❌ Failed to switch network:', error);
-      
+      console.error('❌ Error switching network:', error);
       toast({
         title: "Network Switch Failed",
-        description: error instanceof Error ? error.message : "Failed to switch network. Please switch manually in MetaMask.",
+        description: "Failed to switch network. Please try again.",
         variant: "destructive",
       });
-    } finally {
       setIsSwitchingNetwork(false);
+      setIsSwitchingChain(false);
     }
-  };
+  }, [isConnected, address, chainId, currentNetwork.mode]);
   
   // Auto-switch network when component mounts or network mode changes
   React.useEffect(() => {
@@ -380,111 +473,219 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   const publicClient = usePublicClient();
   const walletClient = useWalletClient();
 
+  // Process vault tokens from signed call result
+  const processVaultTokensFromSignedCall = async (tokenAddresses: any[], tokenBalances: any[]) => {
+    console.log('🔄 Starting vault token processing from signed call...');
+    const processedTokens = [];
+    
+    for (let i = 0; i < tokenAddresses.length; i++) {
+      const tokenAddr = tokenAddresses[i];
+      const tokenBalance = tokenBalances[i];
+      
+      // Skip native token (address 0) - it's already displayed in top balance
+      if (tokenAddr === '0x0000000000000000000000000000000000000000') {
+        const chainConfig = getCurrentChainConfig();
+        console.log(`⏭️ Skipping native ${chainConfig.nativeCurrency.symbol} (address 0) - already displayed in top balance`);
+        continue;
+      }
+      
+      try {
+        // Fetch token metadata (symbol, decimals) from the token contract
+        let metadataResponse;
+        
+        if (activeChain === 'ETH') {
+          // Use Alchemy API for ETH chains
+          metadataResponse = await fetch(getActiveRpcUrl(), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'alchemy_getTokenMetadata',
+              params: [tokenAddr]
+            })
+          });
+        } else if (activeChain === 'BSC') {
+          // For BSC, we'll use a simpler approach since Alchemy methods don't work
+          console.log(`📝 BSC token detected: ${tokenAddr} - using fallback metadata`);
+          const fallbackToken = {
+            address: tokenAddr,
+            symbol: 'BSC-TOKEN',
+            balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+            decimals: 18
+          };
+          processedTokens.push(fallbackToken);
+          console.log(`✅ BSC token processed:`, fallbackToken);
+          continue; // Skip to next token
+        }
+
+        if (metadataResponse && metadataResponse.ok) {
+          const metadata = await metadataResponse.json();
+          console.log(`📡 Token metadata for ${tokenAddr}:`, metadata);
+          
+          if (metadata.result) {
+            const processedToken = {
+              address: tokenAddr,
+              symbol: metadata.result.symbol || 'UNKNOWN',
+              balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+              decimals: metadata.result.decimals || 18
+            };
+            
+            processedTokens.push(processedToken);
+            console.log(`✅ Token processed:`, processedToken);
+          }
+        } else {
+          console.warn(`⚠️ Failed to fetch metadata for token ${tokenAddr}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error processing token ${tokenAddr}:`, error);
+      }
+    }
+    
+    console.log(`✅ Final processed vault tokens (${activeChain} filtered out):`, processedTokens);
+    setVaultTokens(processedTokens);
+  };
+
   // NEW: Signed call for vault tokens since getMyVaultedTokens is private
   const fetchVaultTokensSigned = async () => {
     if (!address || !isConnected) return;
     
+    // Capture current chain to prevent race conditions
+    const currentChain = activeChain;
+    const currentChainId = getCurrentNetwork().chainId;
+    
     try {
-      console.log('🔐 Fetching vault tokens with signed call...');
+      console.log(`🔐 Fetching vault tokens for chain: ${currentChain} (ID: ${currentChainId})`);
       
       if (!publicClient || !walletClient) {
         console.error('❌ Public client or wallet client not available');
         return;
       }
       
+      // Validate we're still on the same chain
+      if (activeChain !== currentChain) {
+        console.log(`⚠️ Chain changed during fetch from ${currentChain} to ${activeChain}, aborting`);
+        return;
+      }
+      
+      // CRITICAL FIX: Get the correct contract address for the current chain
+      const contractAddress = getActiveContractAddress();
+      console.log(`🏗️ Using contract address for ${currentChain}: ${contractAddress}`);
+      
+      // CRITICAL FIX: Use expected chain ID from network config instead of potentially stale hook chainId
+      const expectedChainId = currentChain === 'ETH' 
+        ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
+        : (currentNetwork.mode === 'mainnet' ? 56 : 97);      // BSC mainnet vs testnet
+      
+      console.log(`✅ Expected chain ID for ${currentChain} ${currentNetwork.mode}: ${expectedChainId}`);
+      console.log(`🔍 Current hook chainId: ${chainId} (may be stale during chain switch)`);
+      
+      // Don't abort on chain ID mismatch - the hook chainId might be stale during switching
+      // Instead, proceed with the fetch using the correct contract address
+      
+      // Safety check: Ensure we're using the correct RPC URL for the active chain
+      const rpcUrl = getActiveRpcUrl();
+      console.log(`🌐 Using RPC URL for ${currentChain}: ${rpcUrl}`);
+      
+      // Debug: Check if publicClient is configured for the correct chain
+      console.log(`🔍 Public client chain ID: ${publicClient.chain?.id || 'unknown'}`);
+      console.log(`🔍 Expected chain ID: ${expectedChainId}`);
+      
+      // Fallback: If publicClient is not configured for the correct chain, use direct HTTP call
+      if (publicClient.chain?.id !== expectedChainId) {
+        console.log(`⚠️ Public client chain mismatch, using direct HTTP call to ${rpcUrl}`);
+        
+        try {
+          const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'eth_call',
+              params: [{
+                to: contractAddress,
+                data: '0x' + encodeFunctionData({
+                  abi: VAULT_ABI,
+                  functionName: 'getMyVaultedTokens',
+                  args: []
+                }).slice(2)
+              }, 'latest']
+            })
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log(`✅ Direct HTTP call result:`, result);
+            
+            if (result.result && result.result !== '0x') {
+              // Decode the result
+              const decodedResult = decodeFunctionResult({
+                abi: VAULT_ABI,
+                functionName: 'getMyVaultedTokens',
+                data: result.result
+              });
+              
+              console.log(`✅ Decoded result from direct HTTP call:`, decodedResult);
+              
+              // Process the result directly
+              if (decodedResult && Array.isArray(decodedResult)) {
+                const [tokenAddresses, tokenBalances] = decodedResult;
+                console.log('🔍 Raw vault tokens result from direct HTTP call:', { tokenAddresses, tokenBalances });
+                
+                // Process tokens with real metadata
+                await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
+                return; // Exit early since we processed the result
+              } else {
+                console.log(`ℹ️ No vault tokens found for ${currentChain}`);
+                setVaultTokens([]);
+                return; // Exit early since we processed the result
+              }
+            } else {
+              console.log(`ℹ️ No vault tokens found via direct HTTP call`);
+              setVaultTokens([]);
+              return; // Exit early since we processed the result
+            }
+          } else {
+            console.error(`❌ Direct HTTP call failed:`, response.status, response.statusText);
+          }
+        } catch (error) {
+          console.error(`❌ Direct HTTP call error:`, error);
+        }
+      }
+      
       // Make a direct call to the private function
       const result = await publicClient.readContract({
-        address: getActiveContractAddress() as `0x${string}`,
+        address: contractAddress as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'getMyVaultedTokens',
         args: [],
         account: address,
       });
       
-      console.log('✅ Vault tokens fetched with signed call:', result);
+      // Double-check chain hasn't changed after the call
+      if (activeChain !== currentChain) {
+        console.log(`⚠️ Chain changed after contract call from ${currentChain} to ${activeChain}, discarding results`);
+        return;
+      }
+      
+      console.log(`✅ Vault tokens fetched for ${currentChain}:`, result);
       
       // Process the result directly
       if (result && Array.isArray(result)) {
         const [tokenAddresses, tokenBalances] = result;
         console.log('🔍 Raw vault tokens result:', { tokenAddresses, tokenBalances });
         
-        // Process tokens with real metadata
-        const processVaultTokens = async () => {
-          console.log('🔄 Starting vault token processing from signed call...');
-          const processedTokens = [];
-          
-          for (let i = 0; i < tokenAddresses.length; i++) {
-            const tokenAddr = tokenAddresses[i];
-            const tokenBalance = tokenBalances[i];
-            
-            // Skip native ETH (address 0) - it's already displayed in top balance
-            if (tokenAddr === '0x0000000000000000000000000000000000000000') {
-              console.log('⏭️ Skipping native ETH (address 0) - already displayed in top balance');
-              continue;
-            }
-            
-            //console.log(`🔄 Processing token ${i}:`, { address: tokenAddr, balance: tokenBalance });
-            
-            try {
-              // Fetch token metadata (symbol, decimals) from the token contract
-              const metadataResponse = await fetch(getAlchemyUrl(), {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: 1,
-                  method: 'alchemy_getTokenMetadata',
-                  params: [tokenAddr]
-                })
-              });
-
-              if (metadataResponse.ok) {
-                const metadata = await metadataResponse.json();
-                console.log(`📡 Token metadata for ${tokenAddr}:`, metadata);
-                
-                if (metadata.result) {
-                  const processedToken = {
-                    address: tokenAddr,
-                    symbol: metadata.result.symbol || 'UNKNOWN',
-                    balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-                    decimals: metadata.result.decimals || 18
-                  };
-                  
-                  processedTokens.push(processedToken);
-                  console.log(`✅ Token processed:`, processedToken);
-                }
-              } else {
-                // Fallback if metadata fetch fails
-                const fallbackToken = {
-                  address: tokenAddr,
-                  symbol: 'UNKNOWN',
-                  balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-                  decimals: 18
-                };
-                processedTokens.push(fallbackToken);
-                console.log(`⚠️ Token fallback:`, fallbackToken);
-              }
-            } catch (error) {
-              console.error(`❌ Error fetching metadata for token ${tokenAddr}:`, error);
-              // Fallback on error
-              const errorToken = {
-                address: tokenAddr,
-                symbol: 'UNKNOWN',
-                balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-                decimals: 18
-              };
-              processedTokens.push(errorToken);
-              console.log(`❌ Token error fallback:`, errorToken);
-            }
-          }
-          
-          console.log('✅ Final processed vault tokens (ETH filtered out):', processedTokens);
-          setVaultTokens(processedTokens);
-        };
-        
-        processVaultTokens();
+        // Process tokens with real metadata using the new function
+                await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
+        return; // Exit early since we processed the result
+      } else {
+        console.log(`ℹ️ Invalid result format for ${currentChain}:`, result);
+        setVaultTokens([]);
       }
       
     } catch (error) {
@@ -552,136 +753,143 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
 
   // Helper function to get the correct Alchemy URL based on network mode
   const getAlchemyUrl = () => {
-    return currentNetwork.isMainnet 
-      ? `https://eth-mainnet.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`
-      : `https://eth-sepolia.g.alchemy.com/v2/${WEB3_CONFIG.ALCHEMY_API_KEY}`;
+    // Use our dynamic RPC URL function that respects the active chain
+    return getActiveRpcUrl();
   };
   
-  // Function to get wallet tokens from Alchemy API
+  // Function to get wallet tokens - chain-aware implementation
   const fetchWalletTokens = async () => {
     if (!address) return;
     
     try {
       setIsLoadingTokens(true);
       console.log('🔍 Fetching wallet tokens for address:', address);
-      console.log('🔑 Using Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
       
-      // Get the correct Alchemy URL based on network mode
-      const alchemyUrl = getAlchemyUrl();
+      const chainConfig = getCurrentChainConfig();
+      console.log('📍 Fetching tokens for chain:', chainConfig.chain, chainConfig.networkMode);
       
-      console.log('🌐 Using Alchemy URL:', alchemyUrl);
-      
-      // Use Alchemy API to get token balances
-      const response = await fetch(alchemyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'alchemy_getTokenBalances',
-          params: [address, 'erc20']
-        })
-      });
-
-      console.log('📡 HTTP Response status:', response.status);
-      console.log('📡 HTTP Response headers:', response.headers);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ HTTP error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-      }
-
-      const data = await response.json();
-      //console.log('📡 Full Alchemy API response:', JSON.stringify(data, null, 2));
-
-      if (data.error) {
-        console.error('❌ Alchemy API error:', data.error);
-        throw new Error(`Alchemy API error: ${data.error.message}`);
-      }
-
-      if (data.result && data.result.tokenBalances) {
-        console.log('✅ Token balances found:', data.result.tokenBalances);
+      if (activeChain === 'ETH') {
+        // Use Alchemy API for ETH chains
+        console.log('🔑 Using Alchemy API for ETH chain');
+        console.log('🔑 Using Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
         
-        // Process tokens with proper hex balance parsing and metadata fetching
-        const processTokens = async () => {
-          const processedTokens = [];
-          
-          for (const token of data.result.tokenBalances) {
-            try {
-              // Parse hex balance to decimal
-              const balanceHex = token.tokenBalance;
-              const balanceDecimal = parseInt(balanceHex, 16);
-              
-              //console.log(`🔍 Processing token ${token.contractAddress}:`);
-              //console.log(`   Hex balance: ${balanceHex}`);
-              //console.log(`   Decimal balance: ${balanceDecimal}`);
-              
-              // Only process tokens with balance > 0
-              if (balanceDecimal > 0) {
-                // Fetch token metadata (symbol, decimals)
-                const metadataResponse = await fetch(alchemyUrl, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    id: 1,
-                    method: 'alchemy_getTokenMetadata',
-                    params: [token.contractAddress]
-                  })
-                });
-
-                let symbol = 'UNKNOWN';
-                let decimals = 18;
-
-                if (metadataResponse.ok) {
-                  const metadata = await metadataResponse.json();
-                  console.log(`📡 Metadata for ${token.contractAddress}:`, metadata);
-                  
-                  if (metadata.result) {
-                    symbol = metadata.result.symbol || 'UNKNOWN';
-                    decimals = metadata.result.decimals || 18;
-                  }
-                }
-
-                // Calculate human-readable balance
-                const humanBalance = balanceDecimal / Math.pow(10, decimals);
-                
-                processedTokens.push({
-                  address: token.contractAddress,
-                  symbol: symbol,
-                  balance: humanBalance.toFixed(4).replace(/\.?0+$/, ''), // Clean decimal display like ETH
-                  decimals: decimals
-                });
-                
-                console.log(`✅ Token processed: ${symbol} = ${humanBalance.toFixed(4).replace(/\.?0+$/, '')}`);
-              }
-            } catch (error) {
-              console.error(`❌ Error processing token ${token.contractAddress}:`, error);
-            }
-          }
-          
-          console.log('✅ All tokens processed:', processedTokens);
-          setWalletTokens(processedTokens);
-        };
+        const alchemyUrl = getActiveRpcUrl();
+        console.log('🌐 Using Alchemy URL:', alchemyUrl);
         
-        processTokens();
-      } else {
-        console.log('ℹ️ No token balances in response:', data.result);
+        // Use Alchemy API to get token balances
+        const response = await fetch(alchemyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'alchemy_getTokenBalances',
+            params: [address, 'erc20']
+          })
+        });
+
+        console.log('📡 HTTP Response status:', response.status);
+        console.log('📡 HTTP Response headers:', response.headers);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.error) {
+          console.error('❌ Alchemy API error:', data.error);
+          throw new Error(`Alchemy API error: ${data.error.message}`);
+        }
+
+        if (data.result && data.result.tokenBalances) {
+          console.log('✅ Token balances found:', data.result.tokenBalances);
+          await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
+        }
+        
+      } else if (activeChain === 'BSC') {
+        // Use direct RPC calls for BSC chains (no Alchemy-specific methods)
+        console.log('🔗 Using direct RPC for BSC chain');
+        
+        // For BSC, we'll fetch native balance and show it as the main token
+        // BSC doesn't have the same token discovery as ETH
+        console.log('📝 BSC chain detected - showing native BNB balance only');
+        
+        // Set empty tokens array for BSC (just native BNB)
         setWalletTokens([]);
+        setIsLoadingTokens(false);
       }
       
     } catch (error) {
       console.error('❌ Error fetching wallet tokens:', error);
-      // Fallback to empty array on error
       setWalletTokens([]);
     } finally {
       setIsLoadingTokens(false);
     }
+  };
+
+  // Helper function to process Alchemy API token data
+  const processAlchemyTokens = async (tokenBalances: any[], alchemyUrl: string) => {
+    const processedTokens = [];
+    
+    for (const token of tokenBalances) {
+      try {
+        // Parse hex balance to decimal
+        const balanceHex = token.tokenBalance;
+        const balanceDecimal = parseInt(balanceHex, 16);
+        
+        // Only process tokens with balance > 0
+        if (balanceDecimal > 0) {
+          // Fetch token metadata (symbol, decimals)
+          const metadataResponse = await fetch(alchemyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'alchemy_getTokenMetadata',
+              params: [token.contractAddress]
+            })
+          });
+
+          let symbol = 'UNKNOWN';
+          let decimals = 18;
+
+          if (metadataResponse.ok) {
+            const metadata = await metadataResponse.json();
+            console.log(`📡 Metadata for ${token.contractAddress}:`, metadata);
+            
+            if (metadata.result) {
+              symbol = metadata.result.symbol || 'UNKNOWN';
+              decimals = metadata.result.decimals || 18;
+            }
+          }
+
+          // Calculate human-readable balance
+          const humanBalance = balanceDecimal / Math.pow(10, decimals);
+          
+          processedTokens.push({
+            address: token.contractAddress,
+            symbol: symbol,
+            balance: humanBalance.toFixed(4).replace(/\.?0+$/, ''), // Clean decimal display like ETH
+            decimals: decimals
+          });
+          
+          console.log(`✅ Token processed: ${symbol} = ${humanBalance.toFixed(4).replace(/\.?0+$/, '')}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error processing token ${token.contractAddress}:`, error);
+      }
+    }
+    
+    console.log('✅ All tokens processed:', processedTokens);
+    setWalletTokens(processedTokens);
   };
 
   // Process vault tokens data from contract
@@ -907,7 +1115,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         functionName: 'depositETH',
         args: [],
         value: totalValue, // Send amount + fee together
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
       });
 
@@ -1004,12 +1212,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       
       // Call the real contract - send fee with withdrawal
       writeVaultContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI as any,
         functionName: 'withdrawETH',
         args: [amountInWei],
         value: feeInWei, // Send fee with withdrawal transaction
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
       });
 
@@ -1118,7 +1326,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       
       // Call the real contract for anonymous transfer - send fee with transfer
       writeVaultContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI as any,
         functionName: 'transferInternalETH',
         args: [to as `0x${string}`, amountInWei],
@@ -1872,11 +2080,39 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     }
   }, [isWritePending]);
 
+  // Auto-fetch chain-specific data when activeChain changes
+  React.useEffect(() => {
+    if (isConnected && address) {
+      console.log(`🔄 Active chain changed to ${activeChain}, fetching chain-specific data...`);
+      
+      // Force refresh all Wagmi hooks by updating their dependencies
+      const chainConfig = getCurrentChainConfig();
+      console.log(`🔄 Chain config updated:`, chainConfig);
+      
+      // This will trigger re-fetching of all chain-specific data
+      fetchChainSpecificData();
+    }
+  }, [activeChain, isConnected, address]);
+
   // Combined loading state
   const isTransactionLoading = isLoading || isWritePending || isConfirming;
 
   // Check if we're on the correct network
   const isOnCorrectNetwork = chainId === getTargetChain().id;
+  
+  // Fetch chain-specific data when activeChain changes
+  const fetchChainSpecificData = useCallback(() => {
+    console.log(`🔄 Fetching chain-specific data for ${activeChain}`);
+    
+    // Use debounced fetch for vault tokens to prevent race conditions
+    debouncedFetchVaultTokens();
+    
+    // Other data can be fetched immediately
+    refetchWalletBalance();
+    refetchVaultBalance();
+    refetchFee();
+    fetchWalletTokens();
+  }, [activeChain, debouncedFetchVaultTokens, refetchWalletBalance, refetchVaultBalance, refetchFee, fetchWalletTokens]);
   
   // Function to force network switch with user notification
   const forceNetworkSwitch = async () => {
@@ -1910,6 +2146,80 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     }
     return true;
   };
+
+  // Debug functions for chain switching investigation
+  React.useEffect(() => {
+    // Add debug functions to window for console access
+    (window as any).debugChainSwitching = {
+      // Get current chain state
+      getCurrentState: () => {
+        const chainConfig = getCurrentChainConfig();
+        return {
+          activeChain,
+          chainConfig,
+          currentNetwork: getCurrentNetwork(),
+          address,
+          isConnected,
+          chainId,
+          walletBalance: walletBalance?.value?.toString(),
+          vaultBalance: vaultBalanceData?.toString(),
+          currentFee: currentFee?.toString()
+        };
+      },
+      
+      // Test chain-specific data fetching
+      testChainDataFetching: async () => {
+        console.log('🧪 Testing chain-specific data fetching...');
+        const chainConfig = getCurrentChainConfig();
+        console.log('📍 Current chain config:', chainConfig);
+        console.log('🔗 Active RPC URL:', getActiveRpcUrl());
+        console.log('🏦 Active contract address:', getActiveContractAddress());
+        
+        // Test wallet balance refetch
+        if (refetchWalletBalance) {
+          console.log('🔄 Refetching wallet balance...');
+          refetchWalletBalance();
+        }
+        
+        // Test vault balance refetch
+        if (refetchVaultBalance) {
+          console.log('🔄 Refetching vault balance...');
+          refetchVaultBalance();
+        }
+        
+        // Test token refetch
+        if (fetchWalletTokens) {
+          console.log('🔄 Refetching wallet tokens...');
+          fetchWalletTokens();
+        }
+        
+        if (refetchVaultTokens) {
+          console.log('🔄 Refetching vault tokens...');
+          refetchVaultTokens();
+        }
+      },
+      
+      // Force chain data refresh
+      forceChainRefresh: async () => {
+        console.log('🚨 Force refreshing all chain data...');
+        await fetchChainSpecificData();
+      },
+      
+      // Check if data is stale
+      checkDataFreshness: () => {
+        const chainConfig = getCurrentChainConfig();
+        console.log('📊 Data Freshness Check:');
+        console.log('  Active Chain:', activeChain);
+        console.log('  Expected Chain ID:', chainConfig.chainId);
+        console.log('  Actual Chain ID:', chainId);
+        console.log('  Chain Match:', chainId === chainConfig.chainId);
+        console.log('  Wallet Balance Source:', walletBalance?.value?.toString());
+        console.log('  Vault Balance Source:', vaultBalanceData?.toString());
+      }
+    };
+    
+    console.log('🔧 Debug functions added to window.debugChainSwitching');
+  }, [activeChain, address, isConnected, chainId, walletBalance, vaultBalanceData, currentFee, refetchWalletBalance, refetchVaultBalance, fetchWalletTokens, refetchVaultTokens, fetchChainSpecificData, getCurrentChainConfig, getActiveRpcUrl, getActiveContractAddress]);
 
   return {
     isConnected,
@@ -1947,5 +2257,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     isOnCorrectNetwork, // Add this line
     forceNetworkSwitch, // Add this line
     requireCorrectNetwork, // Add this line
+    fetchChainSpecificData, // Add this line
   };
 };

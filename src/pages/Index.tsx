@@ -160,6 +160,8 @@ const Index = () => {
         tokenSymbol={tokenDepositInfo?.symbol}
         tokenAddress={tokenDepositInfo?.address}
         tokenBalance={tokenDepositInfo?.balance}
+        // Chain-aware props
+        activeChain={activeChain}
       />
 
       <WithdrawModal
@@ -176,6 +178,8 @@ const Index = () => {
         tokenSymbol={tokenWithdrawInfo?.symbol}
         tokenAddress={tokenWithdrawInfo?.address}
         tokenBalance={tokenWithdrawInfo?.balance}
+        // Chain-aware props
+        activeChain={activeChain}
       />
 
       <TransferModal
@@ -192,6 +196,8 @@ const Index = () => {
         tokenSymbol={tokenTransferInfo?.symbol}
         tokenAddress={tokenTransferInfo?.address}
         tokenBalance={tokenTransferInfo?.balance}
+        // Chain-aware props
+        activeChain={activeChain}
       />
     </>
   );

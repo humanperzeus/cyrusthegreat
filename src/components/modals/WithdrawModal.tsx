@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowUpDown, Loader2, Info } from "lucide-react";
+import { getChainConfig } from "@/config/web3";
 
 interface WithdrawModalProps {
   open: boolean;
@@ -21,6 +22,8 @@ interface WithdrawModalProps {
   tokenSymbol?: string;
   tokenAddress?: string;
   tokenBalance?: string;
+  // Chain-aware props
+  activeChain?: 'ETH' | 'BSC';
 }
 
 export function WithdrawModal({
@@ -36,7 +39,8 @@ export function WithdrawModal({
   isTokenWithdraw,
   tokenSymbol,
   tokenAddress,
-  tokenBalance
+  tokenBalance,
+  activeChain
 }: WithdrawModalProps) {
   const [amount, setAmount] = useState("");
 
@@ -75,7 +79,10 @@ export function WithdrawModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
             <ArrowUpDown className="w-6 h-6 text-vault-success" />
-            {isTokenWithdraw ? `Withdraw ${tokenSymbol} from Vault` : 'Withdraw ETH from Vault'}
+            {isTokenWithdraw 
+              ? `Withdraw ${tokenSymbol} from Vault` 
+              : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} from Vault`
+            }
           </DialogTitle>
         </DialogHeader>
         
@@ -103,7 +110,10 @@ export function WithdrawModal({
 
             <div className="grid gap-2">
               <Label htmlFor="amount">
-                Amount {isTokenWithdraw ? `(${tokenSymbol})` : '(ETH)'}
+                Amount {isTokenWithdraw 
+                  ? `(${tokenSymbol})` 
+                  : `(${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'})`
+                }
               </Label>
               <div className="relative">
                 <Input
@@ -128,7 +138,10 @@ export function WithdrawModal({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Available in vault: {isTokenWithdraw ? `${tokenBalance} ${tokenSymbol}` : `${vaultBalance} ETH`}
+                Available in vault: {isTokenWithdraw 
+                  ? `${tokenBalance} ${tokenSymbol}` 
+                  : `${vaultBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                }
               </p>
             </div>
 
@@ -138,12 +151,15 @@ export function WithdrawModal({
                 <div className="flex justify-between text-sm">
                   <span className="text-amber-700 dark:text-amber-300">You will receive:</span>
                   <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
-                    {amount} {isTokenWithdraw ? tokenSymbol : 'ETH'}
+                    {amount} {isTokenWithdraw 
+                      ? tokenSymbol 
+                      : (activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH')
+                    }
                   </span>
                 </div>
                 <div className="flex justify-between text-sm text-amber-600">
                   <span>Fee (paid from wallet):</span>
-                  <span className="font-mono">{currentFee} ETH</span>
+                  <span className="font-mono">{currentFee} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}</span>
                 </div>
               </div>
             )}
@@ -152,8 +168,8 @@ export function WithdrawModal({
               <Info className="h-4 w-4" />
               <AlertDescription>
                 {isTokenWithdraw 
-                  ? `You receive exactly ${amount || "0"} ${tokenSymbol} to your wallet. The ETH fee is paid separately from your wallet balance.`
-                  : `You receive exactly ${amount || "0"} ETH to your wallet. The fee is paid separately from your wallet balance.`
+                  ? `You receive exactly ${amount || "0"} ${tokenSymbol} to your wallet. The ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} fee is paid separately from your wallet balance.`
+                  : `You receive exactly ${amount || "0"} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to your wallet. The fee is paid separately from your wallet balance.`
                 }
               </AlertDescription>
             </Alert>
@@ -190,7 +206,9 @@ export function WithdrawModal({
                     Withdrawing...
                   </>
                 ) : (
-                  isTokenWithdraw ? `Withdraw ${tokenSymbol}` : 'Withdraw ETH'
+                  isTokenWithdraw 
+                    ? `Withdraw ${tokenSymbol}` 
+                    : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
                 )}
               </Button>
             </div>
