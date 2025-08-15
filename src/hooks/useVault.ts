@@ -2037,6 +2037,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   // Combined loading state
   const isTransactionLoading = isLoading || isWritePending || isConfirming;
 
+  // Check if we're on the correct network
+  const isOnCorrectNetwork = chainId === getTargetChain().id;
+  
   // Fetch chain-specific data when activeChain changes
   const fetchChainSpecificData = useCallback(() => {
     console.log(`🔄 Fetching chain-specific data for ${activeChain}`);
@@ -2050,9 +2053,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     refetchFee();
     fetchWalletTokens();
   }, [activeChain, debouncedFetchVaultTokens, refetchWalletBalance, refetchVaultBalance, refetchFee, fetchWalletTokens]);
-  
-  // Check if we're on the correct network
-  const isOnCorrectNetwork = chainId === getTargetChain().id;
   
   // Function to force network switch with user notification
   const forceNetworkSwitch = async () => {
@@ -2217,7 +2217,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     isLoadingTokens,
     refetchWalletTokens: fetchWalletTokens,
     refetchVaultTokens,
-    fetchVaultTokensSigned, // CRITICAL FIX: Expose for manual refresh
     // Network switching functions
     currentNetwork,
     isSwitchingNetwork,

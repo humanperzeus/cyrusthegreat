@@ -29,7 +29,6 @@ interface VaultCoreProps {
   isLoadingTokens: boolean;
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
-  fetchVaultTokensSigned: () => Promise<void>; // CRITICAL FIX: Add for manual vault refresh
   // Chain switching props
   activeChain: 'ETH' | 'BSC';
   setActiveChain: (chain: 'ETH' | 'BSC') => void;
@@ -71,7 +70,6 @@ export const VaultCore = ({
   isLoadingTokens,
   refetchWalletTokens,
   refetchVaultTokens,
-  fetchVaultTokensSigned,
   // Token deposit handler
   onTokenDeposit,
   // Token withdraw handler
@@ -257,15 +255,7 @@ export const VaultCore = ({
                       variant="ghost"
                       size="sm"
                       className="h-6 w-6 p-0 hover:bg-background/40"
-                      onClick={async () => {
-                        console.log('🔄 Manual vault tokens refresh triggered');
-                        try {
-                          await fetchVaultTokensSigned();
-                          console.log('✅ Vault tokens refresh completed');
-                        } catch (error) {
-                          console.error('❌ Vault tokens refresh failed:', error);
-                        }
-                      }}
+                      onClick={refetchVaultTokens}
                       disabled={isLoadingTokens}
                     >
                       <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
