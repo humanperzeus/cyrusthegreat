@@ -85,6 +85,14 @@ export const VaultCore = ({
   // Display mode state
   const [displayMode, setDisplayMode] = useState<'tabs' | 'cards' | 'tabbed-cards' | 'native-tokens'>('tabs');
   
+  // CRITICAL FIX: Add state to track active tab and prevent automatic switching
+  const [activeTab, setActiveTab] = useState<'wallet' | 'vault'>('wallet');
+  
+  // Debug: Log when activeTab changes
+  useEffect(() => {
+    console.log(`🎯 Active tab changed to: ${activeTab}`);
+  }, [activeTab]);
+  
   // Chain switching state
   const [isSwitchingChain, setIsSwitchingChain] = useState(false);
   
@@ -474,9 +482,15 @@ export const VaultCore = ({
   const TabsMode = () => {
     const chainConfig = getChainConfig(activeChain);
     
+    // Handler for tab changes
+    const handleTabChange = (value: string) => {
+      console.log(`🔄 Tab switching from ${activeTab} to ${value}`);
+      setActiveTab(value as 'wallet' | 'vault');
+    };
+    
     return (
     <div className="w-full">
-      <Tabs defaultValue="wallet" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="wallet">Wallet Tokens ({walletTokens.length})</TabsTrigger>
           <TabsTrigger value="vault">Vault Tokens ({vaultTokens.length})</TabsTrigger>
