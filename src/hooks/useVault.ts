@@ -2164,14 +2164,23 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   // CRITICAL FIX: Create a chain-aware public client that always uses the correct chain
   const createChainAwarePublicClient = useCallback(() => {
     const rpcUrl = getActiveRpcUrl();
+    
+    // Ensure we have a valid RPC URL
+    if (!rpcUrl || typeof rpcUrl !== 'string') {
+      throw new Error(`Invalid RPC URL for ${activeChain}: ${rpcUrl}`);
+    }
+    
     const chainId = activeChain === 'ETH' 
       ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
       : (currentNetwork.mode === 'mainnet' ? 56 : 97);      // BSC mainnet vs testnet
     
     console.log(`🔧 Creating chain-aware public client for ${activeChain} (ID: ${chainId}) with RPC: ${rpcUrl}`);
     
+    // Create the transport with explicit typing
+    const transport = http(rpcUrl as `http://${string}` | `https://${string}`);
+    
     return createPublicClient({
-      transport: http(rpcUrl),
+      transport,
       chain: {
         id: chainId,
         name: activeChain === 'ETH' ? 'Ethereum' : 'Binance Smart Chain',
