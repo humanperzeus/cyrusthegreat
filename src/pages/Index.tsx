@@ -26,6 +26,7 @@ const Index = () => {
     isLoadingTokens,
     refetchWalletTokens,
     refetchVaultTokens,
+    fetchVaultTokensSigned, // CRITICAL FIX: Add for manual vault refresh
     depositToken,
     depositTokenWithDelay,
     withdrawToken,
@@ -134,6 +135,7 @@ const Index = () => {
         isLoadingTokens={isLoadingTokens}
         refetchWalletTokens={refetchWalletTokens}
         refetchVaultTokens={refetchVaultTokens}
+        fetchVaultTokensSigned={fetchVaultTokensSigned} // CRITICAL FIX: Add for manual vault refresh
         onDeposit={handleETHDeposit}
         onWithdraw={handleETHWithdraw}
         onTransfer={handleETHTransfer}
