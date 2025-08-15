@@ -1,10 +1,11 @@
 import { Shield, Lock, Coins, ArrowUpDown, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useAccount } from "wagmi";
-import { WalletConnector } from "./WalletConnector";
-import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WalletConnector } from "./WalletConnector";
+import { useAccount } from "wagmi";
+import { switchToChain, getActiveChainInfo } from "@/config/web3";
+import { useState, useEffect } from "react";
 
 interface VaultCoreProps {
   walletBalance: string;
@@ -27,6 +28,9 @@ interface VaultCoreProps {
   isLoadingTokens: boolean;
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
+  // Chain switching props
+  activeChain: 'ETH' | 'BSC';
+  setActiveChain: (chain: 'ETH' | 'BSC') => void;
 }
 
 export const VaultCore = ({ 
@@ -47,12 +51,21 @@ export const VaultCore = ({
   // Token withdraw handler
   onTokenWithdraw,
   // Token transfer handler
-  onTokenTransfer
+  onTokenTransfer,
+  // Chain switching props
+  activeChain,
+  setActiveChain
 }: VaultCoreProps) => {
   const { isConnected } = useAccount();
   
   // Display mode state
   const [displayMode, setDisplayMode] = useState<'tabs' | 'cards' | 'tabbed-cards' | 'native-tokens'>('tabs');
+  
+  // Chain switching state
+  const [isSwitchingChain, setIsSwitchingChain] = useState(false);
+  
+  // Get current network info
+  const currentNetwork = getActiveChainInfo();
 
   // State for token deposit modal
   const [tokenDepositInfo, setTokenDepositInfo] = useState<{
@@ -74,6 +87,24 @@ export const VaultCore = ({
   // Handle token transfer click
   const handleTokenTransfer = (token: { symbol: string; address: string; balance: string }) => {
     onTokenTransfer(token);
+  };
+
+  // Handle chain switching
+  const handleChainSwitch = async (targetChain: 'ETH' | 'BSC') => {
+    if (targetChain === activeChain || isSwitchingChain) return;
+    
+    setIsSwitchingChain(true);
+    try {
+      const success = await switchToChain(targetChain);
+      if (success) {
+        setActiveChain(targetChain);
+        console.log(`✅ Switched to ${targetChain} chain`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to switch to ${targetChain}:`, error);
+    } finally {
+      setIsSwitchingChain(false);
+    }
   };
 
   // NativeTokensMode Component
@@ -703,10 +734,26 @@ export const VaultCore = ({
             
             {/* Chain Switcher - Icons Only */}
             <div className="flex justify-center space-x-2">
-              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-white bg-vault-primary border border-vault-primary rounded cursor-default" title="Ethereum (Current)">
+              <div 
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
+                  activeChain === 'ETH' 
+                    ? 'text-white bg-vault-primary border border-vault-primary' 
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
+                }`}
+                onClick={() => handleChainSwitch('ETH')}
+                title={`Ethereum ${currentNetwork.networkMode === 'mainnet' ? 'Mainnet' : 'Testnet'} (Click to switch)`}
+              >
                 ETH
               </div>
-              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Binance Chain (Coming Soon)">
+              <div 
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
+                  activeChain === 'BSC' 
+                    ? 'text-white bg-vault-primary border border-vault-primary' 
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
+                }`}
+                onClick={() => handleChainSwitch('BSC')}
+                title={`Binance Chain ${currentNetwork.networkMode === 'mainnet' ? 'Mainnet' : 'Testnet'} (Click to switch)`}
+              >
                 BSC
               </div>
               <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Base (Coming Soon)">
@@ -716,6 +763,14 @@ export const VaultCore = ({
                 SOL
               </div>
             </div>
+
+            {/* Chain Switching Status */}
+            {isSwitchingChain && (
+              <div className="flex items-center space-x-2 text-xs text-vault-warning">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Switching to {activeChain === 'ETH' ? 'BSC' : 'ETH'}...</span>
+              </div>
+            )}
 
             {/* Display Mode Switcher - Icons Only */}
             <div className="flex justify-center space-x-2">
@@ -813,13 +868,13 @@ export const VaultCore = ({
             {displayMode !== 'native-tokens' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
                 <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
-                  <div className="text-sm text-muted-foreground">Wallet Balance</div>
+                <div className="text-sm text-muted-foreground">Wallet Balance</div>
                   <div className="text-lg sm:text-xl font-bold text-vault-warning break-all">
                     {walletBalance} ETH
                   </div>
-                </div>
+              </div>
                 <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30">
-                  <div className="text-sm text-muted-foreground">Vault Balance</div>
+                <div className="text-sm text-muted-foreground">Vault Balance</div>
                   <div className="text-lg sm:text-xl font-bold text-vault-success break-all">
                     {vaultBalance} ETH
                   </div>

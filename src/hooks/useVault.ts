@@ -3,7 +3,7 @@ import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTr
 import { sepolia, mainnet, bsc, bscTestnet } from 'wagmi/chains';
 import { formatEther, parseEther, parseUnits } from 'viem';
 import { getContract } from 'viem';
-import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork } from '@/config/web3';
+import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl } from '@/config/web3';
 import { useToast } from '@/hooks/use-toast';
 
 // Add window.ethereum type
@@ -13,7 +13,7 @@ declare global {
   }
 }
 
-export const useVault = () => {
+export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { toast } = useToast();
@@ -24,6 +24,16 @@ export const useVault = () => {
   
   // State for network switching
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+  
+  // Get contract address based on active chain
+  const getActiveContractAddress = () => {
+    return getContractAddress(activeChain);
+  };
+  
+  // Get RPC URL based on active chain
+  const getActiveRpcUrl = () => {
+    return getRpcUrl(activeChain, 'ALCHEMY');
+  };
   
   // Function to get the target chain based on network mode
   const getTargetChain = () => {
@@ -154,12 +164,22 @@ export const useVault = () => {
   
   // Auto-switch network when component mounts or network mode changes
   React.useEffect(() => {
-    // Only auto-switch once when component mounts and wallet connects
-    if (isConnected && !isSwitchingNetwork && chainId !== getTargetChain().id) {
-      console.log('🚀 Auto-switching network on mount...');
-      autoSwitchNetwork();
+    // Force network switch immediately when wallet connects
+    if (isConnected && !isSwitchingNetwork) {
+      console.log('🚀 Wallet connected, checking network...');
+      console.log('Current chainId:', chainId);
+      console.log('Target chainId:', getTargetChain().id);
+      console.log('Network mode:', currentNetwork.mode);
+      
+      // Always try to switch if not on correct network
+      if (chainId !== getTargetChain().id) {
+        console.log('🔄 Chain mismatch detected, forcing switch...');
+        autoSwitchNetwork();
+      } else {
+        console.log('✅ Already on correct network');
+      }
     }
-  }, [isConnected]); // Only depend on isConnected, not currentNetwork.mode
+  }, [isConnected, chainId]); // Depend on both isConnected and chainId
   
   // Debug logging for network switching
   React.useEffect(() => {
@@ -183,7 +203,7 @@ export const useVault = () => {
       VITE_ALCHEMY_ETH_TESTNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_TESTNET_RPC_URL,
       
       // Computed values
-      computedContractAddress: getContractAddress('ETH'),
+              computedContractAddress: getActiveContractAddress(),
       
       // Current network state
       currentNetworkMode: currentNetwork.mode,
@@ -275,7 +295,7 @@ export const useVault = () => {
         VITE_ALCHEMY_ETH_TESTNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_TESTNET_RPC_URL,
         
         // Computed values
-        computedContractAddress: getContractAddress('ETH'),
+        computedContractAddress: getActiveContractAddress(),
         
         // Current network state
         currentNetworkMode: currentNetwork.mode,
@@ -300,7 +320,7 @@ export const useVault = () => {
 
   // Get vault ETH balance using the correct function name from the real ABI
   const { data: vaultBalanceData, refetch: refetchVaultBalance } = useReadContract({
-    address: getContractAddress('ETH') as `0x${string}`,
+    address: getActiveContractAddress() as `0x${string}`,
     abi: VAULT_ABI,
     functionName: 'getBalance', // Changed from 'getETHBalance' to 'getBalance'
     args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined, // ETH is represented as address(0)
@@ -318,7 +338,7 @@ export const useVault = () => {
   React.useEffect(() => {
     console.log('🔍 Vault Balance Fetching Debug:', {
       address,
-      contractAddress: getContractAddress('ETH'),
+      contractAddress: getActiveContractAddress(),
       args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined,
       vaultBalanceData,
       vaultBalanceDataType: typeof vaultBalanceData,
@@ -329,9 +349,9 @@ export const useVault = () => {
 
   // Get current fee from contract
   const { data: currentFee, refetch: refetchFee } = useReadContract({
-    address: getContractAddress('ETH') as `0x${string}`,
-    abi: VAULT_ABI,
-    functionName: 'getCurrentFeeInWei',
+          address: getActiveContractAddress() as `0x${string}`,
+      abi: VAULT_ABI,
+      functionName: 'getCurrentFeeInWei',
     query: {
       enabled: !!address,
       // Only refetch when user returns to tab (no constant polling)
@@ -344,7 +364,7 @@ export const useVault = () => {
 
   // Get vault tokens for the connected user - using signed call since it's private
   const { data: vaultTokensData, refetch: refetchVaultTokens } = useReadContract({
-    address: getContractAddress('ETH') as `0x${string}`,
+    address: getActiveContractAddress() as `0x${string}`,
     abi: VAULT_ABI,
     functionName: 'getMyVaultedTokens',
     args: address ? [address] : undefined,
@@ -374,7 +394,7 @@ export const useVault = () => {
       
       // Make a direct call to the private function
       const result = await publicClient.readContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'getMyVaultedTokens',
         args: [],
@@ -403,7 +423,7 @@ export const useVault = () => {
               continue;
             }
             
-            console.log(`🔄 Processing token ${i}:`, { address: tokenAddr, balance: tokenBalance });
+            //console.log(`🔄 Processing token ${i}:`, { address: tokenAddr, balance: tokenBalance });
             
             try {
               // Fetch token metadata (symbol, decimals) from the token contract
@@ -575,7 +595,7 @@ export const useVault = () => {
       }
 
       const data = await response.json();
-      console.log('📡 Full Alchemy API response:', JSON.stringify(data, null, 2));
+      //console.log('📡 Full Alchemy API response:', JSON.stringify(data, null, 2));
 
       if (data.error) {
         console.error('❌ Alchemy API error:', data.error);
@@ -595,9 +615,9 @@ export const useVault = () => {
               const balanceHex = token.tokenBalance;
               const balanceDecimal = parseInt(balanceHex, 16);
               
-              console.log(`🔍 Processing token ${token.contractAddress}:`);
-              console.log(`   Hex balance: ${balanceHex}`);
-              console.log(`   Decimal balance: ${balanceDecimal}`);
+              //console.log(`🔍 Processing token ${token.contractAddress}:`);
+              //console.log(`   Hex balance: ${balanceHex}`);
+              //console.log(`   Decimal balance: ${balanceDecimal}`);
               
               // Only process tokens with balance > 0
               if (balanceDecimal > 0) {
@@ -796,7 +816,7 @@ export const useVault = () => {
     (window as any).testVaultTokens = () => {
       console.log('🧪 Manual vault tokens test...');
       console.log('📍 Current address:', address);
-      console.log('🏦 Vault contract address:', getContractAddress('ETH'));
+      console.log('🏦 Vault contract address:', getActiveContractAddress());
       console.log('📊 Current vault tokens data:', vaultTokensData);
       console.log('🪙 Current vault tokens state:', vaultTokens);
       
@@ -882,7 +902,7 @@ export const useVault = () => {
       
       // Call the real contract - send amount + fee together
       writeVaultContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI as any,
         functionName: 'depositETH',
         args: [],
@@ -1855,6 +1875,42 @@ export const useVault = () => {
   // Combined loading state
   const isTransactionLoading = isLoading || isWritePending || isConfirming;
 
+  // Check if we're on the correct network
+  const isOnCorrectNetwork = chainId === getTargetChain().id;
+  
+  // Function to force network switch with user notification
+  const forceNetworkSwitch = async () => {
+    if (isOnCorrectNetwork) {
+      console.log('✅ Already on correct network');
+      return;
+    }
+    
+    console.log('🚨 Forcing network switch - user must switch to continue');
+    
+    toast({
+      title: "Network Switch Required",
+      description: `Please switch to ${getTargetChain().name} to use this app`,
+      variant: "destructive",
+    });
+    
+    // Try to switch automatically
+    await autoSwitchNetwork();
+  };
+  
+  // Block interactions if not on correct network
+  const requireCorrectNetwork = () => {
+    if (!isOnCorrectNetwork) {
+      toast({
+        title: "Wrong Network",
+        description: `Please switch to ${getTargetChain().name} to continue`,
+        variant: "destructive",
+      });
+      forceNetworkSwitch();
+      return false;
+    }
+    return true;
+  };
+
   return {
     isConnected,
     walletBalance: walletBalanceFormatted,
@@ -1888,5 +1944,8 @@ export const useVault = () => {
     isSwitchingNetwork,
     autoSwitchNetwork,
     getTargetChain: getTargetChain,
+    isOnCorrectNetwork, // Add this line
+    forceNetworkSwitch, // Add this line
+    requireCorrectNetwork, // Add this line
   };
 };

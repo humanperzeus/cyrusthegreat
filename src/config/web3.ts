@@ -3,6 +3,14 @@
 
 import vaultAbiJson from '../contracts/abis/vaultAbi.json';
 
+// Import MetaMask chain switching functions
+import { 
+  connectMetaMaskToEthMainnet, 
+  connectMetaMaskToEthTestnet,
+  connectMetaMaskToBscMainnet, 
+  connectMetaMaskToBscTestnet 
+} from '../metamask.js';
+
 export const WEB3_CONFIG = {
   // Network Mode (mainnet or testnet)
   NETWORK_MODE: import.meta.env.VITE_NETWORK_MODE || 'testnet',
@@ -94,4 +102,43 @@ export const getEtherscanUrl = (chain: 'ETH' | 'BSC') => {
     return WEB3_CONFIG.ETHERSCAN_BSC_URL;
   }
   throw new Error(`Unsupported chain: ${chain}`);
+};
+
+// Chain Switcher Utility Functions
+export const switchToChain = async (targetChain: 'ETH' | 'BSC') => {
+  const networkMode = WEB3_CONFIG.NETWORK_MODE;
+  
+  try {
+    if (targetChain === 'ETH') {
+      if (networkMode === 'mainnet') {
+        await connectMetaMaskToEthMainnet();
+      } else {
+        await connectMetaMaskToEthTestnet();
+      }
+    } else if (targetChain === 'BSC') {
+      if (networkMode === 'mainnet') {
+        await connectMetaMaskToBscMainnet();
+      } else {
+        await connectMetaMaskToBscTestnet();
+      }
+    }
+    
+    console.log(`✅ Successfully switched to ${targetChain} ${networkMode}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Failed to switch to ${targetChain} ${networkMode}:`, error);
+    return false;
+  }
+};
+
+// Get current active chain info
+export const getActiveChainInfo = () => {
+  const networkMode = WEB3_CONFIG.NETWORK_MODE;
+  return {
+    networkMode,
+    isMainnet: networkMode === 'mainnet',
+    isTestnet: networkMode === 'testnet',
+    ethChainId: networkMode === 'mainnet' ? 1 : 11155111, // ETH mainnet vs Sepolia
+    bscChainId: networkMode === 'mainnet' ? 56 : 97, // BSC mainnet vs testnet
+  };
 };

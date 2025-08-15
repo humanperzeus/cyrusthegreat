@@ -7,6 +7,9 @@ import { useVault } from "@/hooks/useVault";
 import { parseEther } from "viem";
 
 const Index = () => {
+  // Chain switching state
+  const [activeChain, setActiveChain] = useState<'ETH' | 'BSC'>('ETH');
+  
   const { 
     walletBalance, 
     vaultBalance, 
@@ -31,7 +34,7 @@ const Index = () => {
     currentNetwork,
     isSwitchingNetwork,
     autoSwitchNetwork
-  } = useVault();
+  } = useVault(activeChain);
 
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
@@ -137,6 +140,9 @@ const Index = () => {
         onTokenDeposit={handleTokenDeposit}
         onTokenWithdraw={handleTokenWithdraw}
         onTokenTransfer={handleTokenTransfer}
+        // Chain switching props
+        activeChain={activeChain}
+        setActiveChain={setActiveChain}
       />
 
       <DepositModal
