@@ -6,6 +6,7 @@ import { getContract } from 'viem';
 import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl } from '@/config/web3';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
+import { createPublicClient, http } from 'viem';
 
 // Add window.ethereum type
 declare global {
@@ -593,73 +594,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       console.log(`🔍 Public client chain ID: ${publicClient.chain?.id || 'unknown'}`);
       console.log(`🔍 Expected chain ID: ${expectedChainId}`);
       
-      // Fallback: If publicClient is not configured for the correct chain, use direct HTTP call
-      if (publicClient.chain?.id !== expectedChainId) {
-        console.log(`⚠️ Public client chain mismatch, using direct HTTP call to ${rpcUrl}`);
-        
-        try {
-          const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'eth_call',
-              params: [{
-                to: contractAddress,
-                data: '0x' + encodeFunctionData({
-                  abi: VAULT_ABI,
-                  functionName: 'getMyVaultedTokens',
-                  args: []
-                }).slice(2)
-              }, 'latest']
-            })
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            console.log(`✅ Direct HTTP call result:`, result);
-            
-            if (result.result && result.result !== '0x') {
-              // Decode the result
-              const decodedResult = decodeFunctionResult({
-                abi: VAULT_ABI,
-                functionName: 'getMyVaultedTokens',
-                data: result.result
-              });
-              
-              console.log(`✅ Decoded result from direct HTTP call:`, decodedResult);
-              
-              // Process the result directly
-              if (decodedResult && Array.isArray(decodedResult)) {
-                const [tokenAddresses, tokenBalances] = decodedResult;
-                console.log('🔍 Raw vault tokens result from direct HTTP call:', { tokenAddresses, tokenBalances });
-                
-                // Process tokens with real metadata
-                await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
-                return; // Exit early since we processed the result
-              } else {
-                console.log(`ℹ️ No vault tokens found for ${currentChain}`);
-                setVaultTokens([]);
-                return; // Exit early since we processed the result
-              }
-            } else {
-              console.log(`ℹ️ No vault tokens found via direct HTTP call`);
-              setVaultTokens([]);
-              return; // Exit early since we processed the result
-            }
-          } else {
-            console.error(`❌ Direct HTTP call failed:`, response.status, response.statusText);
-          }
-        } catch (error) {
-          console.error(`❌ Direct HTTP call error:`, error);
-        }
-      }
+      // CRITICAL FIX: Always use chain-aware public client instead of potentially stale publicClient
+      const chainAwareClient = createChainAwarePublicClient();
+      console.log(`🔧 Using chain-aware client for ${currentChain} with chain ID: ${chainAwareClient.chain.id}`);
       
-      // Make a direct call to the private function
-      const result = await publicClient.readContract({
+      // Make a direct call to the private function using chain-aware client
+      const result = await chainAwareClient.readContract({
         address: contractAddress as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'getMyVaultedTokens',
@@ -2220,6 +2160,34 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     
     console.log('🔧 Debug functions added to window.debugChainSwitching');
   }, [activeChain, address, isConnected, chainId, walletBalance, vaultBalanceData, currentFee, refetchWalletBalance, refetchVaultBalance, fetchWalletTokens, refetchVaultTokens, fetchChainSpecificData, getCurrentChainConfig, getActiveRpcUrl, getActiveContractAddress]);
+
+  // CRITICAL FIX: Create a chain-aware public client that always uses the correct chain
+  const createChainAwarePublicClient = useCallback(() => {
+    const rpcUrl = getActiveRpcUrl();
+    const chainId = activeChain === 'ETH' 
+      ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
+      : (currentNetwork.mode === 'mainnet' ? 56 : 97);      // BSC mainnet vs testnet
+    
+    console.log(`🔧 Creating chain-aware public client for ${activeChain} (ID: ${chainId}) with RPC: ${rpcUrl}`);
+    
+    return createPublicClient({
+      transport: http(rpcUrl),
+      chain: {
+        id: chainId,
+        name: activeChain === 'ETH' ? 'Ethereum' : 'Binance Smart Chain',
+        network: activeChain === 'ETH' ? 'ethereum' : 'bsc',
+        nativeCurrency: {
+          name: activeChain === 'ETH' ? 'Ether' : 'BNB',
+          symbol: activeChain === 'ETH' ? 'ETH' : 'BNB',
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: { http: [rpcUrl] },
+          public: { http: [rpcUrl] },
+        },
+      },
+    });
+  }, [activeChain, currentNetwork.mode]);
 
   return {
     isConnected,
