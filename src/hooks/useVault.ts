@@ -287,24 +287,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       isSwitchingNetwork
     });
     
-    // Add comprehensive debugging for contract addresses and RPC URLs
-    console.log('🏗️ Contract & RPC Configuration Debug:', {
-      // Environment variables
-      VITE_NETWORK_MODE: import.meta.env.VITE_NETWORK_MODE,
-      VITE_CTGVAULT_ETH_MAINNET_CONTRACT: import.meta.env.VITE_CTGVAULT_ETH_MAINNET_CONTRACT,
-      VITE_CTGVAULT_ETH_TESTNET_CONTRACT: import.meta.env.VITE_CTGVAULT_ETH_TESTNET_CONTRACT,
-      VITE_ALCHEMY_ETH_MAINNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_MAINNET_RPC_URL,
-      VITE_ALCHEMY_ETH_TESTNET_RPC_URL: import.meta.env.VITE_ALCHEMY_ETH_TESTNET_RPC_URL,
-      
-      // Computed values
-              computedContractAddress: getActiveContractAddress(),
-      
-      // Current network state
-      currentNetworkMode: currentNetwork.mode,
-      targetChain: getTargetChain(),
-      actualChainId: chainId
-    });
-    
     // Add manual test function to window for debugging
     (window as any).testNetworkSwitch = () => {
       console.log('🧪 Manual network switch test triggered');
@@ -493,7 +475,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       try {
         // Use the same chain-aware RPC URL that works for wallet tokens
         const rpcUrl = getActiveRpcUrl();
-        console.log(`🌐 Fetching metadata for ${tokenAddr} on ${activeChain} using: ${rpcUrl}`);
+
         
         // Use Alchemy API for both ETH and BSC chains - it works for both!
         const metadataResponse = await fetch(rpcUrl, {
@@ -511,7 +493,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
 
         if (metadataResponse && metadataResponse.ok) {
           const metadata = await metadataResponse.json();
-          console.log(`📡 Token metadata for ${tokenAddr}:`, metadata);
+
           
           if (metadata.result) {
             const processedToken = {
@@ -603,7 +585,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       
       // Safety check: Ensure we're using the correct RPC URL for the active chain
       const rpcUrl = getActiveRpcUrl();
-      console.log(`🌐 Using RPC URL for ${currentChain}: ${rpcUrl}`);
+      
       
       // Debug: Check if publicClient is configured for the correct chain
       console.log(`🔍 Public client chain ID: ${publicClient.chain?.id || 'unknown'}`);
@@ -724,15 +706,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       console.log('🔍 Fetching wallet tokens for address:', address);
       
       const chainConfig = getCurrentChainConfig();
-      console.log('📍 Fetching tokens for chain:', chainConfig.chain, chainConfig.networkMode);
+      
       
       if (activeChain === 'ETH') {
         // Use Alchemy API for ETH chains
-        console.log('🔑 Using Alchemy API for ETH chain');
-        console.log('🔑 Using Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
-        
+  
         const alchemyUrl = getActiveRpcUrl();
-        console.log('🌐 Using Alchemy URL:', alchemyUrl);
+
         
         // Use Alchemy API to get token balances
         const response = await fetch(alchemyUrl, {
@@ -748,9 +728,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
           })
         });
 
-        console.log('📡 HTTP Response status:', response.status);
-        console.log('📡 HTTP Response headers:', response.headers);
-
         if (!response.ok) {
           const errorText = await response.text();
           console.error('❌ HTTP error response:', errorText);
@@ -760,8 +737,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         const data = await response.json();
         
         if (data.error) {
-          console.error('❌ Alchemy API error:', data.error);
-          throw new Error(`Alchemy API error: ${data.error.message}`);
+
         }
 
         if (data.result && data.result.tokenBalances) {
@@ -771,11 +747,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         
       } else if (activeChain === 'BSC') {
         // Use Alchemy API for BSC chains (same as ETH, just different RPC)
-        console.log('🔑 Using Alchemy API for BSC chain');
-        console.log('🔑 Using Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
+
         
         const alchemyUrl = getActiveRpcUrl();
-        console.log('🌐 Using Alchemy URL:', alchemyUrl);
+
         
         // Use Alchemy API to get token balances (same method as ETH)
         const response = await fetch(alchemyUrl, {
@@ -803,8 +778,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         const data = await response.json();
         
         if (data.error) {
-          console.error('❌ Alchemy API error:', data.error);
-          throw new Error(`Alchemy API error: ${data.error.message}`);
         }
 
         if (data.result && data.result.tokenBalances) {
@@ -852,7 +825,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
 
           if (metadataResponse.ok) {
             const metadata = await metadataResponse.json();
-            console.log(`📡 Metadata for ${token.contractAddress}:`, metadata);
+            
             
             if (metadata.result) {
               symbol = metadata.result.symbol || 'UNKNOWN';
@@ -931,7 +904,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
 
               if (metadataResponse.ok) {
                 const metadata = await metadataResponse.json();
-                console.log(`📡 Token metadata for ${tokenAddr}:`, metadata);
+
                 
                 if (metadata.result) {
                   const processedToken = {
@@ -999,8 +972,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     (window as any).testTokenFetching = () => {
       console.log('🧪 Manual token fetching test...');
       console.log('📍 Current address:', address);
-      console.log('🔑 Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
-      console.log('🌐 API URL:', getAlchemyUrl());
       
       if (address) {
         fetchWalletTokens();
@@ -2057,7 +2028,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   // FIX: Reset loading state when transaction is cancelled or fails
   React.useEffect(() => {
     if (!isWritePending && isLoading) {
-      console.log('🔄 Transaction cancelled or failed, resetting loading state...');
+      
       setIsLoading(false);
     }
   }, [isWritePending, isLoading]);
@@ -2072,11 +2043,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   // Auto-fetch chain-specific data when activeChain changes
   React.useEffect(() => {
     if (isConnected && address) {
-      console.log(`🔄 Active chain changed to ${activeChain}, fetching chain-specific data...`);
+      
       
       // Force refresh all Wagmi hooks by updating their dependencies
       const chainConfig = getCurrentChainConfig();
-      console.log(`🔄 Chain config updated:`, chainConfig);
+      
       
       // This will trigger re-fetching of all chain-specific data
       fetchChainSpecificData();
@@ -2160,8 +2131,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       testChainDataFetching: async () => {
         console.log('🧪 Testing chain-specific data fetching...');
         const chainConfig = getCurrentChainConfig();
-        console.log('📍 Current chain config:', chainConfig);
-        console.log('🔗 Active RPC URL:', getActiveRpcUrl());
+        
+        
         console.log('🏦 Active contract address:', getActiveContractAddress());
         
         // Test wallet balance refetch
@@ -2207,7 +2178,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       }
     };
     
-    console.log('🔧 Debug functions added to window.debugChainSwitching');
+    
   }, [activeChain, address, isConnected, chainId, walletBalance, vaultBalanceData, currentFee, refetchWalletBalance, refetchVaultBalance, fetchWalletTokens, refetchVaultTokens, fetchChainSpecificData, getCurrentChainConfig, getActiveRpcUrl, getActiveContractAddress]);
 
   // CRITICAL FIX: Create a chain-aware public client that always uses the correct chain
@@ -2216,14 +2187,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     
     // Ensure we have a valid RPC URL
     if (!rpcUrl || typeof rpcUrl !== 'string') {
-      throw new Error(`Invalid RPC URL for ${activeChain}: ${rpcUrl}`);
+      throw new Error(`Invalid RPC URL for ${activeChain}`);
     }
     
     const chainId = activeChain === 'ETH' 
       ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
       : (currentNetwork.mode === 'mainnet' ? 56 : 97);      // BSC mainnet vs testnet
     
-    console.log(`🔧 Creating chain-aware public client for ${activeChain} (ID: ${chainId}) with RPC: ${rpcUrl}`);
     
     // Create the transport with explicit typing
     const transport = http(rpcUrl as `http://${string}` | `https://${string}`);
