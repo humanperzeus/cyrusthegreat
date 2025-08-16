@@ -491,36 +491,23 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       }
       
       try {
-        // Fetch token metadata (symbol, decimals) from the token contract
-        let metadataResponse;
+        // Use the same chain-aware RPC URL that works for wallet tokens
+        const rpcUrl = getActiveRpcUrl();
+        console.log(`🌐 Fetching metadata for ${tokenAddr} on ${activeChain} using: ${rpcUrl}`);
         
-        if (activeChain === 'ETH') {
-          // Use Alchemy API for ETH chains
-          metadataResponse = await fetch(getActiveRpcUrl(), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'alchemy_getTokenMetadata',
-              params: [tokenAddr]
-            })
-          });
-        } else if (activeChain === 'BSC') {
-          // For BSC, we'll use a simpler approach since Alchemy methods don't work
-          console.log(`📝 BSC token detected: ${tokenAddr} - using fallback metadata`);
-          const fallbackToken = {
-            address: tokenAddr,
-            symbol: 'BSC-TOKEN',
-            balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-            decimals: 18
-          };
-          processedTokens.push(fallbackToken);
-          console.log(`✅ BSC token processed:`, fallbackToken);
-          continue; // Skip to next token
-        }
+        // Use Alchemy API for both ETH and BSC chains - it works for both!
+        const metadataResponse = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'alchemy_getTokenMetadata',
+            params: [tokenAddr]
+          })
+        });
 
         if (metadataResponse && metadataResponse.ok) {
           const metadata = await metadataResponse.json();
@@ -535,17 +522,43 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
             };
             
             processedTokens.push(processedToken);
-            console.log(`✅ Token processed:`, processedToken);
+            console.log(`✅ Token processed: ${processedToken.symbol} = ${processedToken.balance}`);
+          } else {
+            // Fallback if no result in metadata
+            console.warn(`⚠️ No metadata result for token ${tokenAddr}, using fallback`);
+            const fallbackToken = {
+              address: tokenAddr,
+              symbol: 'UNKNOWN',
+              balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+              decimals: 18
+            };
+            processedTokens.push(fallbackToken);
           }
         } else {
-          console.warn(`⚠️ Failed to fetch metadata for token ${tokenAddr}`);
+          // Fallback if metadata fetch fails
+          console.warn(`⚠️ Failed to fetch metadata for token ${tokenAddr}, using fallback`);
+          const fallbackToken = {
+            address: tokenAddr,
+            symbol: 'UNKNOWN',
+            balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+            decimals: 18
+          };
+          processedTokens.push(fallbackToken);
         }
       } catch (error) {
         console.error(`❌ Error processing token ${tokenAddr}:`, error);
+        // Error fallback
+        const errorToken = {
+          address: tokenAddr,
+          symbol: 'UNKNOWN',
+          balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
+          decimals: 18
+        };
+        processedTokens.push(errorToken);
       }
     }
     
-    console.log(`✅ Final processed vault tokens (${activeChain} filtered out):`, processedTokens);
+    console.log(`✅ Final processed vault tokens:`, processedTokens);
     setVaultTokens(processedTokens);
   };
 
