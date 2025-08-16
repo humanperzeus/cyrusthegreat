@@ -1307,7 +1307,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         functionName: 'transferInternalETH',
         args: [to as `0x${string}`, amountInWei],
         value: feeInWei, // Send fee with transfer transaction
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
       });
 
@@ -1361,10 +1361,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         ],
         functionName: 'approve',
         args: [
-          getContractAddress('ETH') as `0x${string}`,
+          getActiveContractAddress() as `0x${string}`,
           amount
         ],
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
       });
 
@@ -1438,11 +1438,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       
       // Call the actual vault deposit function WITH ETH fee
       await writeVaultContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'depositToken',
         args: [tokenAddress, amountWei],
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
         value: feeWei, // Send ETH fee along with token deposit
       });
@@ -1527,7 +1527,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
           }
         ],
         functionName: 'allowance',
-        args: [address, getContractAddress('ETH') as `0x${string}`],
+        args: [address, getActiveContractAddress() as `0x${string}`],
       });
 
       console.log(`📊 Current allowance: ${currentAllowance}, Required: ${amountWei}`);
@@ -1611,10 +1611,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         ],
         functionName: 'approve',
         args: [
-          getContractAddress('ETH') as `0x${string}`,
+          getActiveContractAddress() as `0x${string}`,
           amountWei // Use proper amount
         ],
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
       });
 
@@ -1640,11 +1640,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
           
           // Send the deposit transaction
           await writeVaultContract({
-            address: getContractAddress('ETH') as `0x${string}`,
+            address: getActiveContractAddress() as `0x${string}`,
             abi: VAULT_ABI,
             functionName: 'depositToken',
             args: [tokenAddress, amountWei], // Use proper amount
-            chain: sepolia,
+            chain: getTargetChain(),
             account: address,
             value: feeWei, // Send ETH fee along with token deposit
           });
@@ -1698,11 +1698,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       
       // Call the actual vault deposit function WITH ETH fee
       await writeVaultContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'depositToken',
         args: [tokenAddress, amount],
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
         value: feeWei, // Send ETH fee along with token deposit
       });
@@ -1752,10 +1752,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         ],
         functionName: 'approve',
         args: [
-          getContractAddress('ETH') as `0x${string}`,
+          getActiveContractAddress() as `0x${string}`,
           amount
         ],
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
       });
 
@@ -1852,11 +1852,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
 
       // Call the vault withdraw function WITH ETH fee
       await writeVaultContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'withdrawToken',
         args: [tokenAddress, amountWei],
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
         value: feeWei, // Send ETH fee along with token withdrawal
       });
@@ -1954,11 +1954,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       });
 
       const result = await writeVaultContract({
-        address: getContractAddress('ETH') as `0x${string}`,
+        address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'transferInternalToken',
         args: [tokenAddress, to, amountWei],
-        chain: sepolia,
+        chain: getTargetChain(),
         account: address,
         value: feeWei,
       });

@@ -131,17 +131,10 @@ export const getBestRpcUrl = (chain: 'ETH' | 'BSC') => {
     console.log(`Ankr RPC not available for ${chain}`);
   }
   
-  // Fallback RPCs
-  if (chain === 'ETH') {
-    return WEB3_CONFIG.NETWORK_MODE === 'mainnet' 
-      ? 'https://rpc.ankr.com/eth'
-      : 'https://rpc.sepolia.org';
-  }
-  if (chain === 'BSC') {
-    return WEB3_CONFIG.NETWORK_MODE === 'mainnet'
-      ? 'https://bsc-dataseed.binance.org'
-      : 'https://data-seed-prebsc-1-s1.binance.org:8545';
-  }
+  // CRITICAL FIX: Remove deprecated Binance RPCs - only use Alchemy/Ankr
+  // If both Alchemy and Ankr fail, throw error instead of using deprecated URLs
+  console.error(`❌ No valid RPC URL available for ${chain}`);
+  throw new Error(`No valid RPC URL available for ${chain}. Please check your environment variables.`);
   
   throw new Error(`No RPC URL available for ${chain}`);
 };
