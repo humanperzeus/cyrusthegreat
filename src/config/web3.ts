@@ -66,8 +66,29 @@ export const getCurrentNetwork = () => {
     mode,
     isMainnet: mode === 'mainnet',
     isTestnet: mode === 'testnet',
-    chainId: mode === 'mainnet' ? 1 : 11155111, // ETH mainnet vs Sepolia
-    bscChainId: mode === 'mainnet' ? 56 : 97, // BSC mainnet vs testnet
+    // CRITICAL FIX: Remove hardcoded ETH chainId - this was causing the bug!
+    // chainId: mode === 'mainnet' ? 1 : 11155111, // ❌ OLD: Always returned ETH chain ID
+    // bscChainId: mode === 'mainnet' ? 56 : 97, // ❌ OLD: Unused and confusing
+  };
+};
+
+// NEW: Helper function to get chain-specific network info
+export const getChainNetworkInfo = (chain: 'ETH' | 'BSC') => {
+  const mode = WEB3_CONFIG.NETWORK_MODE;
+  return {
+    mode,
+    isMainnet: mode === 'mainnet',
+    isTestnet: mode === 'testnet',
+    chainId: chain === 'ETH' 
+      ? (mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
+      : (mode === 'mainnet' ? 56 : 97),      // BSC mainnet vs testnet
+    chainName: chain === 'ETH' ? 'Ethereum' : 'Binance Smart Chain',
+    networkName: chain === 'ETH' ? 'ethereum' : 'bsc',
+    nativeCurrency: {
+      name: chain === 'ETH' ? 'Ether' : 'BNB',
+      symbol: chain === 'ETH' ? 'ETH' : 'BNB',
+      decimals: 18,
+    },
   };
 };
 

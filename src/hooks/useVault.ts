@@ -3,7 +3,7 @@ import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTr
 import { sepolia, mainnet, bsc, bscTestnet } from 'wagmi/chains';
 import { formatEther, parseEther, parseUnits } from 'viem';
 import { getContract } from 'viem';
-import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl } from '@/config/web3';
+import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl, getChainNetworkInfo } from '@/config/web3';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
@@ -553,12 +553,16 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   const fetchVaultTokensSigned = async () => {
     if (!address || !isConnected) return;
     
+    // CRITICAL FIX: Set loading state to show refresh animation
+    setIsLoadingTokens(true);
+    
     // Capture current chain to prevent race conditions
     const currentChain = activeChain;
-    const currentChainId = getCurrentNetwork().chainId;
+    // CRITICAL FIX: Use the new function to get correct chain ID for the active chain
+    const currentChainInfo = getChainNetworkInfo(currentChain);
     
     try {
-      console.log(`🔐 Fetching vault tokens for chain: ${currentChain} (ID: ${currentChainId})`);
+      console.log(`🔐 Fetching vault tokens for chain: ${currentChain} (ID: ${currentChainInfo.chainId})`);
       
       if (!publicClient || !walletClient) {
         console.error('❌ Public client or wallet client not available');
@@ -576,9 +580,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       console.log(`🏗️ Using contract address for ${currentChain}: ${contractAddress}`);
       
       // CRITICAL FIX: Use expected chain ID from network config instead of potentially stale hook chainId
-      const expectedChainId = currentChain === 'ETH' 
-        ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
-        : (currentNetwork.mode === 'mainnet' ? 56 : 97);      // BSC mainnet vs testnet
+      const expectedChainId = currentChainInfo.chainId; // Use the new function for consistency
       
       console.log(`✅ Expected chain ID for ${currentChain} ${currentNetwork.mode}: ${expectedChainId}`);
       console.log(`🔍 Current hook chainId: ${chainId} (may be stale during chain switch)`);
@@ -630,6 +632,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       
     } catch (error) {
       console.error('❌ Error fetching vault tokens with signed call:', error);
+    } finally {
+      // CRITICAL FIX: Always reset loading state to show refresh animation completion
+      setIsLoadingTokens(false);
     }
   };
 
@@ -2225,7 +2230,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     vaultTokens,
     isLoadingTokens,
     refetchWalletTokens: fetchWalletTokens,
-    refetchVaultTokens,
+    refetchVaultTokens: fetchVaultTokensSigned, // CRITICAL FIX: Use our working function instead of Wagmi refetch
     // Network switching functions
     currentNetwork,
     isSwitchingNetwork,
