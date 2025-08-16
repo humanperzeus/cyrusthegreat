@@ -757,16 +757,47 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         }
         
       } else if (activeChain === 'BSC') {
-        // Use direct RPC calls for BSC chains (no Alchemy-specific methods)
-        console.log('🔗 Using direct RPC for BSC chain');
+        // Use Alchemy API for BSC chains (same as ETH, just different RPC)
+        console.log('🔑 Using Alchemy API for BSC chain');
+        console.log('🔑 Using Alchemy API key:', WEB3_CONFIG.ALCHEMY_API_KEY);
         
-        // For BSC, we'll fetch native balance and show it as the main token
-        // BSC doesn't have the same token discovery as ETH
-        console.log('📝 BSC chain detected - showing native BNB balance only');
+        const alchemyUrl = getActiveRpcUrl();
+        console.log('🌐 Using Alchemy URL:', alchemyUrl);
         
-        // Set empty tokens array for BSC (just native BNB)
-        setWalletTokens([]);
-        setIsLoadingTokens(false);
+        // Use Alchemy API to get token balances (same method as ETH)
+        const response = await fetch(alchemyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'alchemy_getTokenBalances',
+            params: [address, 'erc20']
+          })
+        });
+
+        console.log('📡 HTTP Response status:', response.status);
+        console.log('📡 HTTP Response headers:', response.headers);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.error) {
+          console.error('❌ Alchemy API error:', data.error);
+          throw new Error(`Alchemy API error: ${data.error.message}`);
+        }
+
+        if (data.result && data.result.tokenBalances) {
+          console.log('✅ Token balances found:', data.result.tokenBalances);
+          await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
+        }
       }
       
     } catch (error) {
