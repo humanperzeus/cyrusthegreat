@@ -26,7 +26,8 @@ interface VaultCoreProps {
   // Token display props
   walletTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
   vaultTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
-  isLoadingTokens: boolean;
+  isLoadingWalletTokens: boolean;
+  isLoadingVaultTokens: boolean;
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
   // Chain switching props
@@ -35,7 +36,7 @@ interface VaultCoreProps {
 }
 
 // Add animated chain cycling state
-const useAnimatedChainDisplay = () => {
+const useAnimatedChainDisplay = (isConnected: boolean) => {
   const [currentDisplayChain, setCurrentDisplayChain] = useState<'ETH' | 'BSC'>('ETH');
   const [currentMessage, setCurrentMessage] = useState(0);
   
@@ -46,13 +47,15 @@ const useAnimatedChainDisplay = () => {
   ];
   
   useEffect(() => {
+    if (isConnected) return; // Stop animation when connected
+    
     const interval = setInterval(() => {
       setCurrentDisplayChain(prev => prev === 'ETH' ? 'BSC' : 'ETH');
       setCurrentMessage(prev => (prev + 1) % vaultMessages.length);
-    }, 3000); // Switch every 3 seconds
+    }, 3000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [isConnected]);
   
   return { currentDisplayChain, currentMessage: vaultMessages[currentMessage] };
 };
@@ -67,9 +70,10 @@ export const VaultCore = ({
   // Token display props
   walletTokens,
   vaultTokens,
-  isLoadingTokens,
+  isLoadingWalletTokens,
+  isLoadingVaultTokens,
   refetchWalletTokens,
-  refetchVaultTokens,
+  refetchVaultTokens, 
   // Token deposit handler
   onTokenDeposit,
   // Token withdraw handler
@@ -88,10 +92,6 @@ export const VaultCore = ({
   // CRITICAL FIX: Add state to track active tab and prevent automatic switching
   const [activeTab, setActiveTab] = useState<'wallet' | 'vault'>('wallet');
   
-  // Debug: Log when activeTab changes
-  useEffect(() => {
-    console.log(`🎯 Active tab changed to: ${activeTab}`);
-  }, [activeTab]);
   
   // Chain switching state
   const [isSwitchingChain, setIsSwitchingChain] = useState(false);
@@ -100,7 +100,42 @@ export const VaultCore = ({
   const currentNetwork = getActiveChainInfo();
 
   // Animated chain display for disconnected state
-  const { currentDisplayChain, currentMessage } = useAnimatedChainDisplay();
+  const { currentDisplayChain, currentMessage } = useAnimatedChainDisplay(isConnected);
+
+  // Debug: Log loading state changes
+  useEffect(() => {
+    console.log('🔍 Loading state changed:', {
+      wallet: isLoadingWalletTokens,
+      vault: isLoadingVaultTokens,
+      activeTab,
+      displayMode
+    });
+  }, [isLoadingWalletTokens, isLoadingVaultTokens, activeTab, displayMode]);
+
+  // Debug: Track all tab changes with detailed context
+  useEffect(() => {
+    console.log('🎯 TAB CHANGE DETECTED:', {
+      timestamp: new Date().toISOString(),
+      previousTab: activeTab,
+      newTab: activeTab,
+      displayMode,
+      isLoadingWalletTokens,
+      isLoadingVaultTokens,
+      walletTokensCount: walletTokens.length,
+      vaultTokensCount: vaultTokens.length,
+      isConnected
+    });
+
+    // Log specific scenarios that might cause glitches
+    if (displayMode === 'native-tokens') {
+      console.log('🔧 NATIVE TOKENS MODE DEBUG:', {
+        activeNativeTab: activeTab === 'wallet' ? 'tokens' : 'tokens',
+        activeTab,
+        isLoadingWalletTokens,
+        isLoadingVaultTokens
+      });
+    }
+  }, [activeTab, displayMode, isLoadingWalletTokens, isLoadingVaultTokens, walletTokens.length, vaultTokens.length, isConnected]);
 
   // State for token deposit modal
   const [tokenDepositInfo, setTokenDepositInfo] = useState<{
@@ -153,10 +188,29 @@ export const VaultCore = ({
   // NativeTokensMode Component
   const NativeTokensMode = () => {
     const chainConfig = getChainConfig(activeChain);
+    const [activeNativeTab, setActiveNativeTab] = useState<'native' | 'tokens'>('tokens');
     
+    // Debug: Log internal tab state changes
+    useEffect(() => {
+      console.log('🔧 NATIVE TOKENS INTERNAL STATE:', {
+        timestamp: new Date().toISOString(),
+        previousNativeTab: activeNativeTab,
+        newNativeTab: activeNativeTab,
+        parentActiveTab: activeTab,
+        isLoadingWalletTokens,
+        isLoadingVaultTokens,
+        walletTokensCount: walletTokens.length,
+        vaultTokensCount: vaultTokens.length
+      });
+    }, [activeNativeTab, activeTab, isLoadingWalletTokens, isLoadingVaultTokens, walletTokens.length, vaultTokens.length]);
+
     return (
       <div className="w-full">
-        <Tabs defaultValue="native" className="w-full">
+        <Tabs 
+          value={activeNativeTab} 
+          onValueChange={(value) => setActiveNativeTab(value as 'native' | 'tokens')} 
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="native">Native</TabsTrigger>
             <TabsTrigger value="tokens">Tokens</TabsTrigger>
@@ -190,17 +244,24 @@ export const VaultCore = ({
                       variant="ghost"
                       size="sm"
                       className="h-6 w-6 p-0 hover:bg-background/40"
-                      onClick={refetchWalletTokens}
-                      disabled={isLoadingTokens}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await refetchWalletTokens();
+                        } catch (error) {
+                          console.error('Wallet refresh failed:', error);
+                        }
+                      }}
+                      disabled={isLoadingWalletTokens}
                     >
-                      <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-3 h-3 ${isLoadingWalletTokens ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                 </div>
                 
                 {/* Scrollable Wallet Tokens Container */}
                 <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
-                  {isLoadingTokens ? (
+                  {isLoadingWalletTokens ? (
                     <div className="text-center p-4 text-muted-foreground">Loading tokens...</div>
                   ) : walletTokens.length > 0 ? (
                     walletTokens.map((token, index) => (
@@ -255,17 +316,24 @@ export const VaultCore = ({
                       variant="ghost"
                       size="sm"
                       className="h-6 w-6 p-0 hover:bg-background/40"
-                      onClick={refetchVaultTokens}
-                      disabled={isLoadingTokens}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await refetchVaultTokens();
+                        } catch (error) {
+                          console.error('Vault refresh failed:', error);
+                        }
+                      }}
+                      disabled={isLoadingVaultTokens}
                     >
-                      <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-3 h-3 ${isLoadingVaultTokens ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                 </div>
                 
                 {/* Scrollable Vault Tokens Container */}
                 <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
-                  {isLoadingTokens ? (
+                  {isLoadingVaultTokens ? (
                     <div className="text-center p-4 text-muted-foreground">Loading tokens...</div>
                   ) : vaultTokens.length > 0 ? (
                     vaultTokens.map((token, index) => (
@@ -343,17 +411,24 @@ export const VaultCore = ({
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 hover:bg-background/40"
-                onClick={refetchWalletTokens}
-                disabled={isLoadingTokens}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await refetchWalletTokens();
+                  } catch (error) {
+                    console.error('Wallet refresh failed:', error);
+                  }
+                }}
+                disabled={isLoadingWalletTokens}
               >
-                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${isLoadingWalletTokens ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
           
           {/* Scrollable Wallet Tokens Container */}
           <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
-            {isLoadingTokens ? (
+            {isLoadingWalletTokens ? (
               <div className="text-center p-4 text-muted-foreground">Loading tokens...</div>
             ) : walletTokens.length > 0 ? (
               walletTokens.map((token, index) => (
@@ -408,17 +483,24 @@ export const VaultCore = ({
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 hover:bg-background/40"
-                onClick={refetchVaultTokens}
-                disabled={isLoadingTokens}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await refetchVaultTokens();
+                  } catch (error) {
+                    console.error('Vault refresh failed:', error);
+                  }
+                }}
+                disabled={isLoadingVaultTokens}
               >
-                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${isLoadingVaultTokens ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
           
           {/* Scrollable Vault Tokens Container */}
           <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
-            {isLoadingTokens ? (
+            {isLoadingVaultTokens ? (
               <div className="text-center p-4 text-muted-foreground">Loading tokens...</div>
             ) : vaultTokens.length > 0 ? (
               vaultTokens.map((token, index) => (
@@ -505,10 +587,17 @@ export const VaultCore = ({
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 hover:bg-background/40"
-                onClick={refetchWalletTokens}
-                disabled={isLoadingTokens}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await refetchWalletTokens();
+                  } catch (error) {
+                    console.error('Wallet refresh failed:', error);
+                  }
+                }}
+                disabled={isLoadingWalletTokens}
               >
-                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${isLoadingWalletTokens ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
@@ -558,10 +647,17 @@ export const VaultCore = ({
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 hover:bg-background/40"
-                onClick={refetchVaultTokens}
-                disabled={isLoadingTokens}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await refetchVaultTokens();
+                  } catch (error) {
+                    console.error('Vault refresh failed:', error);
+                  }
+                }}
+                disabled={isLoadingVaultTokens}
               >
-                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${isLoadingVaultTokens ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
@@ -620,7 +716,7 @@ export const VaultCore = ({
     
     return (
     <div className="w-full">
-      <Tabs defaultValue="wallet" className="w-full">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'wallet' | 'vault')} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="wallet">Wallet Tokens ({walletTokens.length})</TabsTrigger>
           <TabsTrigger value="vault">Vault Tokens ({vaultTokens.length})</TabsTrigger>
@@ -630,21 +726,28 @@ export const VaultCore = ({
           <div className="text-center space-y-2 p-3 bg-background/20 rounded-lg border border-border/30 mb-4">
             <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
               Wallet Tokens
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 hover:bg-background/40"
-                onClick={refetchWalletTokens}
-                disabled={isLoadingTokens}
-              >
-                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 hover:bg-background/40"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await refetchWalletTokens();
+                    } catch (error) {
+                      console.error('Wallet refresh failed:', error);
+                    }
+                  }}
+                  disabled={isLoadingWalletTokens}
+                >
+                <RefreshCw className={`w-3 h-3 ${isLoadingWalletTokens ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
           
           {/* Grid of Wallet Token Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {isLoadingTokens ? (
+            {isLoadingWalletTokens ? (
               <div className="col-span-full text-center p-8 text-muted-foreground">Loading tokens...</div>
             ) : walletTokens.length > 0 ? (
               walletTokens.map((token, index) => (
@@ -689,18 +792,25 @@ export const VaultCore = ({
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0 hover:bg-background/40"
-                onClick={refetchVaultTokens}
-                disabled={isLoadingTokens}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await refetchVaultTokens();
+                    } catch (error) {
+                      console.error('Vault refresh failed:', error);
+                    }
+                  }}
+                disabled={isLoadingVaultTokens}
               >
-                <RefreshCw className={`w-3 h-3 ${isLoadingTokens ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3 h-3 ${isLoadingVaultTokens ? 'animate-spin' : ''}`} />
               </Button>
             </div>
           </div>
           
           {/* Grid of Vault Token Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {isLoadingTokens ? (
-              <div className="col-span-full text-center p-8 text-muted-foreground">Loading tokens...</div>
+            {isLoadingVaultTokens ? (
+              <div className="text-center p-4 text-muted-foreground">Loading tokens...</div>
             ) : vaultTokens.length > 0 ? (
               vaultTokens.map((token, index) => (
                 <div key={index} className="p-4 bg-background/20 rounded-lg border border-border/30 hover:bg-background/40 transition-colors">
@@ -749,6 +859,11 @@ export const VaultCore = ({
     </div>
   );
 };
+
+  // Preserve active tab when switching display modes
+  useEffect(() => {
+    console.log(`🔄 Display mode changed to: ${displayMode}, preserving tab: ${activeTab}`);
+  }, [displayMode, activeTab]);
 
   // Console switcher for testing different display modes
   useEffect(() => {
