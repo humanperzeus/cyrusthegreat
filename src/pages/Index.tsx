@@ -23,7 +23,9 @@ const Index = () => {
     isConfirmed, // Add transaction confirmation state
     walletTokens,
     vaultTokens,
-    isLoadingTokens,
+    isLoadingWalletTokens,
+    isLoadingVaultTokens,
+    isLoadingTokens, // Keep for backward compatibility
     refetchWalletTokens,
     refetchVaultTokens,
     depositToken,
@@ -131,7 +133,8 @@ const Index = () => {
         isTransactionConfirmed={isConfirmed}
         walletTokens={walletTokens}
         vaultTokens={vaultTokens}
-        isLoadingTokens={isLoadingTokens}
+        isLoadingWalletTokens={isLoadingWalletTokens}
+        isLoadingVaultTokens={isLoadingVaultTokens}
         refetchWalletTokens={refetchWalletTokens}
         refetchVaultTokens={refetchVaultTokens}
         onDeposit={handleETHDeposit}

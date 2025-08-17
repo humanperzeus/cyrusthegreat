@@ -549,7 +549,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     if (!address || !isConnected) return;
     
     // CRITICAL FIX: Set loading state to show refresh animation
-    setIsLoadingTokens(true);
+    setIsLoadingVaultTokens(true);
     
     // Capture current chain to prevent race conditions
     const currentChain = activeChain;
@@ -628,8 +628,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     } catch (error) {
       console.error('❌ Error fetching vault tokens with signed call:', error);
     } finally {
-      // CRITICAL FIX: Always reset loading state to show refresh animation completion
-      setIsLoadingTokens(false);
+  // CRITICAL FIX: Always reset loading state to show refresh animation completion
+  setIsLoadingVaultTokens(false);
     }
   };
 
@@ -656,7 +656,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   // Token detection state
   const [walletTokens, setWalletTokens] = useState<Array<{address: string, symbol: string, balance: string, decimals: number}>>([]);
   const [vaultTokens, setVaultTokens] = useState<Array<{address: string, symbol: string, balance: string, decimals: number}>>([]);
-  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [isLoadingWalletTokens, setIsLoadingWalletTokens] = useState(false);
+  const [isLoadingVaultTokens, setIsLoadingVaultTokens] = useState(false);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false); // Keep for backward compatibility
 
   const walletBalanceFormatted = walletBalance ? formatEther(walletBalance.value) : '0.00';
   const vaultBalanceFormatted = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.00';
@@ -702,7 +704,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     if (!address) return;
     
     try {
-      setIsLoadingTokens(true);
+      setIsLoadingWalletTokens(true);
       console.log('🔍 Fetching wallet tokens for address:', address);
       
       const chainConfig = getCurrentChainConfig();
@@ -790,7 +792,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       console.error('❌ Error fetching wallet tokens:', error);
       setWalletTokens([]);
     } finally {
-      setIsLoadingTokens(false);
+      setIsLoadingWalletTokens(false);
     }
   };
 
@@ -2217,42 +2219,44 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     });
   }, [activeChain, currentNetwork.mode]);
 
-  return {
-    isConnected,
-    walletBalance: walletBalanceFormatted,
-    vaultBalance: vaultBalanceFormatted,
-    currentFee: currentFeeFormatted,
-    isLoading: isTransactionLoading,
-    isSimulating, // Add simulation state for UI
-    depositETH,
-    withdrawETH,
-    transferETH,
-    // Token functions
-    approveToken,
-    depositToken,
-    depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
-    depositTokenWithDelay, // SIMPLE: 3-second delay approach
-    withdrawToken, // NEW: Token withdrawal function with approval
-    transferInternalToken, // NEW: Token transfer function
-    // Transaction status for UI feedback
-    isPending: isWritePending,
-    isConfirming,
-    isConfirmed,
-    hash,
-    // Token detection data
-    walletTokens,
-    vaultTokens,
-    isLoadingTokens,
-    refetchWalletTokens: fetchWalletTokens,
-    refetchVaultTokens: fetchVaultTokensSigned, // CRITICAL FIX: Use our working function instead of Wagmi refetch
-    // Network switching functions
-    currentNetwork,
-    isSwitchingNetwork,
-    autoSwitchNetwork,
-    getTargetChain: getTargetChain,
-    isOnCorrectNetwork, // Add this line
-    forceNetworkSwitch, // Add this line
-    requireCorrectNetwork, // Add this line
-    fetchChainSpecificData, // Add this line
-  };
+    return {
+      isConnected,
+      walletBalance: walletBalanceFormatted,
+      vaultBalance: vaultBalanceFormatted,
+      currentFee: currentFeeFormatted,
+      isLoading: isTransactionLoading,
+      isSimulating, // Add simulation state for UI
+      depositETH,
+      withdrawETH,
+      transferETH,
+      // Token functions
+      approveToken,
+      depositToken,
+      depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
+      depositTokenWithDelay, // SIMPLE: 3-second delay approach
+      withdrawToken, // NEW: Token withdrawal function with approval
+      transferInternalToken, // NEW: Token transfer function
+      // Transaction status for UI feedback
+      isPending: isWritePending,
+      isConfirming,
+      isConfirmed,
+      hash,
+      // Token detection data
+      walletTokens,
+      vaultTokens,
+      isLoadingWalletTokens,
+      isLoadingVaultTokens,
+      isLoadingTokens,
+      refetchWalletTokens: fetchWalletTokens,
+      refetchVaultTokens: fetchVaultTokensSigned, // CRITICAL FIX: Use our working function instead of Wagmi refetch
+      // Network switching functions
+      currentNetwork,
+      isSwitchingNetwork,
+      autoSwitchNetwork,
+      getTargetChain: getTargetChain,
+      isOnCorrectNetwork, // Add this line
+      forceNetworkSwitch, // Add this line
+      requireCorrectNetwork, // Add this line
+      fetchChainSpecificData, // Add this line
+    };
 };
