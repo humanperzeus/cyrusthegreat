@@ -7,6 +7,7 @@ import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUr
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
+import { debugLog, debugWarn, debugError } from '@/lib/utils';
 
 // Add window.ethereum type
 declare global {
@@ -32,27 +33,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
   // Clear vault tokens when switching chains to prevent stale data
   const clearVaultTokens = useCallback(() => {
-    console.log('🧹 Clearing vault tokens due to chain switch');
+    debugLog('🧹 Clearing vault tokens due to chain switch');
     setVaultTokens([]);
   }, []);
 
   // Clear vault tokens and transaction states whenever activeChain changes
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-    console.log(`🔄 Active chain changed to: ${activeChain}`);
-    }
+    debugLog(`🔄 Active chain changed to: ${activeChain}`);
     
     // Force clear vault tokens immediately
     setVaultTokens([]);
-    if (process.env.NODE_ENV === 'development') {
-    console.log(`🧹 Vault tokens cleared for chain switch to ${activeChain}`);
-    }
+    debugLog(`🧹 Vault tokens cleared for chain switch to ${activeChain}`);
     
     // CRITICAL FIX: Clear transaction states to prevent stuck modals
     // Note: This is now handled by chain-specific state management below
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🧹 Transaction states will be cleared for chain switch to ${activeChain}`);
-    }
+    debugLog(`🧹 Transaction states will be cleared for chain switch to ${activeChain}`);
   }, [activeChain]);
 
   // Additional safety: clear vault tokens when chainId changes
@@ -65,9 +60,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         : (currentNetwork.mode === 'mainnet' ? 8453 : 84532);
       
       if (chainId !== expectedChainId) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`🔄 Chain ID changed from ${expectedChainId} to ${chainId}, clearing vault tokens`);
-        }
+        debugLog(`🔄 Chain ID changed from ${expectedChainId} to ${chainId}, clearing vault tokens`);
         setVaultTokens([]);
       }
     }
@@ -96,17 +89,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     // Set new timeout for 500ms delay
     const timeout = setTimeout(() => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`⏰ Debounced vault token fetch triggered for ${currentChain}`);
-      }
+      debugLog(`⏰ Debounced vault token fetch triggered for ${currentChain}`);
       
       // Only fetch if we're still on the same chain
       if (activeChain === currentChain) {
         fetchVaultTokensSigned();
       } else {
-        if (process.env.NODE_ENV === 'development') {
-        console.log(`⚠️ Chain changed during debounce from ${currentChain} to ${activeChain}, aborting fetch`);
-        }
+        debugLog(`⚠️ Chain changed during debounce from ${currentChain} to ${activeChain}, aborting fetch`);
       }
     }, 500);
     
@@ -151,7 +140,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
     
     // Fallback to ETH if activeChain is not recognized
-    console.warn(`⚠️ Unknown activeChain: ${activeChain}, falling back to ETH`);
+    debugWarn(`⚠️ Unknown activeChain: ${activeChain}, falling back to ETH`);
     return currentNetwork.mode === 'mainnet' ? mainnet : sepolia;
   };
   
@@ -160,16 +149,16 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     if (!isConnected || !address) return;
     
     try {
-      console.log('🔄 Auto-switching network...');
+      debugLog('🔄 Auto-switching network...');
       setIsSwitchingChain(true);
       
       // Clear any existing vault tokens before switching
       clearVaultTokens();
       
       const targetChain = getTargetChain();
-      console.log(`🎯 Target chain: ${targetChain.name} (ID: ${targetChain.id})`);
+      debugLog(`🎯 Target chain: ${targetChain.name} (ID: ${targetChain.id})`);
       
-      console.log('🔍 Network switch details:', {
+      debugLog('🔍 Network switch details:', {
         currentChainId: chainId,
         targetChainId: targetChain.id,
         targetChainName: targetChain.name,
@@ -178,11 +167,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Check if we're already on the correct network
       if (chainId === targetChain.id) {
-        console.log(`✅ Already on correct network: ${targetChain.name} (${targetChain.id})`);
+        debugLog(`✅ Already on correct network: ${targetChain.name} (${targetChain.id})`);
         return;
       }
       
-      console.log(`🔄 Switching from chain ${chainId} to ${targetChain.name} (${targetChain.id})`);
+      debugLog(`🔄 Switching from chain ${chainId} to ${targetChain.name} (${targetChain.id})`);
       
       try {
         setIsSwitchingNetwork(true);
@@ -190,7 +179,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         // Skip Wagmi and go directly to MetaMask
         if (window.ethereum) {
           try {
-            console.log('🔄 Direct MetaMask network switch...');
+            debugLog('🔄 Direct MetaMask network switch...');
             
             // First try to switch directly
             try {
@@ -198,13 +187,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: `0x${targetChain.id.toString(16)}` }],
               });
-              console.log('✅ Direct MetaMask switch successful');
+              debugLog('✅ Direct MetaMask switch successful');
             } catch (switchError: any) {
-              console.log('⚠️ Direct switch failed, error code:', switchError.code);
+              debugLog('⚠️ Direct switch failed, error code:', switchError.code);
               
               // If network doesn't exist (error code 4902), add it first
               if (switchError.code === 4902) {
-                console.log('🔄 Network not found, adding to MetaMask...');
+                debugLog('🔄 Network not found, adding to MetaMask...');
                 await window.ethereum.request({
                   method: 'wallet_addEthereumChain',
                   params: [{
@@ -219,14 +208,14 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                     blockExplorerUrls: [targetChain.blockExplorers?.default?.url],
                   }],
                 });
-                console.log('✅ Network added to MetaMask');
+                debugLog('✅ Network added to MetaMask');
               } else {
                 throw switchError;
               }
             }
             
           } catch (metamaskError) {
-            console.error('❌ MetaMask network switch failed:', metamaskError);
+            debugError('❌ MetaMask network switch failed:', metamaskError);
             throw metamaskError;
           }
         } else {
@@ -239,16 +228,16 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           variant: "default",
         });
         
-        console.log(`✅ Successfully switched to ${targetChain.name}`);
+        debugLog(`✅ Successfully switched to ${targetChain.name}`);
         
         // Wait a moment for the switch to complete, then check if it worked
         setTimeout(() => {
-          console.log('🔍 Checking if network switch actually worked...');
-          console.log('Current chainId:', chainId);
-          console.log('Target chainId:', targetChain.id);
+          debugLog('🔍 Checking if network switch actually worked...');
+          debugLog('Current chainId:', chainId);
+          debugLog('Target chainId:', targetChain.id);
           
           if (chainId !== targetChain.id) {
-            console.warn('⚠️ Network switch may not have worked - chainId still shows:', chainId);
+            debugWarn('⚠️ Network switch may not have worked - chainId still shows:', chainId);
             toast({
               title: "Network Switch Warning",
               description: "Network may not have switched. Please check MetaMask manually.",
@@ -258,7 +247,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         }, 3000);
         
       } catch (error) {
-        console.error('❌ Failed to switch network:', error);
+        debugError('❌ Failed to switch network:', error);
         
         toast({
           title: "Network Switch Failed",
@@ -270,7 +259,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         setIsSwitchingChain(false);
       }
     } catch (error) {
-      console.error('❌ Error switching network:', error);
+      debugError('❌ Error switching network:', error);
       toast({
         title: "Network Switch Failed",
         description: "Failed to switch network. Please try again.",
@@ -286,14 +275,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
   // Auto-switch network when component mounts or network mode changes
   React.useEffect(() => {
-    // Check network only when wallet connects (not on every chainId change)
-    if (isConnected && !isSwitchingNetwork && !hasShownInitialNetworkCheck) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🚀 Wallet connected, checking network...');
-        console.log('Current chainId:', chainId);
-        console.log('Target chainId:', getTargetChain().id);
-        console.log('Network mode:', currentNetwork.mode);
-      }
+          // Check network only when wallet connects (not on every chainId change)
+      if (isConnected && !isSwitchingNetwork && !hasShownInitialNetworkCheck) {
+        debugLog('🚀 Wallet connected, checking network...');
+        debugLog('Current chainId:', chainId);
+        debugLog('Target chainId:', getTargetChain().id);
+        debugLog('Network mode:', currentNetwork.mode);
       
       // Mark that we've done the initial check
       setHasShownInitialNetworkCheck(true);
@@ -301,7 +288,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Only show notification if not on correct network, but don't force switch
       if (chainId !== getTargetChain().id) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔄 Chain mismatch detected, showing notification...');
+          debugLog('🔄 Chain mismatch detected, showing notification...');
         }
         
         // Show friendly notification instead of forcing switch
@@ -312,7 +299,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         });
       } else {
         if (process.env.NODE_ENV === 'development') {
-          console.log('✅ Already on correct network');
+          debugLog('✅ Already on correct network');
         }
       }
     }
@@ -320,7 +307,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   
   // Debug logging for network switching
   React.useEffect(() => {
-    console.log('🌐 Network Configuration Debug:', {
+    debugLog('🌐 Network Configuration Debug:', {
       networkMode: currentNetwork.mode,
       isMainnet: currentNetwork.isMainnet,
       isTestnet: currentNetwork.isTestnet,
@@ -332,8 +319,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     // Add manual test function to window for debugging
     (window as any).testNetworkSwitch = () => {
-      console.log('🧪 Manual network switch test triggered');
-      console.log('Current state:', {
+      debugLog('🧪 Manual network switch test triggered');
+      debugLog('Current state:', {
         isConnected,
         isSwitchingNetwork,
         currentNetwork: currentNetwork.mode,
@@ -357,30 +344,30 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     // Test if switchChain function exists and works
     (window as any).testSwitchChain = async () => {
-      console.log('🧪 Testing switchChain function...');
-      console.log('switchChain function:', switchChain);
-      console.log('isConnected:', isConnected);
-      console.log('chainId:', chainId);
+      debugLog('🧪 Testing switchChain function...');
+      debugLog('switchChain function:', switchChain);
+      debugLog('isConnected:', isConnected);
+      debugLog('chainId:', chainId);
       
       if (!switchChain) {
-        console.error('❌ switchChain function is not available');
+        debugError('❌ switchChain function is not available');
         return;
       }
       
       try {
         // Try to switch to Sepolia (testnet) as a test
-        console.log('🔄 Testing switch to Sepolia...');
+        debugLog('🔄 Testing switch to Sepolia...');
         const result = await switchChain({ chainId: 11155111 }); // Sepolia
-        console.log('✅ Test switch result:', result);
+        debugLog('✅ Test switch result:', result);
       } catch (error) {
-        console.error('❌ Test switch failed:', error);
+        debugError('❌ Test switch failed:', error);
       }
     };
     
     // Force refresh function to test network switching
     (window as any).forceNetworkSwitch = async () => {
-      console.log('🧪 Force network switch test...');
-      console.log('Current state before switch:', {
+      debugLog('🧪 Force network switch test...');
+      debugLog('Current state before switch:', {
         isConnected,
         isSwitchingNetwork,
         currentNetwork: currentNetwork.mode,
@@ -393,7 +380,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Wait and check result
       setTimeout(() => {
-        console.log('Current state after switch:', {
+        debugLog('Current state after switch:', {
           isConnected,
           isSwitchingNetwork,
           currentNetwork: currentNetwork.mode,
@@ -405,7 +392,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     // Debug contract and RPC configuration
     (window as any).debugConfig = () => {
-      console.log('🔧 Full Configuration Debug:', {
+      debugLog('🔧 Full Configuration Debug:', {
         // Environment variables
         VITE_NETWORK_MODE: import.meta.env.VITE_NETWORK_MODE,
         VITE_CTGVAULT_ETH_MAINNET_CONTRACT: import.meta.env.VITE_CTGVAULT_ETH_MAINNET_CONTRACT,
@@ -455,7 +442,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
   // Debug logging for vault balance fetching
   React.useEffect(() => {
-    console.log('🔍 Vault Balance Fetching Debug:', {
+    debugLog('🔍 Vault Balance Fetching Debug:', {
       address,
       contractAddress: getActiveContractAddress(),
     args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined,
@@ -501,7 +488,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
   // Process vault tokens from signed call result
   const processVaultTokensFromSignedCall = async (tokenAddresses: any[], tokenBalances: any[]) => {
-    console.log('🔄 Starting vault token processing from signed call...');
+    debugLog('🔄 Starting vault token processing from signed call...');
     const processedTokens = [];
     
     for (let i = 0; i < tokenAddresses.length; i++) {
@@ -511,7 +498,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Skip native token (address 0) - it's already displayed in top balance
       if (tokenAddr === '0x0000000000000000000000000000000000000000') {
         const chainConfig = getCurrentChainConfig();
-        console.log(`⏭️ Skipping native ${chainConfig.nativeCurrency.symbol} (address 0) - already displayed in top balance`);
+        debugLog(`⏭️ Skipping native ${chainConfig.nativeCurrency.symbol} (address 0) - already displayed in top balance`);
         continue;
       }
       
@@ -547,10 +534,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             };
             
             processedTokens.push(processedToken);
-            console.log(`✅ Token processed: ${processedToken.symbol} = ${processedToken.balance}`);
+            debugLog(`✅ Token processed: ${processedToken.symbol} = ${processedToken.balance}`);
           } else {
             // Fallback if no result in metadata
-            console.warn(`⚠️ No metadata result for token ${tokenAddr}, using fallback`);
+            debugWarn(`⚠️ No metadata result for token ${tokenAddr}, using fallback`);
             const fallbackToken = {
               address: tokenAddr,
               symbol: 'UNKNOWN',
@@ -561,7 +548,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           }
         } else {
           // Fallback if metadata fetch fails
-          console.warn(`⚠️ Failed to fetch metadata for token ${tokenAddr}, using fallback`);
+          debugWarn(`⚠️ Failed to fetch metadata for token ${tokenAddr}, using fallback`);
           const fallbackToken = {
             address: tokenAddr,
             symbol: 'UNKNOWN',
@@ -571,7 +558,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           processedTokens.push(fallbackToken);
       }
     } catch (error) {
-        console.error(`❌ Error processing token ${tokenAddr}:`, error);
+        debugError(`❌ Error processing token ${tokenAddr}:`, error);
         // Error fallback
         const errorToken = {
           address: tokenAddr,
@@ -583,7 +570,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
     }
     
-    console.log(`✅ Final processed vault tokens:`, processedTokens);
+    debugLog(`✅ Final processed vault tokens:`, processedTokens);
     setVaultTokens(processedTokens);
   };
 
@@ -600,28 +587,28 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     const currentChainInfo = getChainNetworkInfo(currentChain);
     
     try {
-      console.log(`🔐 Fetching vault tokens for chain: ${currentChain} (ID: ${currentChainInfo.chainId})`);
+      debugLog(`🔐 Fetching vault tokens for chain: ${currentChain} (ID: ${currentChainInfo.chainId})`);
       
       if (!publicClient || !walletClient) {
-        console.error('❌ Public client or wallet client not available');
+        debugError('❌ Public client or wallet client not available');
         return;
       }
       
       // Validate we're still on the same chain
       if (activeChain !== currentChain) {
-        console.log(`⚠️ Chain changed during fetch from ${currentChain} to ${activeChain}, aborting`);
+        debugLog(`⚠️ Chain changed during fetch from ${currentChain} to ${activeChain}, aborting`);
         return;
       }
       
       // CRITICAL FIX: Get the correct contract address for the current chain
       const contractAddress = getActiveContractAddress();
-      console.log(`🏗️ Using contract address for ${currentChain}: ${contractAddress}`);
+      debugLog(`🏗️ Using contract address for ${currentChain}: ${contractAddress}`);
       
       // CRITICAL FIX: Use expected chain ID from network config instead of potentially stale hook chainId
       const expectedChainId = currentChainInfo.chainId; // Use the new function for consistency
       
-      console.log(`✅ Expected chain ID for ${currentChain} ${currentNetwork.mode}: ${expectedChainId}`);
-      console.log(`🔍 Current hook chainId: ${chainId} (may be stale during chain switch)`);
+      debugLog(`✅ Expected chain ID for ${currentChain} ${currentNetwork.mode}: ${expectedChainId}`);
+      debugLog(`🔍 Current hook chainId: ${chainId} (may be stale during chain switch)`);
       
       // Don't abort on chain ID mismatch - the hook chainId might be stale during switching
       // Instead, proceed with the fetch using the correct contract address
@@ -631,12 +618,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       
       // Debug: Check if publicClient is configured for the correct chain
-      console.log(`🔍 Public client chain ID: ${publicClient.chain?.id || 'unknown'}`);
-      console.log(`🔍 Expected chain ID: ${expectedChainId}`);
+      debugLog(`🔍 Public client chain ID: ${publicClient.chain?.id || 'unknown'}`);
+      debugLog(`🔍 Expected chain ID: ${expectedChainId}`);
       
       // CRITICAL FIX: Always use chain-aware public client instead of potentially stale publicClient
       const chainAwareClient = createChainAwarePublicClient();
-      console.log(`🔧 Using chain-aware client for ${currentChain} with chain ID: ${chainAwareClient.chain.id}`);
+      debugLog(`🔧 Using chain-aware client for ${currentChain} with chain ID: ${chainAwareClient.chain.id}`);
       
       // Make a direct call to the private function using chain-aware client
       const result = await chainAwareClient.readContract({
@@ -649,27 +636,27 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Double-check chain hasn't changed after the call
       if (activeChain !== currentChain) {
-        console.log(`⚠️ Chain changed after contract call from ${currentChain} to ${activeChain}, discarding results`);
+        debugLog(`⚠️ Chain changed after contract call from ${currentChain} to ${activeChain}, discarding results`);
         return;
       }
       
-      console.log(`✅ Vault tokens fetched for ${currentChain}:`, result);
+      debugLog(`✅ Vault tokens fetched for ${currentChain}:`, result);
       
       // Process the result directly
       if (result && Array.isArray(result)) {
         const [tokenAddresses, tokenBalances] = result;
-        console.log('🔍 Raw vault tokens result:', { tokenAddresses, tokenBalances });
+        debugLog('🔍 Raw vault tokens result:', { tokenAddresses, tokenBalances });
         
         // Process tokens with real metadata using the new function
         await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
         return; // Exit early since we processed the result
       } else {
-        console.log(`ℹ️ Invalid result format for ${currentChain}:`, result);
+        debugLog(`ℹ️ Invalid result format for ${currentChain}:`, result);
         setVaultTokens([]);
       }
       
     } catch (error) {
-      console.error('❌ Error fetching vault tokens with signed call:', error);
+      debugError('❌ Error fetching vault tokens with signed call:', error);
     } finally {
   // CRITICAL FIX: Always reset loading state to show refresh animation completion
       setIsLoadingVaultTokens(false);
@@ -750,7 +737,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             useEffect(() => {
               if (hash && hash !== lastTransactionHash) {
                 if (process.env.NODE_ENV === 'development') {
-                  console.log(`🔗 New transaction hash for ${activeChain}: ${hash}`);
+                  debugLog(`🔗 New transaction hash for ${activeChain}: ${hash}`);
                 }
                 setLastTransactionHash(hash);
               }
@@ -762,7 +749,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
               // This prevents stale transaction states from polluting other chains
               if (lastTransactionHash) {
                 if (process.env.NODE_ENV === 'development') {
-                  console.log(`🧹 Clearing transaction hash ${lastTransactionHash} for chain switch to ${activeChain}`);
+                  debugLog(`🧹 Clearing transaction hash ${lastTransactionHash} for chain switch to ${activeChain}`);
                 }
                 setLastTransactionHash(null);
               }
@@ -772,7 +759,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             useEffect(() => {
               // This effect runs whenever activeChain changes
               if (process.env.NODE_ENV === 'development') {
-                console.log(`🔄 AGGRESSIVE CLEANUP: Chain switched to ${activeChain}`);
+                debugLog(`🔄 AGGRESSIVE CLEANUP: Chain switched to ${activeChain}`);
               }
               
               // Force clear ALL chain transaction states
@@ -787,7 +774,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                   };
                 });
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('🧹 AGGRESSIVE CLEANUP: All chain transaction states reset');
+                  debugLog('🧹 AGGRESSIVE CLEANUP: All chain transaction states reset');
                 }
                 return newStates;
               });
@@ -815,7 +802,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
   // Essential logging only
   if (process.env.NODE_ENV === 'development') {
-    console.log('Vault Hook State:', {
+    debugLog('Vault Hook State:', {
       isConnected,
       walletBalance: walletBalanceFormatted,
       vaultBalance: vaultBalanceFormatted,
@@ -828,19 +815,19 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   if (process.env.NODE_ENV === 'development') {
     React.useEffect(() => {
       if (walletBalance) {
-        console.log('💰 Wallet balance loaded/updated:', formatEther(walletBalance.value));
+        debugLog('💰 Wallet balance loaded/updated:', formatEther(walletBalance.value));
       }
     }, [walletBalance]);
 
     React.useEffect(() => {
       if (vaultBalanceData) {
-        console.log('📊 Vault balance loaded/updated:', formatEther(vaultBalanceData as bigint));
+        debugLog('📊 Vault balance loaded/updated:', formatEther(vaultBalanceData as bigint));
       }
     }, [vaultBalanceData]);
 
     React.useEffect(() => {
       if (currentFee) {
-        console.log('💸 Current fee loaded/updated:', formatEther(currentFee as bigint));
+        debugLog('💸 Current fee loaded/updated:', formatEther(currentFee as bigint));
       }
     }, [currentFee]);
   }
@@ -857,7 +844,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     try {
       setIsLoadingWalletTokens(true);
-      console.log('🔍 Fetching wallet tokens for address:', address);
+      debugLog('🔍 Fetching wallet tokens for address:', address);
       
       const chainConfig = getCurrentChainConfig();
       
@@ -884,7 +871,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ HTTP error response:', errorText);
+          debugError('❌ HTTP error response:', errorText);
           throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
         }
 
@@ -895,7 +882,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         }
 
         if (data.result && data.result.tokenBalances) {
-          console.log('✅ Token balances found:', data.result.tokenBalances);
+          debugLog('✅ Token balances found:', data.result.tokenBalances);
           await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
         }
         
@@ -920,12 +907,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         })
       });
 
-        console.log('📡 HTTP Response status:', response.status);
-        console.log('📡 HTTP Response headers:', response.headers);
+        debugLog('📡 HTTP Response status:', response.status);
+        debugLog('📡 HTTP Response headers:', response.headers);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ HTTP error response:', errorText);
+          debugError('❌ HTTP error response:', errorText);
           throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
         }
 
@@ -935,7 +922,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         }
 
         if (data.result && data.result.tokenBalances) {
-          console.log('✅ Token balances found:', data.result.tokenBalances);
+          debugLog('✅ Token balances found:', data.result.tokenBalances);
           await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
         }
       } else if (activeChain === 'BASE') {
@@ -956,12 +943,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           })
         });
 
-        console.log('📡 HTTP Response status:', response.status);
-        console.log('📡 HTTP Response headers:', response.headers);
+        debugLog('📡 HTTP Response status:', response.status);
+        debugLog('📡 HTTP Response headers:', response.headers);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ HTTP error response:', errorText);
+          debugError('❌ HTTP error response:', errorText);
           throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
         }
 
@@ -971,13 +958,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         }
 
         if (data.result && data.result.tokenBalances) {
-          console.log('✅ Token balances found:', data.result.tokenBalances);
+          debugLog('✅ Token balances found:', data.result.tokenBalances);
           await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
         }
       }
       
     } catch (error) {
-      console.error('❌ Error fetching wallet tokens:', error);
+      debugError('❌ Error fetching wallet tokens:', error);
       setWalletTokens([]);
     } finally {
       setIsLoadingWalletTokens(false);
@@ -1033,38 +1020,38 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             decimals: decimals
           });
           
-          console.log(`✅ Token processed: ${symbol} = ${humanBalance.toFixed(4).replace(/\.?0+$/, '')}`);
+          debugLog(`✅ Token processed: ${symbol} = ${humanBalance.toFixed(4).replace(/\.?0+$/, '')}`);
         }
       } catch (error) {
-        console.error(`❌ Error processing token ${token.contractAddress}:`, error);
+        debugError(`❌ Error processing token ${token.contractAddress}:`, error);
       }
     }
     
-    console.log('✅ All tokens processed:', processedTokens);
+    debugLog('✅ All tokens processed:', processedTokens);
     setWalletTokens(processedTokens);
   };
 
   // Process vault tokens data from contract
   React.useEffect(() => {
-    console.log('🔍 Vault tokens effect triggered with data:', vaultTokensData);
-    console.log('🔍 Vault tokens data type:', typeof vaultTokensData);
-    console.log('🔍 Vault tokens data is array:', Array.isArray(vaultTokensData));
+    debugLog('🔍 Vault tokens effect triggered with data:', vaultTokensData);
+    debugLog('🔍 Vault tokens data type:', typeof vaultTokensData);
+    debugLog('🔍 Vault tokens data is array:', Array.isArray(vaultTokensData));
     
     if (vaultTokensData && Array.isArray(vaultTokensData)) {
-      console.log('🔍 Processing vault tokens data:', vaultTokensData);
+      debugLog('🔍 Processing vault tokens data:', vaultTokensData);
       
       // The contract returns [address[] tokens, uint256[] balances]
       const [tokenAddresses, tokenBalances] = vaultTokensData;
       
-      console.log('🔍 Token addresses:', tokenAddresses);
-      console.log('🔍 Token balances:', tokenBalances);
-      console.log('🔍 Addresses is array:', Array.isArray(tokenAddresses));
-      console.log('🔍 Balances is array:', Array.isArray(tokenBalances));
+      debugLog('🔍 Token addresses:', tokenAddresses);
+      debugLog('🔍 Token balances:', tokenBalances);
+      debugLog('🔍 Addresses is array:', Array.isArray(tokenAddresses));
+      debugLog('🔍 Balances is array:', Array.isArray(tokenBalances));
       
       if (Array.isArray(tokenAddresses) && Array.isArray(tokenBalances)) {
         // Process tokens with real metadata
         const processVaultTokens = async () => {
-          console.log('🔄 Starting vault token processing...');
+          debugLog('🔄 Starting vault token processing...');
           const processedTokens = [];
           
           for (let i = 0; i < tokenAddresses.length; i++) {
@@ -1073,7 +1060,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             
             // Skip native ETH (address 0) - it's already displayed in top balance
             if (tokenAddr === '0x0000000000000000000000000000000000000000') {
-              console.log('⏭️ Skipping native ETH (address 0) - already displayed in top balance');
+              debugLog('⏭️ Skipping native ETH (address 0) - already displayed in top balance');
               continue;
             }
             
@@ -1105,7 +1092,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                   };
                   
                   processedTokens.push(processedToken);
-                  console.log(`✅ Token processed:`, processedToken);
+                  debugLog(`✅ Token processed:`, processedToken);
                 }
               } else {
                 // Fallback if metadata fetch fails
@@ -1116,10 +1103,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                   decimals: 18
                 };
                 processedTokens.push(fallbackToken);
-                console.log(`⚠️ Token fallback:`, fallbackToken);
+                debugLog(`⚠️ Token fallback:`, fallbackToken);
               }
             } catch (error) {
-              console.error(`❌ Error fetching metadata for token ${tokenAddr}:`, error);
+              debugError(`❌ Error fetching metadata for token ${tokenAddr}:`, error);
               // Fallback on error
               const errorToken = {
                 address: tokenAddr,
@@ -1128,23 +1115,23 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                 decimals: 18
               };
               processedTokens.push(errorToken);
-              console.log(`❌ Token error fallback:`, errorToken);
+              debugLog(`❌ Token error fallback:`, errorToken);
             }
           }
           
-          console.log('✅ Final processed vault tokens:', processedTokens);
+          debugLog('✅ Final processed vault tokens:', processedTokens);
           setVaultTokens(processedTokens);
         };
         
         processVaultTokens();
       } else {
-        console.log('❌ Vault tokens data structure invalid:', { tokenAddresses, tokenBalances });
+        debugLog('❌ Vault tokens data structure invalid:', { tokenAddresses, tokenBalances });
         setVaultTokens([]);
       }
     } else {
       // No vault tokens data available
       setVaultTokens([]);
-      console.log('ℹ️ No vault tokens data available');
+      debugLog('ℹ️ No vault tokens data available');
     }
   }, [vaultTokensData]);
 
@@ -1160,34 +1147,34 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   React.useEffect(() => {
     // Add manual test function to window for debugging
     (window as any).testTokenFetching = () => {
-      console.log('🧪 Manual token fetching test...');
-      console.log('📍 Current address:', address);
+      debugLog('🧪 Manual token fetching test...');
+      debugLog('📍 Current address:', address);
       
       if (address) {
         fetchWalletTokens();
       } else {
-        console.log('❌ No wallet address available');
+        debugLog('❌ No wallet address available');
       }
     };
 
     // Add vault tokens test function
     (window as any).testVaultTokens = () => {
-      console.log('🧪 Manual vault tokens test...');
-      console.log('📍 Current address:', address);
-      console.log('🏦 Vault contract address:', getActiveContractAddress());
-      console.log('📊 Current vault tokens data:', vaultTokensData);
-      console.log('🪙 Current vault tokens state:', vaultTokens);
+      debugLog('🧪 Manual vault tokens test...');
+      debugLog('📍 Current address:', address);
+      debugLog('🏦 Vault contract address:', getActiveContractAddress());
+      debugLog('📊 Current vault tokens data:', vaultTokensData);
+      debugLog('🪙 Current vault tokens state:', vaultTokens);
       
       if (address) {
-        console.log('🔄 Manually calling fetchVaultTokensSigned...');
+        debugLog('🔄 Manually calling fetchVaultTokensSigned...');
         fetchVaultTokensSigned();
       } else {
-        console.log('❌ No wallet address available');
+        debugLog('❌ No wallet address available');
       }
     };
 
-    console.log('🧪 Token fetching test function available: window.testTokenFetching()');
-    console.log('🧪 Vault tokens test function available: window.testVaultTokens()');
+    debugLog('🧪 Token fetching test function available: window.testTokenFetching()');
+    debugLog('🧪 Vault tokens test function available: window.testVaultTokens()');
 
     return () => {
       delete (window as any).testTokenFetching;
@@ -1223,7 +1210,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
       const totalValue = amountInWei + feeInWei;
       
-      console.log('🔍 Deposit Simulation:', {
+      debugLog('🔍 Deposit Simulation:', {
         amount,
         amountInWei: amountInWei.toString(),
         feeInWei: feeInWei.toString(),
@@ -1235,7 +1222,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       if (walletBalance && walletBalance.value < totalValue) {
         const required = formatEther(totalValue);
         const available = formatEther(walletBalance.value);
-        console.log('❌ Insufficient wallet balance for deposit:', { required, available });
+        debugLog('❌ Insufficient wallet balance for deposit:', { required, available });
       toast({
           title: "Insufficient Balance",
           description: `You need ${required} ETH (${amount} + ${formatEther(feeInWei)} fee). You have ${available} ETH.`,
@@ -1245,13 +1232,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         return;
       }
       
-      console.log('✅ Deposit simulation successful, proceeding with transaction');
+      debugLog('✅ Deposit simulation successful, proceeding with transaction');
       
       // Simulation successful - proceed with transaction
       setIsSimulating(false);
       setIsLoading(true);
       
-      console.log('Depositing ETH:', { 
+      debugLog('Depositing ETH:', { 
         amount, 
         amountInWei: amountInWei.toString(),
         feeInWei: feeInWei.toString(),
@@ -1275,7 +1262,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         });
       
     } catch (error) {
-      console.error('Deposit error:', error);
+      debugError('Deposit error:', error);
       toast({
         title: "Deposit Failed",
         description: "Transaction failed or was rejected",
@@ -1313,7 +1300,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       const amountInWei = parseEther(amount);
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
       
-      console.log('🔍 Withdrawal Simulation:', {
+      debugLog('🔍 Withdrawal Simulation:', {
         amount,
         amountInWei: amountInWei.toString(),
         vaultBalanceData: vaultBalanceData ? (vaultBalanceData as bigint).toString() : 'null',
@@ -1324,7 +1311,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Check if user has enough ETH in vault for withdrawal
       if ((vaultBalanceData as bigint) < amountInWei) {
         const available = formatEther(vaultBalanceData as bigint);
-        console.log('❌ Insufficient vault balance:', { available, requested: amount });
+        debugLog('❌ Insufficient vault balance:', { available, requested: amount });
       toast({
           title: "Insufficient Vault Balance",
           description: `You only have ${available} ETH in vault. Cannot withdraw ${amount} ETH.`,
@@ -1338,7 +1325,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       if (walletBalance && walletBalance.value < feeInWei) {
         const feeRequired = formatEther(feeInWei);
         const available = formatEther(walletBalance.value);
-        console.log('❌ Insufficient wallet balance for fee:', { feeRequired, available });
+        debugLog('❌ Insufficient wallet balance for fee:', { feeRequired, available });
         toast({
           title: "Insufficient Balance for Fee",
           description: `You need ${feeRequired} ETH for the withdrawal fee. You have ${available} ETH.`,
@@ -1348,13 +1335,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         return;
       }
       
-      console.log('✅ Withdrawal simulation successful, proceeding with transaction');
+      debugLog('✅ Withdrawal simulation successful, proceeding with transaction');
       
       // Simulation successful - proceed with transaction
       setIsSimulating(false);
       setIsLoading(true);
       
-      console.log('Withdrawing ETH:', { 
+      debugLog('Withdrawing ETH:', { 
         amount, 
         amountInWei: amountInWei.toString(),
         feeInWei: feeInWei.toString()
@@ -1377,7 +1364,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       });
       
     } catch (error) {
-      console.error('Withdrawal error:', error);
+      debugError('Withdrawal error:', error);
       toast({
         title: "Withdrawal Failed",
         description: "Transaction failed or was rejected",
@@ -1425,7 +1412,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       const amountInWei = parseEther(amount);
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
       
-      console.log('🔍 Transfer Simulation:', {
+      debugLog('🔍 Transfer Simulation:', {
         to,
         amount,
         amountInWei: amountInWei.toString(),
@@ -1437,7 +1424,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Check if user has enough ETH in vault for transfer
       if ((vaultBalanceData as bigint) < amountInWei) {
         const available = formatEther(vaultBalanceData as bigint);
-        console.log('❌ Insufficient vault balance for transfer:', { available, requested: amount });
+        debugLog('❌ Insufficient vault balance for transfer:', { available, requested: amount });
       toast({
           title: "Insufficient Vault Balance",
           description: `You only have ${available} ETH in vault. Cannot transfer ${amount} ETH.`,
@@ -1451,7 +1438,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       if (walletBalance && walletBalance.value < feeInWei) {
         const feeRequired = formatEther(feeInWei);
         const available = formatEther(walletBalance.value);
-        console.log('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
+        debugLog('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
         toast({
           title: "Insufficient Balance for Fee",
           description: `You need ${feeRequired} ETH for the transfer fee. You have ${available} ETH.`,
@@ -1461,13 +1448,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         return;
       }
       
-      console.log('✅ Transfer simulation successful, proceeding with transaction');
+      debugLog('✅ Transfer simulation successful, proceeding with transaction');
       
       // Simulation successful - proceed with transaction
       setIsSimulating(false);
       setIsLoading(true);
       
-      console.log('Transferring ETH:', { 
+      debugLog('Transferring ETH:', { 
         to, 
         amount, 
         amountInWei: amountInWei.toString(),
@@ -1491,7 +1478,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       });
       
     } catch (error) {
-      console.error('Transfer error:', error);
+      debugError('Transfer error:', error);
       toast({
         title: "Transfer Failed",
         description: "Transaction failed or was rejected",
@@ -1514,7 +1501,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
 
     try {
-      console.log(`🔐 Approving token ${tokenAddress} for amount ${amount}`);
+      debugLog(`🔐 Approving token ${tokenAddress} for amount ${amount}`);
       
       // Use the write contract hook for approval
       const approvalResult = await writeVaultContract({
@@ -1542,11 +1529,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         account: address,
       });
 
-      console.log(`✅ Token approval transaction sent: ${approvalResult}`);
+      debugLog(`✅ Token approval transaction sent: ${approvalResult}`);
       return true;
       
     } catch (error) {
-      console.error('❌ Token approval error:', error);
+      debugError('❌ Token approval error:', error);
       toast({
         title: "Error",
         description: "Failed to approve token",
@@ -1569,7 +1556,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
     try {
       setIsLoading(true);
-      console.log(`💰 Depositing ${amount} ${tokenSymbol} to vault`);
+      debugLog(`💰 Depositing ${amount} ${tokenSymbol} to vault`);
 
       // Step 1: Get token decimals (like transferInternalToken)
       const decimals = await publicClient.readContract({
@@ -1586,11 +1573,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         functionName: 'decimals',
       }) as number;
 
-      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+      debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
       // Step 2: Convert amount using proper decimals
       const amountWei = parseUnits(amount, decimals);
-      console.log(`💰 Amount in wei:`, amountWei.toString());
+      debugLog(`💰 Amount in wei:`, amountWei.toString());
 
       // Step 3: First approve the token
       const approved = await approveToken(tokenAddress, amountWei);
@@ -1600,7 +1587,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
 
       // Step 4: Then deposit to vault (this would call your vault contract)
-      console.log(`✅ Token approved, proceeding with deposit...`);
+      debugLog(`✅ Token approved, proceeding with deposit...`);
       
       // Get current fee for the transaction
       if (!currentFee) {
@@ -1608,7 +1595,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
       
       const feeWei = currentFee as bigint;
-      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+      debugLog(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
       
       // Call the actual vault deposit function WITH ETH fee
       await writeVaultContract({
@@ -1621,7 +1608,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         value: feeWei, // Send ETH fee along with token deposit
       });
       
-      console.log(`📝 Token deposit transaction initiated with ETH fee`);
+      debugLog(`📝 Token deposit transaction initiated with ETH fee`);
       
       toast({
         title: "Token Deposit Initiated",
@@ -1635,7 +1622,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // This matches the ETH deposit flow exactly
       
     } catch (error) {
-      console.error('❌ Token deposit error:', error);
+      debugError('❌ Token deposit error:', error);
       toast({
         title: "Error",
         description: `Failed to deposit ${tokenSymbol}`,
@@ -1659,7 +1646,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
     try {
       setIsLoading(true);
-      console.log(`🧠 Smart deposit for ${amount} ${tokenSymbol}`);
+      debugLog(`🧠 Smart deposit for ${amount} ${tokenSymbol}`);
 
       // Step 1: Get token decimals (like other functions)
       const decimals = await publicClient.readContract({
@@ -1676,14 +1663,14 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         functionName: 'decimals',
       }) as number;
 
-      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+      debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
       // Step 2: Convert amount using proper decimals
       const amountWei = parseUnits(amount, decimals);
-      console.log(`💰 Amount in wei:`, amountWei.toString());
+      debugLog(`💰 Amount in wei:`, amountWei.toString());
 
       // Step 3: Check current allowance
-      console.log(`🔍 Checking current allowance for ${tokenSymbol}...`);
+      debugLog(`🔍 Checking current allowance for ${tokenSymbol}...`);
       const currentAllowance = await publicClient.readContract({
         address: tokenAddress as `0x${string}`,
         abi: [
@@ -1704,21 +1691,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         args: [address, getActiveContractAddress() as `0x${string}`],
       });
 
-      console.log(`📊 Current allowance: ${currentAllowance}, Required: ${amountWei}`);
+      debugLog(`📊 Current allowance: ${currentAllowance}, Required: ${amountWei}`);
 
       // Step 4: Check if approval is needed
       if ((currentAllowance as bigint) >= amountWei) {
-        console.log(`✅ Sufficient allowance (${currentAllowance}), proceeding directly to deposit`);
+        debugLog(`✅ Sufficient allowance (${currentAllowance}), proceeding directly to deposit`);
         // Skip approval, go straight to deposit
         await executeTokenDeposit(tokenAddress, amountWei, tokenSymbol);
       } else {
-        console.log(`❌ Insufficient allowance (${currentAllowance} < ${amountWei}), approval needed`);
+        debugLog(`❌ Insufficient allowance (${currentAllowance} < ${amountWei}), approval needed`);
         // Need approval first, then auto-deposit after confirmation
         await executeTokenApprovalAndDeposit(tokenAddress, amountWei, tokenSymbol);
       }
 
     } catch (error) {
-      console.error('❌ Smart token deposit error:', error);
+      debugError('❌ Smart token deposit error:', error);
       toast({
         title: "Error",
         description: `Failed to deposit ${tokenSymbol}`,
@@ -1741,7 +1728,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
     try {
       setIsLoading(true);
-      console.log(`⏱️ Deposit with 3-second delay for ${amount} ${tokenSymbol}`);
+      debugLog(`⏱️ Deposit with 3-second delay for ${amount} ${tokenSymbol}`);
 
       // Step 1: Get token decimals (like other functions)
       const decimals = await publicClient.readContract({
@@ -1758,14 +1745,14 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         functionName: 'decimals',
       }) as number;
 
-      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+      debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
       // Step 2: Convert amount using proper decimals
       const amountWei = parseUnits(amount, decimals);
-      console.log(`💰 Amount in wei:`, amountWei.toString());
+      debugLog(`💰 Amount in wei:`, amountWei.toString());
 
       // Step 3: Send approval transaction
-      console.log(`🔐 Sending approval transaction for ${tokenSymbol}...`);
+      debugLog(`🔐 Sending approval transaction for ${tokenSymbol}...`);
       
       await writeVaultContract({
         address: tokenAddress as `0x${string}`,
@@ -1792,7 +1779,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         account: address,
       });
 
-      console.log(`✅ Approval transaction sent, waiting 3 seconds...`);
+      debugLog(`✅ Approval transaction sent, waiting 3 seconds...`);
       
       toast({
         title: "Token Approval Sent",
@@ -1802,7 +1789,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Step 4: Wait 3 seconds then send deposit
       setTimeout(async () => {
         try {
-          console.log(`⏰ 3 seconds elapsed, sending deposit transaction for ${tokenSymbol}...`);
+          debugLog(`⏰ 3 seconds elapsed, sending deposit transaction for ${tokenSymbol}...`);
           
           // Get current fee for the transaction
           if (!currentFee) {
@@ -1810,7 +1797,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           }
           
           const feeWei = currentFee as bigint;
-          console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+          debugLog(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
           
           // Send the deposit transaction
           await writeVaultContract({
@@ -1823,7 +1810,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             value: feeWei, // Send ETH fee along with token deposit
           });
           
-          console.log(`📝 Deposit transaction sent with ETH fee`);
+          debugLog(`📝 Deposit transaction sent with ETH fee`);
           
           toast({
             title: "Token Deposit Sent",
@@ -1834,7 +1821,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           // DON'T set isLoading(false) here - let the transaction confirmation system handle it
           
         } catch (error) {
-          console.error('❌ Deposit transaction error:', error);
+          debugError('❌ Deposit transaction error:', error);
           toast({
             title: "Deposit Failed",
             description: `Failed to deposit ${tokenSymbol}`,
@@ -1847,7 +1834,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // DON'T set isLoading(false) here - let the delayed deposit handle it
       
     } catch (error) {
-      console.error('❌ Approval transaction error:', error);
+      debugError('❌ Approval transaction error:', error);
       toast({
         title: "Error",
         description: `Failed to approve ${tokenSymbol}`,
@@ -1860,7 +1847,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   // Helper: Execute token deposit (when allowance is sufficient)
   const executeTokenDeposit = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
     try {
-      console.log(`🚀 Executing direct deposit for ${tokenSymbol}...`);
+      debugLog(`🚀 Executing direct deposit for ${tokenSymbol}...`);
       
       // Get current fee for the transaction
       if (!currentFee) {
@@ -1868,7 +1855,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
       
       const feeWei = currentFee as bigint;
-      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+      debugLog(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
       
       // Call the actual vault deposit function WITH ETH fee
       await writeVaultContract({
@@ -1881,7 +1868,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         value: feeWei, // Send ETH fee along with token deposit
       });
       
-      console.log(`📝 Direct token deposit transaction initiated with ETH fee`);
+      debugLog(`📝 Direct token deposit transaction initiated with ETH fee`);
       
       toast({
         title: "Token Deposit Initiated",
@@ -1892,7 +1879,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // DON'T set isLoading(false) here - let the transaction confirmation system handle it
       
     } catch (error) {
-      console.error('❌ Direct token deposit error:', error);
+      debugError('❌ Direct token deposit error:', error);
       toast({
         title: "Error",
         description: `Failed to deposit ${tokenSymbol}`,
@@ -1905,7 +1892,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   // Helper: Execute approval then auto-deposit after confirmation
   const executeTokenApprovalAndDeposit = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
     try {
-      console.log(`🔐 Executing approval + auto-deposit for ${tokenSymbol}...`);
+      debugLog(`🔐 Executing approval + auto-deposit for ${tokenSymbol}...`);
       
       // Step 1: Send approval transaction
       await writeVaultContract({
@@ -1933,7 +1920,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         account: address,
       });
 
-      console.log(`✅ Approval transaction sent`);
+      debugLog(`✅ Approval transaction sent`);
       
       toast({
         title: "Token Approval Sent",
@@ -1941,7 +1928,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       });
 
       // Step 2: Wait for approval confirmation
-      console.log(`⏳ Waiting for approval confirmation...`);
+      debugLog(`⏳ Waiting for approval confirmation...`);
       
       // Use the transaction confirmation system to auto-trigger deposit
       // We'll set a flag to indicate this is an approval transaction
@@ -1956,7 +1943,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // DON'T set isLoading(false) here - let the approval confirmation trigger deposit
       
     } catch (error) {
-      console.error('❌ Token approval error:', error);
+      debugError('❌ Token approval error:', error);
       toast({
         title: "Error",
         description: `Failed to approve ${tokenSymbol}`,
@@ -1979,7 +1966,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
     try {
       setIsLoading(true);
-      console.log(`💰 Withdrawing ${amount} ${tokenSymbol} from vault`);
+      debugLog(`💰 Withdrawing ${amount} ${tokenSymbol} from vault`);
 
       // Step 1: Get token decimals (like transferInternalToken)
       const decimals = await publicClient.readContract({
@@ -1996,11 +1983,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         functionName: 'decimals',
       }) as number;
 
-      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+      debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
       // Step 2: Convert amount using proper decimals
       const amountWei = parseUnits(amount, decimals);
-      console.log(`💰 Amount in wei:`, amountWei.toString());
+      debugLog(`💰 Amount in wei:`, amountWei.toString());
       
       // Get current fee for the transaction
       if (!currentFee) {
@@ -2008,13 +1995,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
       
       const feeWei = currentFee as bigint;
-      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+      debugLog(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
 
       // Check if user has enough ETH for fee
       if (walletBalance && walletBalance.value < feeWei) {
         const feeRequired = formatEther(feeWei);
         const available = formatEther(walletBalance.value);
-        console.log('❌ Insufficient wallet balance for withdrawal fee:', { feeRequired, available });
+        debugLog('❌ Insufficient wallet balance for withdrawal fee:', { feeRequired, available });
         toast({
           title: "Insufficient Balance for Fee",
           description: `You need ${feeRequired} ETH for the withdrawal fee. You have ${available} ETH.`,
@@ -2035,7 +2022,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         value: feeWei, // Send ETH fee along with token withdrawal
       });
       
-      console.log(`📝 Token withdrawal transaction initiated with ETH fee`);
+      debugLog(`📝 Token withdrawal transaction initiated with ETH fee`);
       
       toast({
         title: "Token Withdrawal Initiated",
@@ -2046,7 +2033,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // DON'T set isLoading(false) here - let the transaction confirmation system handle it
       
     } catch (error) {
-      console.error('❌ Token withdrawal error:', error);
+      debugError('❌ Token withdrawal error:', error);
       toast({
         title: "Error",
         description: `Failed to withdraw ${tokenSymbol}`,
@@ -2074,7 +2061,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
     try {
       setIsLoading(true);
-      console.log(`🔄 Transferring ${amount} ${tokenSymbol} to ${to}`);
+      debugLog(`🔄 Transferring ${amount} ${tokenSymbol} to ${to}`);
 
       // Step 1: Get token decimals (like your working project)
       const decimals = await publicClient.readContract({
@@ -2091,11 +2078,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         functionName: 'decimals',
       }) as number;
 
-      console.log(`🔍 Token ${tokenSymbol} decimals:`, decimals);
+      debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
       // Step 2: Convert amount using proper decimals (like your working project)
       const amountWei = parseUnits(amount, decimals);
-      console.log(`💰 Amount in wei:`, amountWei.toString());
+      debugLog(`💰 Amount in wei:`, amountWei.toString());
       
       // Step 3: Get current fee
       if (!currentFee) {
@@ -2103,13 +2090,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
       
       const feeWei = currentFee as bigint;
-      console.log(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+      debugLog(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
 
       // Step 4: Check wallet ETH balance for fee
       if (walletBalance && walletBalance.value < feeWei) {
         const feeRequired = formatEther(feeWei);
         const available = formatEther(walletBalance.value);
-        console.log('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
+        debugLog('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
         toast({
           title: "Insufficient Balance for Fee",
           description: `You need ${feeRequired} ETH for the transfer fee. You have ${available} ETH.`,
@@ -2120,7 +2107,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
 
       // Step 5: Execute token transfer (like your working project)
-      console.log(`🚀 Calling transferInternalToken with:`, {
+      debugLog(`🚀 Calling transferInternalToken with:`, {
         tokenAddress,
         to,
         amountWei: amountWei.toString(),
@@ -2137,7 +2124,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         value: feeWei,
       });
 
-      console.log(`📝 Token transfer transaction result:`, result);
+      debugLog(`📝 Token transfer transaction result:`, result);
       
       toast({
         title: "Token Transfer Initiated",
@@ -2148,7 +2135,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // DON'T set isLoading(false) here - let the transaction confirmation system handle it
       
     } catch (error) {
-      console.error('❌ Token transfer error:', error);
+      debugError('❌ Token transfer error:', error);
       toast({
         title: "Transfer Failed",
         description: error instanceof Error ? error.message : "Unknown error occurred",
@@ -2176,7 +2163,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   // Handle transaction state changes
   React.useEffect(() => {
     if (isConfirmed && !hasRefreshedAfterConfirmation) {
-      console.log('🔄 Transaction confirmed! Starting smart refetch...');
+      debugLog('🔄 Transaction confirmed! Starting smart refetch...');
       
       // Set flag to prevent multiple refreshes
       setHasRefreshedAfterConfirmation(true);
@@ -2190,7 +2177,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Check if this was an approval transaction that should trigger auto-deposit
       if (pendingApprovalForDeposit) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔐 Approval confirmed, automatically proceeding to deposit...');
+          debugLog('🔐 Approval confirmed, automatically proceeding to deposit...');
         }
         
         // Auto-execute the deposit
@@ -2213,7 +2200,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // All chains benefit from delays to ensure proper state propagation
       const finalityDelay = getChainFinalityDelay();
       if (process.env.NODE_ENV === 'development') {
-        console.log(`⏰ Waiting ${finalityDelay}ms for ${activeChain} chain finality before refreshing data...`);
+        debugLog(`⏰ Waiting ${finalityDelay}ms for ${activeChain} chain finality before refreshing data...`);
       }
       
       // Show user-friendly notification with delay time
@@ -2226,42 +2213,42 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Delay the refresh to allow blockchain state to settle (or refresh immediately if no delay)
       const executeRefresh = () => {
         if (process.env.NODE_ENV === 'development') {
-          console.log(`✅ ${activeChain} chain finality delay completed (${finalityDelay}ms), now refreshing data...`);
+          debugLog(`✅ ${activeChain} chain finality delay completed (${finalityDelay}ms), now refreshing data...`);
         }
         
         // Smart refetch ONLY after transaction confirmation and finality delay
         // This updates balances without constant API polling
         if (process.env.NODE_ENV === 'development') {
-          console.log('📊 Refetching vault balance...');
+          debugLog('📊 Refetching vault balance...');
       }
       refetchVaultBalance();
         
         if (process.env.NODE_ENV === 'development') {
-          console.log('💰 Refetching wallet balance...');
+          debugLog('💰 Refetching wallet balance...');
         }
       refetchWalletBalance();
         
         if (process.env.NODE_ENV === 'development') {
-          console.log('💸 Refetching current fee...');
+          debugLog('💸 Refetching current fee...');
         }
       refetchFee();
         
         // NEW: Refresh token balances after transaction confirmation and finality delay
         if (process.env.NODE_ENV === 'development') {
-          console.log('🪙 Refreshing token balances after confirmation...');
-          console.log('🪙 Calling fetchWalletTokens...');
+          debugLog('🪙 Refreshing token balances after confirmation...');
+          debugLog('🪙 Calling fetchWalletTokens...');
         }
       fetchWalletTokens();
         if (process.env.NODE_ENV === 'development') {
-          console.log('🪙 Calling fetchVaultTokensSigned...');
+          debugLog('🪙 Calling fetchVaultTokensSigned...');
         }
       fetchVaultTokensSigned();
         if (process.env.NODE_ENV === 'development') {
-          console.log('🪙 Token refresh calls completed');
+          debugLog('🪙 Token refresh calls completed');
         }
         
         if (process.env.NODE_ENV === 'development') {
-          console.log(`✅ Smart refetch completed for ${activeChain} chain!`);
+          debugLog(`✅ Smart refetch completed for ${activeChain} chain!`);
         }
       };
 
@@ -2277,7 +2264,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   React.useEffect(() => {
     if (!isWritePendingForCurrentChain && isLoading) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔄 Transaction cancelled or failed, resetting loading state');
+        debugLog('🔄 Transaction cancelled or failed, resetting loading state');
       }
       setIsLoading(false);
     }
@@ -2287,7 +2274,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   React.useEffect(() => {
     if (isWritePendingForCurrentChain) {
       if (process.env.NODE_ENV === 'development') {
-        console.log(`🔄 New transaction started for ${activeChain}, resetting refresh flag`);
+        debugLog(`🔄 New transaction started for ${activeChain}, resetting refresh flag`);
       }
       setHasRefreshedAfterConfirmation(false);
     }
@@ -2314,7 +2301,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   
   // Fetch chain-specific data when activeChain changes
   const fetchChainSpecificData = useCallback(() => {
-    console.log(`🔄 Fetching chain-specific data for ${activeChain}`);
+    debugLog(`🔄 Fetching chain-specific data for ${activeChain}`);
     
     // Use debounced fetch for vault tokens to prevent race conditions
       debouncedFetchVaultTokens();
@@ -2329,11 +2316,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   // Function to force network switch with user notification
   const forceNetworkSwitch = async () => {
     if (isOnCorrectNetwork) {
-      console.log('✅ Already on correct network');
+      debugLog('✅ Already on correct network');
       return;
     }
     
-    console.log('🚨 Forcing network switch - user must switch to continue');
+    debugLog('🚨 Forcing network switch - user must switch to continue');
     
     toast({
       title: "Network Switch Required",
@@ -2381,52 +2368,52 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Test chain-specific data fetching
       testChainDataFetching: async () => {
-        console.log('🧪 Testing chain-specific data fetching...');
+        debugLog('🧪 Testing chain-specific data fetching...');
         const chainConfig = getCurrentChainConfig();
         
         
-        console.log('🏦 Active contract address:', getActiveContractAddress());
+        debugLog('🏦 Active contract address:', getActiveContractAddress());
         
         // Test wallet balance refetch
         if (refetchWalletBalance) {
-          console.log('🔄 Refetching wallet balance...');
+          debugLog('🔄 Refetching wallet balance...');
           refetchWalletBalance();
         }
         
         // Test vault balance refetch
         if (refetchVaultBalance) {
-          console.log('🔄 Refetching vault balance...');
+          debugLog('🔄 Refetching vault balance...');
           refetchVaultBalance();
         }
         
         // Test token refetch
         if (fetchWalletTokens) {
-          console.log('🔄 Refetching wallet tokens...');
+          debugLog('🔄 Refetching wallet tokens...');
           fetchWalletTokens();
         }
         
         if (refetchVaultTokens) {
-          console.log('🔄 Refetching vault tokens...');
+          debugLog('🔄 Refetching vault tokens...');
           refetchVaultTokens();
         }
       },
       
       // Force chain data refresh
       forceChainRefresh: async () => {
-        console.log('🚨 Force refreshing all chain data...');
+        debugLog('🚨 Force refreshing all chain data...');
         await fetchChainSpecificData();
       },
       
       // Check if data is stale
       checkDataFreshness: () => {
         const chainConfig = getCurrentChainConfig();
-        console.log('📊 Data Freshness Check:');
-        console.log('  Active Chain:', activeChain);
-        console.log('  Expected Chain ID:', chainConfig.chainId);
-        console.log('  Actual Chain ID:', chainId);
-        console.log('  Chain Match:', chainId === chainConfig.chainId);
-        console.log('  Wallet Balance Source:', walletBalance?.value?.toString());
-        console.log('  Vault Balance Source:', vaultBalanceData?.toString());
+        debugLog('📊 Data Freshness Check:');
+        debugLog('  Active Chain:', activeChain);
+        debugLog('  Expected Chain ID:', chainConfig.chainId);
+        debugLog('  Actual Chain ID:', chainId);
+        debugLog('  Chain Match:', chainId === chainConfig.chainId);
+        debugLog('  Wallet Balance Source:', walletBalance?.value?.toString());
+        debugLog('  Vault Balance Source:', vaultBalanceData?.toString());
       }
     };
     
@@ -2439,66 +2426,66 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     (window as any).debugTransactionStates = {
       // BUTTON 1: Check Current Transaction State
       checkCurrentState: () => {
-        console.log('🔍 BUTTON 1: CURRENT TRANSACTION STATE ANALYSIS');
-        console.log('================================================');
-        console.log('📍 Active Chain:', activeChain);
-        console.log('📍 Chain ID:', chainId);
-        console.log('📍 Wallet Connected:', isConnected);
-        console.log('📍 Wallet Address:', address);
-        console.log('');
-        console.log('📊 CHAIN-SPECIFIC STATES:');
-        console.log('  isLoading:', isLoading);
-        console.log('  isSimulating:', isSimulating);
-        console.log('  hasRefreshedAfterConfirmation:', hasRefreshedAfterConfirmation);
-        console.log('  lastTransactionHash:', lastTransactionHash);
-        console.log('');
-        console.log('🌐 WAGMI GLOBAL STATES:');
-        console.log('  isWritePending:', isWritePending);
-        console.log('  isConfirming:', isConfirming);
-        console.log('  isConfirmed:', isConfirmed);
-        console.log('  currentHash:', hash);
-        console.log('');
-        console.log('🔗 TRANSACTION ASSOCIATION:');
-        console.log('  isCurrentChainTransaction:', isCurrentChainTransaction);
-        console.log('  isWritePendingForCurrentChain:', isWritePendingForCurrentChain);
-        console.log('  isConfirmingForCurrentChain:', isConfirmingForCurrentChain);
-        console.log('');
-        console.log('⚡ COMBINED LOADING STATE:');
-        console.log('  isTransactionLoading:', isTransactionLoading);
-        console.log('  Final isLoading for UI:', isTransactionLoading);
+        debugLog('🔍 BUTTON 1: CURRENT TRANSACTION STATE ANALYSIS');
+        debugLog('================================================');
+        debugLog('📍 Active Chain:', activeChain);
+        debugLog('📍 Chain ID:', chainId);
+        debugLog('📍 Wallet Connected:', isConnected);
+        debugLog('📍 Wallet Address:', address);
+        debugLog('');
+        debugLog('📊 CHAIN-SPECIFIC STATES:');
+        debugLog('  isLoading:', isLoading);
+        debugLog('  isSimulating:', isSimulating);
+        debugLog('  hasRefreshedAfterConfirmation:', hasRefreshedAfterConfirmation);
+        debugLog('  lastTransactionHash:', lastTransactionHash);
+        debugLog('');
+        debugLog('🌐 WAGMI GLOBAL STATES:');
+        debugLog('  isWritePending:', isWritePending);
+        debugLog('  isConfirming:', isConfirming);
+        debugLog('  isConfirmed:', isConfirmed);
+        debugLog('  currentHash:', hash);
+        debugLog('');
+        debugLog('🔗 TRANSACTION ASSOCIATION:');
+        debugLog('  isCurrentChainTransaction:', isCurrentChainTransaction);
+        debugLog('  isWritePendingForCurrentChain:', isWritePendingForCurrentChain);
+        debugLog('  isConfirmingForCurrentChain:', isConfirmingForCurrentChain);
+        debugLog('');
+        debugLog('⚡ COMBINED LOADING STATE:');
+        debugLog('  isTransactionLoading:', isTransactionLoading);
+        debugLog('  Final isLoading for UI:', isTransactionLoading);
       },
 
       // BUTTON 2: Test Chain Switching State Isolation
       testChainIsolation: () => {
-        console.log('🧪 BUTTON 2: TESTING CHAIN STATE ISOLATION');
-        console.log('============================================');
-        console.log('🔄 Simulating chain switch...');
+        debugLog('🧪 BUTTON 2: TESTING CHAIN STATE ISOLATION');
+        debugLog('============================================');
+        debugLog('🔄 Simulating chain switch...');
         
         // Show current state before "switch"
-        console.log('📊 BEFORE "SWITCH":');
-        console.log('  ETH States:', chainTransactionStates.ETH);
-        console.log('  BSC States:', chainTransactionStates.BSC);
-        console.log('  BASE States:', chainTransactionStates.BASE);
-        console.log('');
+        debugLog('📊 BEFORE "SWITCH":');
+        debugLog('  ETH States:', chainTransactionStates.ETH);
+        debugLog('  BSC States:', chainTransactionStates.BSC);
+        debugLog('  BASE States:', chainTransactionStates.BASE);
+        debugLog('');
         
         // Show what would happen if we switched
         const otherChains = ['ETH', 'BSC', 'BASE'].filter(c => c !== activeChain);
         otherChains.forEach(chain => {
-          console.log(`🔍 If we switched to ${chain}:`);
-          console.log(`  isLoading: ${chainTransactionStates[chain].isLoading}`);
-          console.log(`  isSimulating: ${chainTransactionStates[chain].isSimulating}`);
-          console.log(`  hasRefreshedAfterConfirmation: ${chainTransactionStates[chain].hasRefreshedAfterConfirmation}`);
-          console.log(`  lastTransactionHash: ${chainTransactionStates[chain].lastTransactionHash}`);
-          console.log('');
+          debugLog(`🔍 If we switched to ${chain}:`);
+          debugLog(`  isLoading: ${chainTransactionStates[chain].isLoading}`);
+          debugLog(`  isSimulating: ${chainTransactionStates[chain].isSimulating}`);
+          debugLog(`  hasRefreshedAfterConfirmation: ${chainTransactionStates[chain].hasRefreshedAfterConfirmation}`);
+          debugLog(`  lastTransactionHash: ${chainTransactionStates[chain].lastTransactionHash}`);
+          debugLog('');
         });
         
-        console.log('✅ Chain isolation test completed!');
+        debugLog('✅ Chain isolation test completed!');
       },
 
       // BUTTON 3: Force Reset All Transaction States
       forceResetStates: () => {
-        console.log('🚨 BUTTON 3: FORCE RESETTING ALL TRANSACTION STATES');
-        console.log('==================================================');
+        debugLog('🚨 BUTTON 3: FORCE RESETTING ALL TRANSACTION STATES');
+        debugLog('==================================================');
         
         // Reset all chain states
         setChainTransactionStates({
@@ -2507,15 +2494,15 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null }
         });
         
-        console.log('🧹 All chain transaction states reset to false');
-        console.log('🔄 This should clear any stuck modal states');
-        console.log('✅ Force reset completed!');
+        debugLog('🧹 All chain transaction states reset to false');
+        debugLog('🔄 This should clear any stuck modal states');
+        debugLog('✅ Force reset completed!');
       },
 
       // NEW BUTTON 6: Nuclear Reset - Clear Everything
       nuclearReset: () => {
-        console.log('☢️ BUTTON 6: NUCLEAR RESET - CLEARING EVERYTHING');
-        console.log('==================================================');
+        debugLog('☢️ BUTTON 6: NUCLEAR RESET - CLEARING EVERYTHING');
+        debugLog('==================================================');
         
         // Reset all chain states
         setChainTransactionStates({
@@ -2525,88 +2512,88 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         });
         
         // Force clear any remaining Wagmi states by triggering a re-render
-        console.log('🧹 All chain transaction states reset');
-        console.log('🔄 Forcing component re-render...');
+        debugLog('🧹 All chain transaction states reset');
+        debugLog('🔄 Forcing component re-render...');
         
         // This will trigger the aggressive cleanup effect
-        console.log('✅ Nuclear reset completed!');
-        console.log('🔄 Now try switching chains or opening modals');
+        debugLog('✅ Nuclear reset completed!');
+        debugLog('🔄 Now try switching chains or opening modals');
       },
 
       // BUTTON 4: Simulate Transaction on Current Chain
       simulateTransaction: () => {
-        console.log('🎭 BUTTON 4: SIMULATING TRANSACTION ON CURRENT CHAIN');
-        console.log('==================================================');
-        console.log(`📍 Simulating on: ${activeChain}`);
+        debugLog('🎭 BUTTON 4: SIMULATING TRANSACTION ON CURRENT CHAIN');
+        debugLog('==================================================');
+        debugLog(`📍 Simulating on: ${activeChain}`);
         
         // Simulate starting a transaction
         setIsLoading(true);
-        console.log('✅ Set isLoading = true for current chain');
+        debugLog('✅ Set isLoading = true for current chain');
         
         // Simulate transaction hash
         const fakeHash = `0x${Math.random().toString(16).substr(2, 64)}`;
         setLastTransactionHash(fakeHash);
-        console.log('🔗 Set fake transaction hash:', fakeHash);
+        debugLog('🔗 Set fake transaction hash:', fakeHash);
         
         // Wait 3 seconds then "complete" transaction
         setTimeout(() => {
           setIsLoading(false);
           setLastTransactionHash(null);
-          console.log('⏰ 3 seconds elapsed - simulated transaction completed');
-          console.log('✅ Reset isLoading = false and cleared hash');
+          debugLog('⏰ 3 seconds elapsed - simulated transaction completed');
+          debugLog('✅ Reset isLoading = false and cleared hash');
         }, 3000);
         
-        console.log('🎬 Simulation started - check console in 3 seconds');
+        debugLog('🎬 Simulation started - check console in 3 seconds');
       },
 
       // BUTTON 5: Deep State Investigation
       deepInvestigation: () => {
-        console.log('🔬 BUTTON 5: DEEP STATE INVESTIGATION');
-        console.log('=====================================');
+        debugLog('🔬 BUTTON 5: DEEP STATE INVESTIGATION');
+        debugLog('=====================================');
         
         // Check if there are any stale Wagmi states
-        console.log('🔍 WAGMI STATE ANALYSIS:');
-        console.log('  isWritePending:', isWritePending);
-        console.log('  isConfirming:', isConfirming);
-        console.log('  isConfirmed:', isConfirmed);
-        console.log('  hash:', hash);
-        console.log('');
+        debugLog('🔍 WAGMI STATE ANALYSIS:');
+        debugLog('  isWritePending:', isWritePending);
+        debugLog('  isConfirming:', isConfirming);
+        debugLog('  isConfirmed:', isConfirmed);
+        debugLog('  hash:', hash);
+        debugLog('');
         
         // Check if our chain-specific filtering is working
-        console.log('🔍 CHAIN FILTERING ANALYSIS:');
-        console.log('  Current hash:', hash);
-        console.log('  Last transaction hash for', activeChain + ':', lastTransactionHash);
-        console.log('  Hash match:', hash === lastTransactionHash);
-        console.log('  isCurrentChainTransaction:', isCurrentChainTransaction);
-        console.log('');
+        debugLog('🔍 CHAIN FILTERING ANALYSIS:');
+        debugLog('  Current hash:', hash);
+        debugLog('  Last transaction hash for', activeChain + ':', lastTransactionHash);
+        debugLog('  Hash match:', hash === lastTransactionHash);
+        debugLog('  isCurrentChainTransaction:', isCurrentChainTransaction);
+        debugLog('');
         
         // Check if there are any React state inconsistencies
-        console.log('🔍 REACT STATE CONSISTENCY:');
-        console.log('  Chain states object keys:', Object.keys(chainTransactionStates));
-        console.log('  Current chain state:', chainTransactionStates[activeChain]);
-        console.log('  All chain states:', chainTransactionStates);
-        console.log('');
+        debugLog('🔍 REACT STATE CONSISTENCY:');
+        debugLog('  Chain states object keys:', Object.keys(chainTransactionStates));
+        debugLog('  Current chain state:', chainTransactionStates[activeChain]);
+        debugLog('  All chain states:', chainTransactionStates);
+        debugLog('');
         
         // Check if there are any circular dependencies
-        console.log('🔍 DEPENDENCY ANALYSIS:');
-        console.log('  activeChain dependency:', activeChain);
-        console.log('  hash dependency:', hash);
-        console.log('  chainTransactionStates dependency:', chainTransactionStates);
-        console.log('');
+        debugLog('🔍 DEPENDENCY ANALYSIS:');
+        debugLog('  activeChain dependency:', activeChain);
+        debugLog('  hash dependency:', hash);
+        debugLog('  chainTransactionStates dependency:', chainTransactionStates);
+        debugLog('');
         
-        console.log('✅ Deep investigation completed!');
+        debugLog('✅ Deep investigation completed!');
       }
     };
     
     // Debug buttons available (development only)
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔧 DEBUG BUTTONS AVAILABLE:');
-      console.log('  Button 1: window.debugTransactionStates.checkCurrentState()');
-      console.log('  Button 2: window.debugTransactionStates.testChainIsolation()');
-      console.log('  Button 3: window.debugTransactionStates.forceResetStates()');
-      console.log('  Button 4: window.debugTransactionStates.simulateTransaction()');
-      console.log('  Button 5: window.debugTransactionStates.deepInvestigation()');
-      console.log('  Button 6: window.debugTransactionStates.nuclearReset()');
+      debugLog('🔧 DEBUG BUTTONS AVAILABLE:');
+      debugLog('  Button 1: window.debugTransactionStates.checkCurrentState()');
+      debugLog('  Button 2: window.debugTransactionStates.testChainIsolation()');
+      debugLog('  Button 3: window.debugTransactionStates.forceResetStates()');
+      debugLog('  Button 4: window.debugTransactionStates.simulateTransaction()');
+      debugLog('  Button 5: window.debugTransactionStates.deepInvestigation()');
+      debugLog('  Button 6: window.debugTransactionStates.nuclearReset()');
     }
     
   }, [activeChain, address, isConnected, chainId, walletBalance, vaultBalanceData, currentFee, refetchWalletBalance, refetchVaultBalance, fetchWalletTokens, refetchVaultTokens, fetchChainSpecificData, getCurrentChainConfig, getActiveRpcUrl, getActiveContractAddress, chainTransactionStates, isLoading, isSimulating, hasRefreshedAfterConfirmation, lastTransactionHash, isWritePending, isConfirming, isConfirmed, hash, isCurrentChainTransaction, isWritePendingForCurrentChain, isConfirmingForCurrentChain, isTransactionLoading, setIsLoading, setLastTransactionHash]);
