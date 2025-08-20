@@ -13,6 +13,9 @@ import {
   connectMetaMaskToBaseTestnet
 } from '../metamask.js';
 
+// Import logging utilities
+import { debugLog, debugError } from '@/lib/utils';
+
 export const WEB3_CONFIG = {
   // Network Mode (mainnet or testnet)
   NETWORK_MODE: import.meta.env.VITE_NETWORK_MODE || 'testnet',
@@ -143,17 +146,17 @@ export const getBestRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
     const alchemyUrl = getRpcUrl(chain, 'ALCHEMY');
     if (alchemyUrl) return alchemyUrl;
   } catch (error) {
-    console.log(`Alchemy RPC not available for ${chain}`);
+    debugLog(`Alchemy RPC not available for ${chain}`);
   }
   
   try {
     const ankrUrl = getRpcUrl(chain, 'ANKR');
     if (ankrUrl) return ankrUrl;
   } catch (error) {
-    console.log(`Ankr RPC not available for ${chain}`);
+    debugLog(`Ankr RPC not available for ${chain}`);
   }
   
-  console.error(`❌ No valid RPC URL available for ${chain}`);
+  debugError(`❌ No valid RPC URL available for ${chain}`);
   throw new Error(`No valid RPC URL available for ${chain}. Please check your environment variables.`);
 };
 
@@ -204,10 +207,10 @@ export const switchToChain = async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
       }
     }
     
-    console.log(`✅ Successfully switched to ${targetChain} ${networkMode}`);
+    debugLog(`✅ Successfully switched to ${targetChain} ${networkMode}`);
     return true;
   } catch (error) {
-    console.error(`❌ Failed to switch to ${targetChain} ${networkMode}:`, error);
+    debugError(`❌ Failed to switch to ${targetChain} ${networkMode}:`, error);
     return false;
   }
 };

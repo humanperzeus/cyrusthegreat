@@ -5,6 +5,7 @@ import { WithdrawModal } from "@/components/modals/WithdrawModal";
 import { TransferModal } from "@/components/modals/TransferModal";
 import { useVault } from "@/hooks/useVault";
 import { parseEther } from "viem";
+import { debugLog } from "@/lib/utils";
 
 const Index = () => {
   // Chain switching state with persistence
@@ -17,7 +18,7 @@ const Index = () => {
   // Save chain preference to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('vaultwhisper-active-chain', activeChain);
-    console.log(`💾 Chain preference saved to localStorage: ${activeChain}`);
+    debugLog(`💾 Chain preference saved to localStorage: ${activeChain}`);
   }, [activeChain]);
   
   const { 

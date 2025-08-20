@@ -7,6 +7,7 @@ import { useAccount } from "wagmi";
 import { switchToChain, getActiveChainInfo, getChainConfig } from "@/config/web3";
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { debugLog } from "@/lib/utils";
 
 interface VaultCoreProps {
   walletBalance: string;
@@ -108,7 +109,7 @@ export const VaultCore = ({
 
   // Debug: Log loading state changes
   useEffect(() => {
-    console.log('🔍 Loading state changed:', {
+    debugLog('🔍 Loading state changed:', {
       wallet: isLoadingWalletTokens,
       vault: isLoadingVaultTokens,
       activeTab,
@@ -118,7 +119,7 @@ export const VaultCore = ({
 
   // Debug: Track all tab changes with detailed context
   useEffect(() => {
-    console.log('🎯 TAB CHANGE DETECTED:', {
+    debugLog('🎯 TAB CHANGE DETECTED:', {
       timestamp: new Date().toISOString(),
       previousTab: activeTab,
       newTab: activeTab,
@@ -132,7 +133,7 @@ export const VaultCore = ({
 
     // Log specific scenarios that might cause glitches
     if (displayMode === 'native-tokens') {
-      console.log('🔧 NATIVE TOKENS MODE DEBUG:', {
+      debugLog('🔧 NATIVE TOKENS MODE DEBUG:', {
         activeNativeTab: activeTab === 'wallet' ? 'tokens' : 'tokens',
         activeTab,
         isLoadingWalletTokens,
@@ -167,34 +168,34 @@ export const VaultCore = ({
   const handleChainSwitch = async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
     if (targetChain === activeChain || isSwitchingChain) return;
     
-    console.log(`🔄 Chain switch initiated: ${activeChain} → ${targetChain}`);
-    console.log(`🔧 Debug - isSwitchingChain:`, isSwitchingChain);
-    console.log(`🔧 Debug - setIsSwitchingChain:`, typeof setIsSwitchingChain);
+    debugLog(`🔄 Chain switch initiated: ${activeChain} → ${targetChain}`);
+    debugLog(`🔧 Debug - isSwitchingChain:`, isSwitchingChain);
+    debugLog(`🔧 Debug - setIsSwitchingChain:`, typeof setIsSwitchingChain);
     
     try {
       setIsSwitchingChain(true);
-      console.log(`✅ setIsSwitchingChain(true) called successfully`);
+      debugLog(`✅ setIsSwitchingChain(true) called successfully`);
       
       const success = await switchToChain(targetChain);
-      console.log(`🔄 switchToChain result:`, success);
+      debugLog(`🔄 switchToChain result:`, success);
       
       if (success) {
-        console.log(`✅ MetaMask switched to ${targetChain} successfully`);
+        debugLog(`✅ MetaMask switched to ${targetChain} successfully`);
         setActiveChain(targetChain);
-        console.log(`✅ Frontend activeChain updated to ${targetChain}`);
+        debugLog(`✅ Frontend activeChain updated to ${targetChain}`);
         
         // Trigger chain-specific data fetching
         // Note: This will be handled by the useVault hook when activeChain changes
-        console.log(`🔄 Triggering data refresh for ${targetChain}...`);
+        debugLog(`🔄 Triggering data refresh for ${targetChain}...`);
       } else {
-        console.log(`❌ MetaMask switch to ${targetChain} failed`);
+        debugLog(`❌ MetaMask switch to ${targetChain} failed`);
       }
     } catch (error) {
-      console.error(`❌ Failed to switch to ${targetChain}:`, error);
+      debugError(`❌ Failed to switch to ${targetChain}:`, error);
     } finally {
-      console.log(`🔄 Setting isSwitchingChain to false...`);
+      debugLog(`🔄 Setting isSwitchingChain to false...`);
       setIsSwitchingChain(false);
-      console.log(`🔄 Chain switching completed for ${targetChain}`);
+      debugLog(`🔄 Chain switching completed for ${targetChain}`);
     }
   };
 
@@ -205,7 +206,7 @@ export const VaultCore = ({
     
     // Debug: Log internal tab state changes
     useEffect(() => {
-      console.log('🔧 NATIVE TOKENS INTERNAL STATE:', {
+      debugLog('🔧 NATIVE TOKENS INTERNAL STATE:', {
         timestamp: new Date().toISOString(),
         previousNativeTab: activeNativeTab,
         newNativeTab: activeNativeTab,
@@ -262,7 +263,7 @@ export const VaultCore = ({
                         try {
                           await refetchWalletTokens();
                         } catch (error) {
-                          console.error('Wallet refresh failed:', error);
+                          debugError('Wallet refresh failed:', error);
                         }
                       }}
                       disabled={isLoadingWalletTokens}
@@ -334,7 +335,7 @@ export const VaultCore = ({
                         try {
                           await refetchVaultTokens();
                         } catch (error) {
-                          console.error('Vault refresh failed:', error);
+                          debugError('Vault refresh failed:', error);
                         }
                       }}
                       disabled={isLoadingVaultTokens}
@@ -429,7 +430,7 @@ export const VaultCore = ({
                   try {
                     await refetchWalletTokens();
                   } catch (error) {
-                    console.error('Wallet refresh failed:', error);
+                    debugError('Wallet refresh failed:', error);
                   }
                 }}
                 disabled={isLoadingWalletTokens}
@@ -501,7 +502,7 @@ export const VaultCore = ({
                   try {
                     await refetchVaultTokens();
                   } catch (error) {
-                    console.error('Vault refresh failed:', error);
+                    debugError('Vault refresh failed:', error);
                   }
                 }}
                 disabled={isLoadingVaultTokens}
@@ -579,7 +580,7 @@ export const VaultCore = ({
     
     // Handler for tab changes
     const handleTabChange = (value: string) => {
-      console.log(`🔄 Tab switching from ${activeTab} to ${value}`);
+      debugLog(`🔄 Tab switching from ${activeTab} to ${value}`);
       setActiveTab(value as 'wallet' | 'vault');
     };
     
@@ -605,7 +606,7 @@ export const VaultCore = ({
                   try {
                     await refetchWalletTokens();
                   } catch (error) {
-                    console.error('Wallet refresh failed:', error);
+                    debugError('Wallet refresh failed:', error);
                   }
                 }}
                 disabled={isLoadingWalletTokens}
@@ -665,7 +666,7 @@ export const VaultCore = ({
                   try {
                     await refetchVaultTokens();
                   } catch (error) {
-                    console.error('Vault refresh failed:', error);
+                    debugError('Vault refresh failed:', error);
                   }
                 }}
                 disabled={isLoadingVaultTokens}
@@ -748,7 +749,7 @@ export const VaultCore = ({
                     try {
                       await refetchWalletTokens();
                     } catch (error) {
-                      console.error('Wallet refresh failed:', error);
+                      debugError('Wallet refresh failed:', error);
                     }
                   }}
                   disabled={isLoadingWalletTokens}
@@ -810,7 +811,7 @@ export const VaultCore = ({
                     try {
                       await refetchVaultTokens();
                     } catch (error) {
-                      console.error('Vault refresh failed:', error);
+                      debugError('Vault refresh failed:', error);
                     }
                   }}
                 disabled={isLoadingVaultTokens}
@@ -875,7 +876,7 @@ export const VaultCore = ({
 
   // Preserve active tab when switching display modes
   useEffect(() => {
-    console.log(`🔄 Display mode changed to: ${displayMode}, preserving tab: ${activeTab}`);
+    debugLog(`🔄 Display mode changed to: ${displayMode}, preserving tab: ${activeTab}`);
   }, [displayMode, activeTab]);
 
   // Console switcher for testing different display modes
@@ -886,22 +887,22 @@ export const VaultCore = ({
           case '1':
             event.preventDefault();
             setDisplayMode('tabs');
-            console.log('🎯 Switched to TABS mode');
+            debugLog('🎯 Switched to TABS mode');
             break;
           case '2':
             event.preventDefault();
             setDisplayMode('cards');
-            console.log('🎯 Switched to CARDS mode');
+            debugLog('🎯 Switched to CARDS mode');
             break;
           case '3':
             event.preventDefault();
             setDisplayMode('tabbed-cards');
-            console.log('🎯 Switched to TABBED-CARDS mode');
+            debugLog('🎯 Switched to TABBED-CARDS mode');
             break;
           case '4':
             event.preventDefault();
             setDisplayMode('native-tokens');
-            console.log('🎯 Switched to NATIVE/TOKENS mode');
+            debugLog('🎯 Switched to NATIVE/TOKENS mode');
             break;
         }
       }
