@@ -1309,9 +1309,9 @@ export const VaultCore = ({
                 </div>
               )}
 
-      {/* v1.0 Release Information */}
+      {/* v1.15 Release Information */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-        🚀 <strong>v1.20 Release</strong> - ETH and BNB Chain working - Solana Chain Soon
+        🚀 <strong>v1.15 Release</strong> - Complete BASE Chain Integration & Multi-Chain Support
       </div>
 
       {/* Made by humanperzeus */}
