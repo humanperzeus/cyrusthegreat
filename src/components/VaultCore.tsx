@@ -1255,10 +1255,10 @@ export const VaultCore = ({
         </div>
       )}
 
-                    {/* DEBUG PANEL - Transaction State Investigation (TESTNET ONLY) */}
-              {isConnected && currentNetwork.networkMode === 'testnet' && (
+                    {/* DEBUG PANEL - Transaction State Investigation (DEBUG MODE ONLY) */}
+              {isConnected && process.env.VITE_LOG_MODE === 'debug' && (
                 <div className="text-xs text-center p-4 bg-red-500/10 border border-red-500/30 rounded">
-                  <div className="font-bold text-red-500 mb-2">🔧 DEBUG PANEL - Transaction State Investigation (TESTNET)</div>
+                  <div className="font-bold text-red-500 mb-2">🔧 DEBUG PANEL - Transaction State Investigation (DEBUG MODE)</div>
                   <div className="grid grid-cols-6 gap-2">
                     <button
                       onClick={() => (window as any).debugTransactionStates?.checkCurrentState()}
@@ -1304,7 +1304,7 @@ export const VaultCore = ({
                     </button>
                   </div>
                   <div className="text-red-500/70 mt-2">
-                    Debug panel only visible on testnet - Use these buttons to debug transaction state pollution issues
+                    Debug panel only visible in debug mode - Use these buttons to debug transaction state pollution issues
                   </div>
                 </div>
               )}
@@ -1314,10 +1314,19 @@ export const VaultCore = ({
         🚀 <strong>v1.20 Release</strong> - ETH and BNB Chain working - Solana Chain Soon
       </div>
 
-      {/* Made by humanperzeus */}
-      <div className="text-xs text-muted-foreground text-center p-2">
-        made by <a href="https://x.com/humanperzeus" target="_blank" rel="noopener noreferrer" className="text-vault-primary hover:text-vault-primary/80 transition-colors">@humanperzeus</a>
-      </div>
+      {/* Footer with Version Info */}
+      <footer className="mt-8 py-4 text-center border-t border-gray-200 dark:border-gray-800">
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          <span className="font-semibold text-vault-primary">VaultWhisper</span> • 
+          <span className="ml-2 px-2 py-1 bg-vault-primary/10 text-vault-primary text-xs rounded-full font-mono">
+            v1.15.1
+          </span>
+          <span className="ml-2 text-gray-500">• Multi-Chain Vault Solution</span>
+        </div>
+        <div className="mt-2 text-xs text-gray-500">
+          made by <a href="https://x.com/humanperzeus" target="_blank" rel="noopener noreferrer" className="text-vault-primary hover:text-vault-primary/80 transition-colors">@humanperzeus</a>
+        </div>
+      </footer>
     </div>
   );
 };

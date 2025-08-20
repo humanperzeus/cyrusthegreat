@@ -288,7 +288,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   React.useEffect(() => {
     // Check network only when wallet connects (not on every chainId change)
     if (isConnected && !isSwitchingNetwork && !hasShownInitialNetworkCheck) {
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.VITE_LOG_MODE === 'debug') {
         console.log('🚀 Wallet connected, checking network...');
         console.log('Current chainId:', chainId);
         console.log('Target chainId:', getTargetChain().id);
@@ -300,7 +300,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Only show notification if not on correct network, but don't force switch
       if (chainId !== getTargetChain().id) {
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.VITE_LOG_MODE === 'debug') {
           console.log('🔄 Chain mismatch detected, showing notification...');
         }
         
@@ -311,7 +311,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           variant: "default",
         });
       } else {
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.VITE_LOG_MODE === 'debug') {
           console.log('✅ Already on correct network');
         }
       }
@@ -320,26 +320,30 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   
   // Debug logging for network switching
   React.useEffect(() => {
-    console.log('🌐 Network Configuration Debug:', {
-      networkMode: currentNetwork.mode,
-      isMainnet: currentNetwork.isMainnet,
-      isTestnet: currentNetwork.isTestnet,
-      targetChainId: getTargetChain().id,
-      currentChainId: chainId,
-      isConnected,
-      isSwitchingNetwork
-    });
+    if (process.env.VITE_LOG_MODE === 'debug') {
+      console.log('🌐 Network Configuration Debug:', {
+        networkMode: currentNetwork.mode,
+        isMainnet: currentNetwork.isMainnet,
+        isTestnet: currentNetwork.isTestnet,
+        targetChainId: getTargetChain().id,
+        currentChainId: chainId,
+        isConnected,
+        isSwitchingNetwork
+      });
+    }
     
     // Add manual test function to window for debugging
     (window as any).testNetworkSwitch = () => {
-      console.log('🧪 Manual network switch test triggered');
-      console.log('Current state:', {
-        isConnected,
-        isSwitchingNetwork,
-        currentNetwork: currentNetwork.mode,
-        chainId,
-        targetChain: getTargetChain()
-      });
+      if (process.env.VITE_LOG_MODE === 'debug') {
+        console.log('🧪 Manual network switch test triggered');
+        console.log('Current state:', {
+          isConnected,
+          isSwitchingNetwork,
+          currentNetwork: currentNetwork.mode,
+          chainId,
+          targetChain: getTargetChain()
+        });
+      }
       autoSwitchNetwork();
     };
     
@@ -357,23 +361,33 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     // Test if switchChain function exists and works
     (window as any).testSwitchChain = async () => {
-      console.log('🧪 Testing switchChain function...');
-      console.log('switchChain function:', switchChain);
-      console.log('isConnected:', isConnected);
-      console.log('chainId:', chainId);
+      if (process.env.VITE_LOG_MODE === 'debug') {
+        console.log('🧪 Testing switchChain function...');
+        console.log('switchChain function:', switchChain);
+        console.log('isConnected:', isConnected);
+        console.log('chainId:', chainId);
+      }
       
       if (!switchChain) {
-        console.error('❌ switchChain function is not available');
+        if (process.env.VITE_LOG_MODE === 'debug') {
+          console.error('❌ switchChain function is not available');
+        }
         return;
       }
       
       try {
         // Try to switch to Sepolia (testnet) as a test
-        console.log('🔄 Testing switch to Sepolia...');
+        if (process.env.VITE_LOG_MODE === 'debug') {
+          console.log('🔄 Testing switch to Sepolia...');
+        }
         const result = await switchChain({ chainId: 11155111 }); // Sepolia
-        console.log('✅ Test switch result:', result);
+        if (process.env.VITE_LOG_MODE === 'debug') {
+          console.log('✅ Test switch result:', result);
+        }
       } catch (error) {
-        console.error('❌ Test switch failed:', error);
+        if (process.env.VITE_LOG_MODE === 'debug') {
+          console.error('❌ Test switch failed:', error);
+        }
       }
     };
     
@@ -814,7 +828,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   const currentFeeFormatted = currentFee ? formatEther(currentFee as bigint) : '0.00';
 
   // Essential logging only
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.VITE_LOG_MODE === 'debug') {
     console.log('Vault Hook State:', {
       isConnected,
       walletBalance: walletBalanceFormatted,
@@ -824,8 +838,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     });
   }
 
-  // Track when data loads/refetches (development only)
-  if (process.env.NODE_ENV === 'development') {
+  // Track when data loads/refetches (debug mode only)
+  if (process.env.VITE_LOG_MODE === 'debug') {
     React.useEffect(() => {
       if (walletBalance) {
         console.log('💰 Wallet balance loaded/updated:', formatEther(walletBalance.value));
@@ -857,7 +871,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     try {
       setIsLoadingWalletTokens(true);
-      console.log('🔍 Fetching wallet tokens for address:', address);
+      if (process.env.VITE_LOG_MODE === 'debug') {
+        console.log('🔍 Fetching wallet tokens for address:', address);
+      }
       
       const chainConfig = getCurrentChainConfig();
       
@@ -2598,8 +2614,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
     };
     
-    // Debug buttons available (development only)
-    if (process.env.NODE_ENV === 'development') {
+    // Debug buttons available (debug mode only)
+    if (process.env.VITE_LOG_MODE === 'debug') {
       console.log('🔧 DEBUG BUTTONS AVAILABLE:');
       console.log('  Button 1: window.debugTransactionStates.checkCurrentState()');
       console.log('  Button 2: window.debugTransactionStates.testChainIsolation()');
