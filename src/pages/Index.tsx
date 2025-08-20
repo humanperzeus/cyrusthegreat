@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { VaultCore } from "@/components/VaultCore";
 import { DepositModal } from "@/components/modals/DepositModal";
 import { WithdrawModal } from "@/components/modals/WithdrawModal";
@@ -7,8 +7,18 @@ import { useVault } from "@/hooks/useVault";
 import { parseEther } from "viem";
 
 const Index = () => {
-  // Chain switching state
-  const [activeChain, setActiveChain] = useState<'ETH' | 'BSC'>('ETH');
+  // Chain switching state with persistence
+  const [activeChain, setActiveChain] = useState<'ETH' | 'BSC' | 'BASE'>(() => {
+    // Try to restore from localStorage, fallback to ETH
+    const saved = localStorage.getItem('vaultwhisper-active-chain');
+    return (saved as 'ETH' | 'BSC' | 'BASE') || 'ETH';
+  });
+
+  // Save chain preference to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('vaultwhisper-active-chain', activeChain);
+    console.log(`💾 Chain preference saved to localStorage: ${activeChain}`);
+  }, [activeChain]);
   
   const { 
     walletBalance, 

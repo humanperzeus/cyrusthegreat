@@ -31,13 +31,13 @@ interface VaultCoreProps {
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
   // Chain switching props
-  activeChain: 'ETH' | 'BSC';
-  setActiveChain: (chain: 'ETH' | 'BSC') => void;
+  activeChain: 'ETH' | 'BSC' | 'BASE';
+  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE') => void;
 }
 
 // Add animated chain cycling state
 const useAnimatedChainDisplay = (isConnected: boolean) => {
-  const [currentDisplayChain, setCurrentDisplayChain] = useState<'ETH' | 'BSC'>('ETH');
+  const [currentDisplayChain, setCurrentDisplayChain] = useState<'ETH' | 'BSC' | 'BASE'>('ETH');
   const [currentMessage, setCurrentMessage] = useState(0);
   
   const vaultMessages = [
@@ -50,7 +50,11 @@ const useAnimatedChainDisplay = (isConnected: boolean) => {
     if (isConnected) return; // Stop animation when connected
     
     const interval = setInterval(() => {
-      setCurrentDisplayChain(prev => prev === 'ETH' ? 'BSC' : 'ETH');
+      setCurrentDisplayChain(prev => {
+        if (prev === 'ETH') return 'BSC';
+        if (prev === 'BSC') return 'BASE';
+        return 'ETH';
+      });
       setCurrentMessage(prev => (prev + 1) % vaultMessages.length);
     }, 3000);
     
@@ -82,7 +86,7 @@ export const VaultCore = ({
   onTokenTransfer,
   // Chain switching props
   activeChain,
-  setActiveChain
+  setActiveChain,
 }: VaultCoreProps) => {
   const { isConnected } = useAccount();
   
@@ -160,14 +164,20 @@ export const VaultCore = ({
   };
 
   // Handle chain switching
-  const handleChainSwitch = async (targetChain: 'ETH' | 'BSC') => {
+  const handleChainSwitch = async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
     if (targetChain === activeChain || isSwitchingChain) return;
     
     console.log(`🔄 Chain switch initiated: ${activeChain} → ${targetChain}`);
-    setIsSwitchingChain(true);
+    console.log(`🔧 Debug - isSwitchingChain:`, isSwitchingChain);
+    console.log(`🔧 Debug - setIsSwitchingChain:`, typeof setIsSwitchingChain);
     
     try {
+      setIsSwitchingChain(true);
+      console.log(`✅ setIsSwitchingChain(true) called successfully`);
+      
       const success = await switchToChain(targetChain);
+      console.log(`🔄 switchToChain result:`, success);
+      
       if (success) {
         console.log(`✅ MetaMask switched to ${targetChain} successfully`);
         setActiveChain(targetChain);
@@ -176,10 +186,13 @@ export const VaultCore = ({
         // Trigger chain-specific data fetching
         // Note: This will be handled by the useVault hook when activeChain changes
         console.log(`🔄 Triggering data refresh for ${targetChain}...`);
+      } else {
+        console.log(`❌ MetaMask switch to ${targetChain} failed`);
       }
     } catch (error) {
       console.error(`❌ Failed to switch to ${targetChain}:`, error);
     } finally {
+      console.log(`🔄 Setting isSwitchingChain to false...`);
       setIsSwitchingChain(false);
       console.log(`🔄 Chain switching completed for ${targetChain}`);
     }
@@ -936,8 +949,16 @@ export const VaultCore = ({
               >
                 {currentNetwork.networkMode === 'mainnet' ? 'BSC' : 'tBSC'}
               </div>
-              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Base (Coming Soon)">
-                BASE
+              <div 
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
+                  activeChain === 'BASE' 
+                    ? 'text-white bg-vault-primary border border-vault-primary' 
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
+                }`}
+                onClick={() => handleChainSwitch('BASE')}
+                title={`Base ${currentNetwork.networkMode === 'mainnet' ? 'Mainnet' : 'Testnet'} (Click to switch)`}
+              >
+                {currentNetwork.networkMode === 'mainnet' ? 'BASE' : 'tBASE'}
               </div>
               <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Solana (Coming Soon)">
                 SOL
@@ -962,7 +983,7 @@ export const VaultCore = ({
             {isSwitchingChain && (
               <div className="flex items-center space-x-2 text-xs text-vault-warning">
                 <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>Switching to {activeChain === 'ETH' ? 'Binance Chain' : 'Ethereum'}...</span>
+                <span>Switching to {activeChain === 'ETH' ? 'Binance Chain' : activeChain === 'BSC' ? 'Ethereum' : 'Base'}...</span>
               </div>
             )}
 
@@ -1058,7 +1079,7 @@ export const VaultCore = ({
                     }}
                   >
                     <Shield className="w-3 h-3 mr-1" />
-                    View Contract on {activeChain === 'ETH' ? 'Etherscan' : 'BscScan'}
+                    View Contract on {activeChain === 'ETH' ? 'Etherscan' : activeChain === 'BSC' ? 'BscScan' : 'BaseScan'}
                   </Button>
                 ) : (
                   // When disconnected, show both contract links
@@ -1086,6 +1107,18 @@ export const VaultCore = ({
                     >
                       <Shield className="w-3 h-3 mr-1" />
                       View BSC Contract
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground hover:text-foreground hover:bg-background/20"
+                      onClick={() => {
+                        const baseConfig = getChainConfig('BASE');
+                        window.open(`${baseConfig.etherscanUrl}/address/${baseConfig.contractAddress}`, '_blank');
+                      }}
+                    >
+                      <Shield className="w-3 h-3 mr-1" />
+                      View BASE Contract
                     </Button>
                   </div>
                 )}
@@ -1221,6 +1254,60 @@ export const VaultCore = ({
           💡 Switch modes: Use buttons above or <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+1</kbd> for Tabs, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+2</kbd> for Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+3</kbd> for Tabbed-Cards, <kbd className="px-1 py-0.5 bg-muted rounded text-xs">Ctrl+4</kbd> for Native/Tokens
         </div>
       )}
+
+                    {/* DEBUG PANEL - Transaction State Investigation (TESTNET ONLY) */}
+              {isConnected && currentNetwork.networkMode === 'testnet' && (
+                <div className="text-xs text-center p-4 bg-red-500/10 border border-red-500/30 rounded">
+                  <div className="font-bold text-red-500 mb-2">🔧 DEBUG PANEL - Transaction State Investigation (TESTNET)</div>
+                  <div className="grid grid-cols-6 gap-2">
+                    <button
+                      onClick={() => (window as any).debugTransactionStates?.checkCurrentState()}
+                      className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                      title="Check current transaction state"
+                    >
+                      🔍 State
+                    </button>
+                    <button
+                      onClick={() => (window as any).debugTransactionStates?.testChainIsolation()}
+                      className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                      title="Test chain state isolation"
+                    >
+                      🧪 Isolation
+                    </button>
+                    <button
+                      onClick={() => (window as any).debugTransactionStates?.forceResetStates()}
+                      className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                      title="Force reset all transaction states"
+                    >
+                      🚨 Reset
+                    </button>
+                    <button
+                      onClick={() => (window as any).debugTransactionStates?.simulateTransaction()}
+                      className="px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
+                      title="Simulate transaction on current chain"
+                    >
+                      🎭 Simulate
+                    </button>
+                    <button
+                      onClick={() => (window as any).debugTransactionStates?.deepInvestigation()}
+                      className="px-2 py-1 bg-orange-500 text-white text-white text-xs rounded hover:bg-orange-600"
+                      title="Deep state investigation"
+                    >
+                      🔬 Deep
+                    </button>
+                    <button
+                      onClick={() => (window as any).debugTransactionStates?.nuclearReset()}
+                      className="px-2 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600"
+                      title="Nuclear reset - clear everything"
+                    >
+                      ☢️ Nuclear
+                    </button>
+                  </div>
+                  <div className="text-red-500/70 mt-2">
+                    Debug panel only visible on testnet - Use these buttons to debug transaction state pollution issues
+                  </div>
+                </div>
+              )}
 
       {/* v1.0 Release Information */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">

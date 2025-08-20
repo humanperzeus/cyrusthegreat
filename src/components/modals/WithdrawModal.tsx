@@ -23,7 +23,7 @@ interface WithdrawModalProps {
   tokenAddress?: string;
   tokenBalance?: string;
   // Chain-aware props
-  activeChain?: 'ETH' | 'BSC';
+  activeChain?: 'ETH' | 'BSC' | 'BASE';
 }
 
 export function WithdrawModal({

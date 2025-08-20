@@ -8,7 +8,9 @@ import {
   connectMetaMaskToEthMainnet, 
   connectMetaMaskToEthTestnet,
   connectMetaMaskToBscMainnet, 
-  connectMetaMaskToBscTestnet 
+  connectMetaMaskToBscTestnet,
+  connectMetaMaskToBaseMainnet,
+  connectMetaMaskToBaseTestnet
 } from '../metamask.js';
 
 export const WEB3_CONFIG = {
@@ -26,6 +28,11 @@ export const WEB3_CONFIG = {
   CTGVAULT_BSC_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
     ? import.meta.env.VITE_CTGVAULT_BSC_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGVAULT_BSC_TESTNET_CONTRACT,
+  
+  // BASE Contract Addresses
+  CTGVAULT_BASE_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_CTGVAULT_BASE_MAINNET_CONTRACT
+    : import.meta.env.VITE_CTGVAULT_BASE_TESTNET_CONTRACT,
   
   // Ethereum RPC URLs
   ALCHEMY_ETH_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
@@ -45,6 +52,15 @@ export const WEB3_CONFIG = {
     ? import.meta.env.VITE_ANKR_BSC_MAINNET_RPC_URL
     : import.meta.env.VITE_ANKR_BSC_TESTNET_RPC_URL,
   
+  // BASE RPC URLs
+  ALCHEMY_BASE_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_ALCHEMY_BASE_MAINNET_RPC_URL
+    : import.meta.env.VITE_ALCHEMY_BASE_TESTNET_RPC_URL,
+    
+  ANKR_BASE_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_ANKR_BASE_MAINNET_RPC_URL
+    : import.meta.env.VITE_ANKR_BASE_TESTNET_RPC_URL,
+  
   // API Keys
   ANKR_API_KEY: import.meta.env.VITE_ANKR_API_KEY,
   ALCHEMY_API_KEY: import.meta.env.VITE_ALCHEMY_API_KEY,
@@ -54,6 +70,7 @@ export const WEB3_CONFIG = {
   // Etherscan URLs
   ETHERSCAN_ETH_URL: import.meta.env.VITE_ETHERSCAN_ETH_URL || 'https://etherscan.io',
   ETHERSCAN_BSC_URL: import.meta.env.VITE_ETHERSCAN_BSC_URL || 'https://bscscan.com',
+  ETHERSCAN_BASE_URL: import.meta.env.VITE_ETHERSCAN_BASE_URL || 'https://basescan.org',
 } as const;
 
 // Load vault ABI
@@ -66,56 +83,61 @@ export const getCurrentNetwork = () => {
     mode,
     isMainnet: mode === 'mainnet',
     isTestnet: mode === 'testnet',
-    // CRITICAL FIX: Remove hardcoded ETH chainId - this was causing the bug!
-    // chainId: mode === 'mainnet' ? 1 : 11155111, // ❌ OLD: Always returned ETH chain ID
-    // bscChainId: mode === 'mainnet' ? 56 : 97, // ❌ OLD: Unused and confusing
   };
 };
 
-// NEW: Helper function to get chain-specific network info
-export const getChainNetworkInfo = (chain: 'ETH' | 'BSC') => {
+// Helper function to get chain-specific network info
+export const getChainNetworkInfo = (chain: 'ETH' | 'BSC' | 'BASE') => {
   const mode = WEB3_CONFIG.NETWORK_MODE;
   return {
     mode,
     isMainnet: mode === 'mainnet',
     isTestnet: mode === 'testnet',
     chainId: chain === 'ETH' 
-      ? (mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
-      : (mode === 'mainnet' ? 56 : 97),      // BSC mainnet vs testnet
-    chainName: chain === 'ETH' ? 'Ethereum' : 'Binance Smart Chain',
-    networkName: chain === 'ETH' ? 'ethereum' : 'bsc',
+      ? (mode === 'mainnet' ? 1 : 11155111)      // ETH mainnet vs Sepolia
+      : chain === 'BSC'
+      ? (mode === 'mainnet' ? 56 : 97)           // BSC mainnet vs testnet
+      : (mode === 'mainnet' ? 8453 : 84532),     // BASE mainnet vs Sepolia
+    chainName: chain === 'ETH' ? 'Ethereum' : chain === 'BSC' ? 'Binance Smart Chain' : 'Base',
+    networkName: chain === 'ETH' ? 'ethereum' : chain === 'BSC' ? 'bsc' : 'base',
     nativeCurrency: {
-      name: chain === 'ETH' ? 'Ether' : 'BNB',
-      symbol: chain === 'ETH' ? 'ETH' : 'BNB',
+      name: chain === 'ETH' ? 'Ether' : chain === 'BSC' ? 'BNB' : 'Ether',
+      symbol: chain === 'ETH' ? 'ETH' : chain === 'BSC' ? 'BNB' : 'ETH',
       decimals: 18,
     },
   };
 };
 
 // Helper function to get contract address for specific chain
-export const getContractAddress = (chain: 'ETH' | 'BSC') => {
+export const getContractAddress = (chain: 'ETH' | 'BSC' | 'BASE') => {
   if (chain === 'ETH') {
     return WEB3_CONFIG.CTGVAULT_ETH_CONTRACT;
   }
   if (chain === 'BSC') {
     return WEB3_CONFIG.CTGVAULT_BSC_CONTRACT;
   }
+  if (chain === 'BASE') {
+    return WEB3_CONFIG.CTGVAULT_BASE_CONTRACT;
+  }
   throw new Error(`Unsupported chain: ${chain}`);
 };
 
 // Helper function to get RPC URL for specific chain
-export const getRpcUrl = (chain: 'ETH' | 'BSC', provider: 'ALCHEMY' | 'ANKR') => {
+export const getRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE', provider: 'ALCHEMY' | 'ANKR') => {
   if (chain === 'ETH') {
     return provider === 'ALCHEMY' ? WEB3_CONFIG.ALCHEMY_ETH_RPC_URL : WEB3_CONFIG.ANKR_ETH_RPC_URL;
   }
   if (chain === 'BSC') {
     return provider === 'ALCHEMY' ? WEB3_CONFIG.ALCHEMY_BSC_RPC_URL : WEB3_CONFIG.ANKR_BSC_RPC_URL;
   }
+  if (chain === 'BASE') {
+    return provider === 'ALCHEMY' ? WEB3_CONFIG.ALCHEMY_BASE_RPC_URL : WEB3_CONFIG.ANKR_BASE_RPC_URL;
+  }
   throw new Error(`Unsupported chain: ${chain}`);
 };
 
 // Helper function to get the best available RPC URL for a chain
-export const getBestRpcUrl = (chain: 'ETH' | 'BSC') => {
+export const getBestRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
   // Try Alchemy first, then Ankr as fallback
   try {
     const alchemyUrl = getRpcUrl(chain, 'ALCHEMY');
@@ -131,16 +153,12 @@ export const getBestRpcUrl = (chain: 'ETH' | 'BSC') => {
     console.log(`Ankr RPC not available for ${chain}`);
   }
   
-  // CRITICAL FIX: Remove deprecated Binance RPCs - only use Alchemy/Ankr
-  // If both Alchemy and Ankr fail, throw error instead of using deprecated URLs
   console.error(`❌ No valid RPC URL available for ${chain}`);
   throw new Error(`No valid RPC URL available for ${chain}. Please check your environment variables.`);
-  
-  throw new Error(`No RPC URL available for ${chain}`);
 };
 
 // Helper function to get Etherscan URL for specific chain
-export const getEtherscanUrl = (chain: 'ETH' | 'BSC') => {
+export const getEtherscanUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
   const networkMode = WEB3_CONFIG.NETWORK_MODE;
   
   if (chain === 'ETH') {
@@ -153,11 +171,16 @@ export const getEtherscanUrl = (chain: 'ETH' | 'BSC') => {
       ? 'https://bscscan.com'
       : 'https://testnet.bscscan.com';
   }
+  if (chain === 'BASE') {
+    return networkMode === 'mainnet'
+      ? 'https://basescan.org'
+      : 'https://sepolia.basescan.org';
+  }
   throw new Error(`Unsupported chain: ${chain}`);
 };
 
 // Chain Switcher Utility Functions
-export const switchToChain = async (targetChain: 'ETH' | 'BSC') => {
+export const switchToChain = async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
   const networkMode = WEB3_CONFIG.NETWORK_MODE;
   
   try {
@@ -172,6 +195,12 @@ export const switchToChain = async (targetChain: 'ETH' | 'BSC') => {
         await connectMetaMaskToBscMainnet();
       } else {
         await connectMetaMaskToBscTestnet();
+      }
+    } else if (targetChain === 'BASE') {
+      if (networkMode === 'mainnet') {
+        await connectMetaMaskToBaseMainnet();
+      } else {
+        await connectMetaMaskToBaseTestnet();
       }
     }
     
@@ -190,13 +219,14 @@ export const getActiveChainInfo = () => {
     networkMode,
     isMainnet: networkMode === 'mainnet',
     isTestnet: networkMode === 'testnet',
-    ethChainId: networkMode === 'mainnet' ? 1 : 11155111, // ETH mainnet vs Sepolia
-    bscChainId: networkMode === 'mainnet' ? 56 : 97, // BSC mainnet vs testnet
+    ethChainId: networkMode === 'mainnet' ? 1 : 11155111,      // ETH mainnet vs Sepolia
+    bscChainId: networkMode === 'mainnet' ? 56 : 97,           // BSC mainnet vs testnet
+    baseChainId: networkMode === 'mainnet' ? 8453 : 84532,     // BASE mainnet vs Sepolia
   };
 };
 
 // Get comprehensive chain configuration for a specific chain
-export const getChainConfig = (chain: 'ETH' | 'BSC') => {
+export const getChainConfig = (chain: 'ETH' | 'BSC' | 'BASE') => {
   const networkMode = WEB3_CONFIG.NETWORK_MODE;
   
   if (chain === 'ETH') {
@@ -230,6 +260,24 @@ export const getChainConfig = (chain: 'ETH' | 'BSC') => {
       nativeCurrency: {
         name: networkMode === 'mainnet' ? 'BNB' : 'tBNB',
         symbol: networkMode === 'mainnet' ? 'BNB' : 'tBNB',
+        decimals: 18
+      }
+    };
+  }
+  
+  if (chain === 'BASE') {
+    return {
+      chain,
+      networkMode,
+      isMainnet: networkMode === 'mainnet',
+      isTestnet: networkMode === 'testnet',
+      chainId: networkMode === 'mainnet' ? 8453 : 84532,
+      contractAddress: getContractAddress('BASE'),
+      rpcUrl: getBestRpcUrl('BASE'),
+      etherscanUrl: getEtherscanUrl('BASE'),
+      nativeCurrency: {
+        name: networkMode === 'mainnet' ? 'Ether' : 'Sepolia ETH',
+        symbol: 'ETH',
         decimals: 18
       }
     };

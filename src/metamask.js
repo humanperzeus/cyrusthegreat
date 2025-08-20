@@ -1,5 +1,7 @@
 
 export async function connectMetaMaskToEthMainnet() {
+  console.log('🔧 connectMetaMaskToEthMainnet called');
+  
   if (typeof window.ethereum === 'undefined') {
     console.error('MetaMask is not installed or not detected.');
     return;
@@ -46,6 +48,8 @@ export async function connectMetaMaskToEthMainnet() {
   }
 }
 export async function connectMetaMaskToEthTestnet() {
+    console.log('🔧 connectMetaMaskToEthTestnet called');
+    
     if (typeof window.ethereum === 'undefined') {
       console.error('MetaMask is not installed or not detected.');
       return;
@@ -92,6 +96,8 @@ export async function connectMetaMaskToEthTestnet() {
     }
 }
 export async function connectMetaMaskToBscMainnet() {
+    console.log('🔧 connectMetaMaskToBscMainnet called');
+    
     if (typeof window.ethereum === 'undefined') {
       console.error('MetaMask is not installed or not detected.');
       return;
@@ -138,50 +144,151 @@ export async function connectMetaMaskToBscMainnet() {
     }
 }
 export async function connectMetaMaskToBscTestnet() {
-    if (typeof window.ethereum === 'undefined') {
-      console.error('MetaMask is not installed or not detected.');
-      return;
-    }
+  console.log('🔧 connectMetaMaskToBscTestnet called');
   
-    try {
-      // Step 1: Request account access to activate/connect MetaMask
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      console.log('Connected accounts:', accounts);
-  
-      // Step 2: Try to switch to BSC Testnet (Chain ID 97, or 0x61 in hex)
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x61' }],
-      });
-      console.log('Successfully switched to BSC Testnet.');
-    } catch (error) {
-      // If chain not added (error code 4902), add it
-      if (error.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: '0x61', // Hex for 97
-                chainName: 'BNB Smart Chain Testnet',
-                nativeCurrency: {
-                  name: 'tBNB',
-                  symbol: 'tBNB',
-                  decimals: 18,
-                },
-                rpcUrls: ['https://data-seed-prebsc-1-s1.bnbchain.org:8545'], // Official RPC<grok-card data-id="b90c93" data-type="citation_card"></grok-card>
-                blockExplorerUrls: ['https://testnet.bscscan.com'],
+  if (typeof window.ethereum === 'undefined') {
+    console.error('MetaMask is not installed or not detected.');
+    return;
+  }
+
+  try {
+    // Step 1: Request account access to activate/connect MetaMask
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    console.log('Connected accounts:', accounts);
+
+    // Step 2: Try to switch to BSC Testnet
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x61' }],
+    });
+    console.log('Successfully switched to BSC Testnet.');
+  } catch (error) {
+    // If chain not added (error code 4902), add it
+    if (error.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [
+            {
+              chainId: '0x61',
+              chainName: 'BSC Testnet',
+              nativeCurrency: {
+                name: 'tBNB',
+                symbol: 'tBNB',
+                decimals: 18,
               },
-            ],
-          });
-          console.log('BSC Testnet added and switched.');
-        } catch (addError) {
-          console.error('Failed to add BSC Testnet:', addError);
-        }
-      } else {
-        console.error('Failed to switch to BSC Testnet:', error);
+              rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545'],
+              blockExplorerUrls: ['https://testnet.bscscan.com'],
+            },
+          ],
+        });
+        console.log('BSC Testnet added and switched.');
+      } catch (addError) {
+        console.error('Failed to add BSC Testnet:', addError);
       }
+    } else {
+      console.error('Failed to switch to BSC Testnet:', error);
     }
+  }
+}
+
+// BASE Chain MetaMask Functions
+export async function connectMetaMaskToBaseMainnet() {
+  console.log('🔧 connectMetaMaskToBaseMainnet called');
+  
+  if (typeof window.ethereum === 'undefined') {
+    console.error('MetaMask is not installed or not detected.');
+    return;
+  }
+
+  try {
+    // Step 1: Request account access to activate/connect MetaMask
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    console.log('Connected accounts:', accounts);
+
+    // Step 2: Try to switch to BASE Mainnet
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x2105' }], // 8453 (BASE Mainnet)
+    });
+    console.log('Successfully switched to BASE Mainnet.');
+  } catch (error) {
+    // If chain not added (error code 4902), add it
+    if (error.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [
+            {
+              chainId: '0x2105',
+              chainName: 'Base',
+              nativeCurrency: {
+                name: 'Ether',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+              rpcUrls: ['https://mainnet.base.org'],
+              blockExplorerUrls: ['https://basescan.org'],
+            },
+          ],
+        });
+        console.log('BASE Mainnet added and switched.');
+      } catch (addError) {
+        console.error('Failed to add BASE Mainnet:', addError);
+      }
+    } else {
+      console.error('Failed to switch to BASE Mainnet:', error);
+    }
+  }
+}
+
+export async function connectMetaMaskToBaseTestnet() {
+  console.log('🔧 connectMetaMaskToBaseTestnet called');
+  
+  if (typeof window.ethereum === 'undefined') {
+    console.error('MetaMask is not installed or not detected.');
+    return;
+  }
+
+  try {
+    // Step 1: Request account access to activate/connect MetaMask
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    console.log('Connected accounts:', accounts);
+
+    // Step 2: Try to switch to BASE Sepolia Testnet
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x14a34' }], // 84532 (BASE Sepolia)
+    });
+    console.log('Successfully switched to BASE Sepolia Testnet.');
+  } catch (error) {
+    // If chain not added (error code 4902), add it
+    if (error.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [
+            {
+              chainId: '0x14a34',
+              chainName: 'Base Sepolia',
+              nativeCurrency: {
+                name: 'Sepolia Ether',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+              rpcUrls: ['https://sepolia.base.org'],
+              blockExplorerUrls: ['https://sepolia.basescan.org'],
+            },
+          ],
+        });
+        console.log('BASE Sepolia Testnet added and switched.');
+      } catch (addError) {
+        console.error('Failed to add BASE Sepolia Testnet:', addError);
+      }
+    } else {
+      console.error('Failed to switch to BASE Sepolia Testnet:', error);
+    }
+  }
 }
 // connectMetaMaskToEthMainnet();
 // connectMetaMaskToEthSepolia();

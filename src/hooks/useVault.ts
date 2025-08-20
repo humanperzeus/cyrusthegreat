@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
-import { sepolia, mainnet, bsc, bscTestnet } from 'wagmi/chains';
+import { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia } from 'wagmi/chains';
 import { formatEther, parseEther, parseUnits } from 'viem';
 import { getContract } from 'viem';
 import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl, getChainNetworkInfo } from '@/config/web3';
@@ -15,44 +15,59 @@ declare global {
   }
 }
 
-export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
+export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { toast } = useToast();
   const { switchChain } = useSwitchChain();
-  
+
   // Get current network configuration
   const currentNetwork = getCurrentNetwork();
-  
+
   // State for network switching
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   
   // Chain switching state
   const [isSwitchingChain, setIsSwitchingChain] = useState(false);
-  
+
   // Clear vault tokens when switching chains to prevent stale data
   const clearVaultTokens = useCallback(() => {
     console.log('🧹 Clearing vault tokens due to chain switch');
     setVaultTokens([]);
   }, []);
-  
-  // Clear vault tokens whenever activeChain changes
+
+  // Clear vault tokens and transaction states whenever activeChain changes
   useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
     console.log(`🔄 Active chain changed to: ${activeChain}`);
+    }
+    
     // Force clear vault tokens immediately
     setVaultTokens([]);
+    if (process.env.NODE_ENV === 'development') {
     console.log(`🧹 Vault tokens cleared for chain switch to ${activeChain}`);
+    }
+    
+    // CRITICAL FIX: Clear transaction states to prevent stuck modals
+    // Note: This is now handled by chain-specific state management below
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🧹 Transaction states will be cleared for chain switch to ${activeChain}`);
+    }
   }, [activeChain]);
-  
+
   // Additional safety: clear vault tokens when chainId changes
   useEffect(() => {
     if (chainId && activeChain) {
       const expectedChainId = activeChain === 'ETH' 
         ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)
-        : (currentNetwork.mode === 'mainnet' ? 56 : 97);
+        : activeChain === 'BSC'
+        ? (currentNetwork.mode === 'mainnet' ? 56 : 97)
+        : (currentNetwork.mode === 'mainnet' ? 8453 : 84532);
       
       if (chainId !== expectedChainId) {
-        console.log(`🔄 Chain ID changed from ${expectedChainId} to ${chainId}, clearing vault tokens`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔄 Chain ID changed from ${expectedChainId} to ${chainId}, clearing vault tokens`);
+        }
         setVaultTokens([]);
       }
     }
@@ -81,19 +96,23 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     
     // Set new timeout for 500ms delay
     const timeout = setTimeout(() => {
-      console.log(`⏰ Debounced vault token fetch triggered for ${currentChain}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⏰ Debounced vault token fetch triggered for ${currentChain}`);
+      }
       
       // Only fetch if we're still on the same chain
       if (activeChain === currentChain) {
         fetchVaultTokensSigned();
       } else {
+        if (process.env.NODE_ENV === 'development') {
         console.log(`⚠️ Chain changed during debounce from ${currentChain} to ${activeChain}, aborting fetch`);
+        }
       }
     }, 500);
     
     setVaultTokenFetchTimeout(timeout);
   }, [vaultTokenFetchTimeout, activeChain]);
-  
+
   // Get contract address based on active chain
   const getActiveContractAddress = () => {
     return getContractAddress(activeChain);
@@ -122,6 +141,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         return bsc; // BSC mainnet
       } else {
         return bscTestnet; // BSC testnet
+      }
+    } else if (activeChain === 'BASE') {
+      if (currentNetwork.mode === 'mainnet') {
+        return base; // Base mainnet
+      } else {
+        return baseSepolia; // Base testnet (Base Sepolia)
       }
     }
     
@@ -256,24 +281,42 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     }
   }, [isConnected, address, chainId, currentNetwork.mode]);
   
+  // Track if we've already shown the network notification on initial load
+  const [hasShownInitialNetworkCheck, setHasShownInitialNetworkCheck] = useState(false);
+
   // Auto-switch network when component mounts or network mode changes
   React.useEffect(() => {
-    // Force network switch immediately when wallet connects
-    if (isConnected && !isSwitchingNetwork) {
-      console.log('🚀 Wallet connected, checking network...');
-      console.log('Current chainId:', chainId);
-      console.log('Target chainId:', getTargetChain().id);
-      console.log('Network mode:', currentNetwork.mode);
+    // Check network only when wallet connects (not on every chainId change)
+    if (isConnected && !isSwitchingNetwork && !hasShownInitialNetworkCheck) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚀 Wallet connected, checking network...');
+        console.log('Current chainId:', chainId);
+        console.log('Target chainId:', getTargetChain().id);
+        console.log('Network mode:', currentNetwork.mode);
+      }
       
-      // Always try to switch if not on correct network
+      // Mark that we've done the initial check
+      setHasShownInitialNetworkCheck(true);
+      
+      // Only show notification if not on correct network, but don't force switch
       if (chainId !== getTargetChain().id) {
-        console.log('🔄 Chain mismatch detected, forcing switch...');
-        autoSwitchNetwork();
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔄 Chain mismatch detected, showing notification...');
+        }
+        
+        // Show friendly notification instead of forcing switch
+        toast({
+          title: "Network Info",
+          description: `App optimized for ${getTargetChain().name}. You can switch manually if needed.`,
+          variant: "default",
+        });
       } else {
-        console.log('✅ Already on correct network');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Already on correct network');
+        }
       }
     }
-  }, [isConnected, chainId]); // Depend on both isConnected and chainId
+  }, [isConnected, hasShownInitialNetworkCheck]); // Only depend on isConnected and our flag
   
   // Debug logging for network switching
   React.useEffect(() => {
@@ -415,19 +458,19 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     console.log('🔍 Vault Balance Fetching Debug:', {
       address,
       contractAddress: getActiveContractAddress(),
-      args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined,
+    args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined,
       vaultBalanceData,
       vaultBalanceDataType: typeof vaultBalanceData,
       vaultBalanceDataValue: vaultBalanceData?.toString(),
       isEnabled: !!address
-    });
+  });
   }, [address, vaultBalanceData]);
 
   // Get current fee from contract
   const { data: currentFee, refetch: refetchFee } = useReadContract({
-          address: getActiveContractAddress() as `0x${string}`,
-      abi: VAULT_ABI,
-      functionName: 'getCurrentFeeInWei',
+    address: getActiveContractAddress() as `0x${string}`,
+    abi: VAULT_ABI,
+    functionName: 'getCurrentFeeInWei',
     query: {
       enabled: !!address,
       // Only refetch when user returns to tab (no constant polling)
@@ -526,8 +569,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
             decimals: 18
           };
           processedTokens.push(fallbackToken);
-        }
-      } catch (error) {
+      }
+    } catch (error) {
         console.error(`❌ Error processing token ${tokenAddr}:`, error);
         // Error fallback
         const errorToken = {
@@ -618,7 +661,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         console.log('🔍 Raw vault tokens result:', { tokenAddresses, tokenBalances });
         
         // Process tokens with real metadata using the new function
-                await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
+        await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
         return; // Exit early since we processed the result
       } else {
         console.log(`ℹ️ Invalid result format for ${currentChain}:`, result);
@@ -629,7 +672,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       console.error('❌ Error fetching vault tokens with signed call:', error);
     } finally {
   // CRITICAL FIX: Always reset loading state to show refresh animation completion
-  setIsLoadingVaultTokens(false);
+      setIsLoadingVaultTokens(false);
     }
   };
 
@@ -641,9 +684,115 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     hash,
   });
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [hasRefreshedAfterConfirmation, setHasRefreshedAfterConfirmation] = useState(false);
+  // CRITICAL FIX: Chain-specific transaction states to prevent cross-chain state pollution
+  type ChainStates = {
+    isLoading: boolean;
+    isSimulating: boolean;
+    hasRefreshedAfterConfirmation: boolean;
+    lastTransactionHash: string | null;
+  };
+  
+  const defaultChainState: ChainStates = {
+    isLoading: false,
+    isSimulating: false,
+    hasRefreshedAfterConfirmation: false,
+    lastTransactionHash: null
+  };
+  
+  const [chainTransactionStates, setChainTransactionStates] = useState<Record<string, ChainStates>>({
+    ETH: { ...defaultChainState },
+    BSC: { ...defaultChainState },
+    BASE: { ...defaultChainState }
+  });
+
+  // Get current chain transaction state
+  const isLoading = chainTransactionStates[activeChain].isLoading;
+  const isSimulating = chainTransactionStates[activeChain].isSimulating;
+  const hasRefreshedAfterConfirmation = chainTransactionStates[activeChain].hasRefreshedAfterConfirmation;
+  const lastTransactionHash = chainTransactionStates[activeChain].lastTransactionHash;
+
+  // CRITICAL: Only use Wagmi states if they belong to the current chain's transaction
+  const isCurrentChainTransaction = hash === lastTransactionHash;
+  const isWritePendingForCurrentChain = isWritePending && isCurrentChainTransaction;
+  const isConfirmingForCurrentChain = isConfirming && isCurrentChainTransaction;
+
+  // Update functions for specific chain
+  const setIsLoading = useCallback((loading: boolean) => {
+    setChainTransactionStates(prev => ({
+      ...prev,
+      [activeChain]: { ...prev[activeChain], isLoading: loading }
+    }));
+  }, [activeChain]);
+
+  const setIsSimulating = useCallback((simulating: boolean) => {
+    setChainTransactionStates(prev => ({
+      ...prev,
+      [activeChain]: { ...prev[activeChain], isSimulating: simulating }
+    }));
+  }, [activeChain]);
+
+  const setHasRefreshedAfterConfirmation = useCallback((refreshed: boolean) => {
+    setChainTransactionStates(prev => ({
+      ...prev,
+      [activeChain]: { ...prev[activeChain], hasRefreshedAfterConfirmation: refreshed }
+    }));
+  }, [activeChain]);
+
+  // Track transaction hash for current chain
+  const setLastTransactionHash = useCallback((transactionHash: string | null) => {
+    setChainTransactionStates(prev => ({
+      ...prev,
+      [activeChain]: { ...prev[activeChain], lastTransactionHash: transactionHash }
+    }));
+  }, [activeChain]);
+
+            // Track transaction hash when it changes to associate with current chain
+            useEffect(() => {
+              if (hash && hash !== lastTransactionHash) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log(`🔗 New transaction hash for ${activeChain}: ${hash}`);
+                }
+                setLastTransactionHash(hash);
+              }
+            }, [hash, lastTransactionHash, activeChain, setLastTransactionHash]);
+
+            // CRITICAL FIX: Clear transaction hash when switching chains
+            useEffect(() => {
+              // Clear the transaction hash when the active chain changes
+              // This prevents stale transaction states from polluting other chains
+              if (lastTransactionHash) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log(`🧹 Clearing transaction hash ${lastTransactionHash} for chain switch to ${activeChain}`);
+                }
+                setLastTransactionHash(null);
+              }
+            }, [activeChain]); // Only depend on activeChain change
+
+            // AGGRESSIVE FIX: Force clear ALL transaction states on chain switch
+            useEffect(() => {
+              // This effect runs whenever activeChain changes
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`🔄 AGGRESSIVE CLEANUP: Chain switched to ${activeChain}`);
+              }
+              
+              // Force clear ALL chain transaction states
+              setChainTransactionStates(prev => {
+                const newStates = { ...prev };
+                Object.keys(newStates).forEach(chain => {
+                  newStates[chain] = {
+                    isLoading: false,
+                    isSimulating: false,
+                    hasRefreshedAfterConfirmation: false,
+                    lastTransactionHash: null
+                  };
+                });
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🧹 AGGRESSIVE CLEANUP: All chain transaction states reset');
+                }
+                return newStates;
+              });
+              
+            }, [activeChain]); // This will run on EVERY chain switch
   
   // State for tracking pending approvals that should trigger auto-deposit
   const [pendingApprovalForDeposit, setPendingApprovalForDeposit] = useState<{
@@ -664,34 +813,37 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
   const vaultBalanceFormatted = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.00';
   const currentFeeFormatted = currentFee ? formatEther(currentFee as bigint) : '0.00';
 
-  // Debug logging
-  console.log('Vault Hook State:', {
-    isConnected,
-    walletBalance: walletBalanceFormatted,
-    vaultBalance: vaultBalanceFormatted,
-    currentFee: currentFeeFormatted,
-    currentFeeRaw: currentFee,
-    address
-  });
+  // Essential logging only
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Vault Hook State:', {
+      isConnected,
+      walletBalance: walletBalanceFormatted,
+      vaultBalance: vaultBalanceFormatted,
+      currentFee: currentFeeFormatted,
+      address
+    });
+  }
 
-  // Track when data loads/refetches
-  React.useEffect(() => {
-    if (walletBalance) {
-      console.log('💰 Wallet balance loaded/updated:', formatEther(walletBalance.value));
-    }
-  }, [walletBalance]);
+  // Track when data loads/refetches (development only)
+  if (process.env.NODE_ENV === 'development') {
+    React.useEffect(() => {
+      if (walletBalance) {
+        console.log('💰 Wallet balance loaded/updated:', formatEther(walletBalance.value));
+      }
+    }, [walletBalance]);
 
-  React.useEffect(() => {
-    if (vaultBalanceData) {
-      console.log('📊 Vault balance loaded/updated:', formatEther(vaultBalanceData as bigint));
-    }
-  }, [vaultBalanceData]);
+    React.useEffect(() => {
+      if (vaultBalanceData) {
+        console.log('📊 Vault balance loaded/updated:', formatEther(vaultBalanceData as bigint));
+      }
+    }, [vaultBalanceData]);
 
-  React.useEffect(() => {
-    if (currentFee) {
-      console.log('💸 Current fee loaded/updated:', formatEther(currentFee as bigint));
-    }
-  }, [currentFee]);
+    React.useEffect(() => {
+      if (currentFee) {
+        console.log('💸 Current fee loaded/updated:', formatEther(currentFee as bigint));
+      }
+    }, [currentFee]);
+  }
 
   // Helper function to get the correct Alchemy URL based on network mode
   const getAlchemyUrl = () => {
@@ -755,6 +907,42 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
 
         
         // Use Alchemy API to get token balances (same method as ETH)
+        const response = await fetch(alchemyUrl, {
+        method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'alchemy_getTokenBalances',
+          params: [address, 'erc20']
+        })
+      });
+
+        console.log('📡 HTTP Response status:', response.status);
+        console.log('📡 HTTP Response headers:', response.headers);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.error) {
+        }
+
+        if (data.result && data.result.tokenBalances) {
+          console.log('✅ Token balances found:', data.result.tokenBalances);
+          await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
+        }
+      } else if (activeChain === 'BASE') {
+        // Use Alchemy API for BASE chains (same as ETH/BSC, just different RPC)
+        const alchemyUrl = getActiveRpcUrl();
+
+        // Use Alchemy API to get token balances (same method as ETH/BSC)
         const response = await fetch(alchemyUrl, {
           method: 'POST',
           headers: {
@@ -1970,6 +2158,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     }
   };
 
+  // Helper function to get chain-specific delay for blockchain finality
+  // All chains benefit from delays to ensure proper state propagation
+  const getChainFinalityDelay = useCallback(() => {
+    switch (activeChain) {
+      case 'ETH':
+        return 12000; // 12 seconds delay for ETH (proper state propagation)
+      case 'BSC':
+        return 8000;  // 8 seconds delay for BSC (proper state propagation)
+      case 'BASE':
+        return 2000;  // 2 seconds delay for BASE (fast finality causes race conditions)
+      default:
+        return 5000;  // 5 seconds default delay for unknown chains
+    }
+  }, [activeChain]);
+
   // Handle transaction state changes
   React.useEffect(() => {
     if (isConfirmed && !hasRefreshedAfterConfirmation) {
@@ -1986,7 +2189,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       
       // Check if this was an approval transaction that should trigger auto-deposit
       if (pendingApprovalForDeposit) {
-        console.log('🔐 Approval confirmed, automatically proceeding to deposit...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔐 Approval confirmed, automatically proceeding to deposit...');
+        }
         
         // Auto-execute the deposit
         executeTokenDeposit(
@@ -2004,43 +2209,89 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
         });
       }
       
-      // Smart refetch ONLY after transaction confirmation
-      // This updates balances without constant API polling
-      console.log('📊 Refetching vault balance...');
+      // CRITICAL FIX: Add chain-specific delay for blockchain finality
+      // All chains benefit from delays to ensure proper state propagation
+      const finalityDelay = getChainFinalityDelay();
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⏰ Waiting ${finalityDelay}ms for ${activeChain} chain finality before refreshing data...`);
+      }
+      
+      // Show user-friendly notification with delay time
+      toast({
+        title: "Transaction Confirmed!",
+        description: `Waiting ${finalityDelay/1000} seconds for ${activeChain} chain finality, then updating balances...`,
+        variant: "default",
+      });
+      
+      // Delay the refresh to allow blockchain state to settle (or refresh immediately if no delay)
+      const executeRefresh = () => {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ ${activeChain} chain finality delay completed (${finalityDelay}ms), now refreshing data...`);
+        }
+        
+        // Smart refetch ONLY after transaction confirmation and finality delay
+        // This updates balances without constant API polling
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📊 Refetching vault balance...');
+      }
       refetchVaultBalance();
-      
-      console.log('💰 Refetching wallet balance...');
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('💰 Refetching wallet balance...');
+        }
       refetchWalletBalance();
-      
-      console.log('💸 Refetching current fee...');
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('💸 Refetching current fee...');
+        }
       refetchFee();
-      
-      // NEW: Refresh token balances after transaction confirmation
-      console.log('🪙 Refreshing token balances after confirmation...');
-      console.log('🪙 Calling fetchWalletTokens...');
+        
+        // NEW: Refresh token balances after transaction confirmation and finality delay
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🪙 Refreshing token balances after confirmation...');
+          console.log('🪙 Calling fetchWalletTokens...');
+        }
       fetchWalletTokens();
-      console.log('🪙 Calling fetchVaultTokensSigned...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🪙 Calling fetchVaultTokensSigned...');
+        }
       fetchVaultTokensSigned();
-      console.log('🪙 Token refresh calls completed');
-      
-      console.log('✅ Smart refetch completed!');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🪙 Token refresh calls completed');
+        }
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Smart refetch completed for ${activeChain} chain!`);
+        }
+      };
+
+      if (finalityDelay > 0) {
+        setTimeout(executeRefresh, finalityDelay);
+      } else {
+        executeRefresh();
+      }
     }
-  }, [isConfirmed, hasRefreshedAfterConfirmation, toast, refetchVaultBalance, refetchWalletBalance, refetchFee, fetchWalletTokens, fetchVaultTokensSigned, pendingApprovalForDeposit, hash]);
+  }, [isConfirmed, hasRefreshedAfterConfirmation, toast, refetchVaultBalance, refetchWalletBalance, refetchFee, fetchWalletTokens, fetchVaultTokensSigned, pendingApprovalForDeposit, hash, activeChain, getChainFinalityDelay]);
 
   // FIX: Reset loading state when transaction is cancelled or fails
   React.useEffect(() => {
-    if (!isWritePending && isLoading) {
-      
+    if (!isWritePendingForCurrentChain && isLoading) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔄 Transaction cancelled or failed, resetting loading state');
+      }
       setIsLoading(false);
     }
-  }, [isWritePending, isLoading]);
+  }, [isWritePendingForCurrentChain, isLoading, setIsLoading]);
 
   // Reset refresh flag when new transaction starts
   React.useEffect(() => {
-    if (isWritePending) {
+    if (isWritePendingForCurrentChain) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔄 New transaction started for ${activeChain}, resetting refresh flag`);
+      }
       setHasRefreshedAfterConfirmation(false);
     }
-  }, [isWritePending]);
+  }, [isWritePendingForCurrentChain, activeChain, setHasRefreshedAfterConfirmation]);
 
   // Auto-fetch chain-specific data when activeChain changes
   React.useEffect(() => {
@@ -2050,14 +2301,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       // Force refresh all Wagmi hooks by updating their dependencies
       const chainConfig = getCurrentChainConfig();
       
-      
       // This will trigger re-fetching of all chain-specific data
       fetchChainSpecificData();
     }
   }, [activeChain, isConnected, address]);
 
-  // Combined loading state
-  const isTransactionLoading = isLoading || isWritePending || isConfirming;
+  // Combined loading state - ONLY for current chain's transactions
+  const isTransactionLoading = isLoading || isWritePendingForCurrentChain || isConfirmingForCurrentChain;
 
   // Check if we're on the correct network
   const isOnCorrectNetwork = chainId === getTargetChain().id;
@@ -2067,13 +2317,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     console.log(`🔄 Fetching chain-specific data for ${activeChain}`);
     
     // Use debounced fetch for vault tokens to prevent race conditions
-    debouncedFetchVaultTokens();
+      debouncedFetchVaultTokens();
     
     // Other data can be fetched immediately
-    refetchWalletBalance();
-    refetchVaultBalance();
-    refetchFee();
-    fetchWalletTokens();
+      refetchWalletBalance();
+      refetchVaultBalance();
+      refetchFee();
+      fetchWalletTokens();
   }, [activeChain, debouncedFetchVaultTokens, refetchWalletBalance, refetchVaultBalance, refetchFee, fetchWalletTokens]);
   
   // Function to force network switch with user notification
@@ -2094,7 +2344,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     // Try to switch automatically
     await autoSwitchNetwork();
   };
-  
+
   // Block interactions if not on correct network
   const requireCorrectNetwork = () => {
     if (!isOnCorrectNetwork) {
@@ -2117,15 +2367,15 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       getCurrentState: () => {
         const chainConfig = getCurrentChainConfig();
         return {
-          activeChain,
-          chainConfig,
-          currentNetwork: getCurrentNetwork(),
-          address,
-          isConnected,
-          chainId,
-          walletBalance: walletBalance?.value?.toString(),
-          vaultBalance: vaultBalanceData?.toString(),
-          currentFee: currentFee?.toString()
+        activeChain,
+        chainConfig,
+        currentNetwork: getCurrentNetwork(),
+        address,
+        isConnected,
+        chainId,
+        walletBalance: walletBalance?.value?.toString(),
+        vaultBalance: vaultBalanceData?.toString(),
+        currentFee: currentFee?.toString()
         };
       },
       
@@ -2183,6 +2433,184 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     
   }, [activeChain, address, isConnected, chainId, walletBalance, vaultBalanceData, currentFee, refetchWalletBalance, refetchVaultBalance, fetchWalletTokens, refetchVaultTokens, fetchChainSpecificData, getCurrentChainConfig, getActiveRpcUrl, getActiveContractAddress]);
 
+  // COMPREHENSIVE DEBUGGING SYSTEM FOR TRANSACTION STATE POLLUTION
+  React.useEffect(() => {
+    // Add comprehensive debug functions to window for console access
+    (window as any).debugTransactionStates = {
+      // BUTTON 1: Check Current Transaction State
+      checkCurrentState: () => {
+        console.log('🔍 BUTTON 1: CURRENT TRANSACTION STATE ANALYSIS');
+        console.log('================================================');
+        console.log('📍 Active Chain:', activeChain);
+        console.log('📍 Chain ID:', chainId);
+        console.log('📍 Wallet Connected:', isConnected);
+        console.log('📍 Wallet Address:', address);
+        console.log('');
+        console.log('📊 CHAIN-SPECIFIC STATES:');
+        console.log('  isLoading:', isLoading);
+        console.log('  isSimulating:', isSimulating);
+        console.log('  hasRefreshedAfterConfirmation:', hasRefreshedAfterConfirmation);
+        console.log('  lastTransactionHash:', lastTransactionHash);
+        console.log('');
+        console.log('🌐 WAGMI GLOBAL STATES:');
+        console.log('  isWritePending:', isWritePending);
+        console.log('  isConfirming:', isConfirming);
+        console.log('  isConfirmed:', isConfirmed);
+        console.log('  currentHash:', hash);
+        console.log('');
+        console.log('🔗 TRANSACTION ASSOCIATION:');
+        console.log('  isCurrentChainTransaction:', isCurrentChainTransaction);
+        console.log('  isWritePendingForCurrentChain:', isWritePendingForCurrentChain);
+        console.log('  isConfirmingForCurrentChain:', isConfirmingForCurrentChain);
+        console.log('');
+        console.log('⚡ COMBINED LOADING STATE:');
+        console.log('  isTransactionLoading:', isTransactionLoading);
+        console.log('  Final isLoading for UI:', isTransactionLoading);
+      },
+
+      // BUTTON 2: Test Chain Switching State Isolation
+      testChainIsolation: () => {
+        console.log('🧪 BUTTON 2: TESTING CHAIN STATE ISOLATION');
+        console.log('============================================');
+        console.log('🔄 Simulating chain switch...');
+        
+        // Show current state before "switch"
+        console.log('📊 BEFORE "SWITCH":');
+        console.log('  ETH States:', chainTransactionStates.ETH);
+        console.log('  BSC States:', chainTransactionStates.BSC);
+        console.log('  BASE States:', chainTransactionStates.BASE);
+        console.log('');
+        
+        // Show what would happen if we switched
+        const otherChains = ['ETH', 'BSC', 'BASE'].filter(c => c !== activeChain);
+        otherChains.forEach(chain => {
+          console.log(`🔍 If we switched to ${chain}:`);
+          console.log(`  isLoading: ${chainTransactionStates[chain].isLoading}`);
+          console.log(`  isSimulating: ${chainTransactionStates[chain].isSimulating}`);
+          console.log(`  hasRefreshedAfterConfirmation: ${chainTransactionStates[chain].hasRefreshedAfterConfirmation}`);
+          console.log(`  lastTransactionHash: ${chainTransactionStates[chain].lastTransactionHash}`);
+          console.log('');
+        });
+        
+        console.log('✅ Chain isolation test completed!');
+      },
+
+      // BUTTON 3: Force Reset All Transaction States
+      forceResetStates: () => {
+        console.log('🚨 BUTTON 3: FORCE RESETTING ALL TRANSACTION STATES');
+        console.log('==================================================');
+        
+        // Reset all chain states
+        setChainTransactionStates({
+          ETH: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
+          BSC: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
+          BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null }
+        });
+        
+        console.log('🧹 All chain transaction states reset to false');
+        console.log('🔄 This should clear any stuck modal states');
+        console.log('✅ Force reset completed!');
+      },
+
+      // NEW BUTTON 6: Nuclear Reset - Clear Everything
+      nuclearReset: () => {
+        console.log('☢️ BUTTON 6: NUCLEAR RESET - CLEARING EVERYTHING');
+        console.log('==================================================');
+        
+        // Reset all chain states
+        setChainTransactionStates({
+          ETH: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
+          BSC: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
+          BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null }
+        });
+        
+        // Force clear any remaining Wagmi states by triggering a re-render
+        console.log('🧹 All chain transaction states reset');
+        console.log('🔄 Forcing component re-render...');
+        
+        // This will trigger the aggressive cleanup effect
+        console.log('✅ Nuclear reset completed!');
+        console.log('🔄 Now try switching chains or opening modals');
+      },
+
+      // BUTTON 4: Simulate Transaction on Current Chain
+      simulateTransaction: () => {
+        console.log('🎭 BUTTON 4: SIMULATING TRANSACTION ON CURRENT CHAIN');
+        console.log('==================================================');
+        console.log(`📍 Simulating on: ${activeChain}`);
+        
+        // Simulate starting a transaction
+        setIsLoading(true);
+        console.log('✅ Set isLoading = true for current chain');
+        
+        // Simulate transaction hash
+        const fakeHash = `0x${Math.random().toString(16).substr(2, 64)}`;
+        setLastTransactionHash(fakeHash);
+        console.log('🔗 Set fake transaction hash:', fakeHash);
+        
+        // Wait 3 seconds then "complete" transaction
+        setTimeout(() => {
+          setIsLoading(false);
+          setLastTransactionHash(null);
+          console.log('⏰ 3 seconds elapsed - simulated transaction completed');
+          console.log('✅ Reset isLoading = false and cleared hash');
+        }, 3000);
+        
+        console.log('🎬 Simulation started - check console in 3 seconds');
+      },
+
+      // BUTTON 5: Deep State Investigation
+      deepInvestigation: () => {
+        console.log('🔬 BUTTON 5: DEEP STATE INVESTIGATION');
+        console.log('=====================================');
+        
+        // Check if there are any stale Wagmi states
+        console.log('🔍 WAGMI STATE ANALYSIS:');
+        console.log('  isWritePending:', isWritePending);
+        console.log('  isConfirming:', isConfirming);
+        console.log('  isConfirmed:', isConfirmed);
+        console.log('  hash:', hash);
+        console.log('');
+        
+        // Check if our chain-specific filtering is working
+        console.log('🔍 CHAIN FILTERING ANALYSIS:');
+        console.log('  Current hash:', hash);
+        console.log('  Last transaction hash for', activeChain + ':', lastTransactionHash);
+        console.log('  Hash match:', hash === lastTransactionHash);
+        console.log('  isCurrentChainTransaction:', isCurrentChainTransaction);
+        console.log('');
+        
+        // Check if there are any React state inconsistencies
+        console.log('🔍 REACT STATE CONSISTENCY:');
+        console.log('  Chain states object keys:', Object.keys(chainTransactionStates));
+        console.log('  Current chain state:', chainTransactionStates[activeChain]);
+        console.log('  All chain states:', chainTransactionStates);
+        console.log('');
+        
+        // Check if there are any circular dependencies
+        console.log('🔍 DEPENDENCY ANALYSIS:');
+        console.log('  activeChain dependency:', activeChain);
+        console.log('  hash dependency:', hash);
+        console.log('  chainTransactionStates dependency:', chainTransactionStates);
+        console.log('');
+        
+        console.log('✅ Deep investigation completed!');
+      }
+    };
+    
+    // Debug buttons available (development only)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 DEBUG BUTTONS AVAILABLE:');
+      console.log('  Button 1: window.debugTransactionStates.checkCurrentState()');
+      console.log('  Button 2: window.debugTransactionStates.testChainIsolation()');
+      console.log('  Button 3: window.debugTransactionStates.forceResetStates()');
+      console.log('  Button 4: window.debugTransactionStates.simulateTransaction()');
+      console.log('  Button 5: window.debugTransactionStates.deepInvestigation()');
+      console.log('  Button 6: window.debugTransactionStates.nuclearReset()');
+    }
+    
+  }, [activeChain, address, isConnected, chainId, walletBalance, vaultBalanceData, currentFee, refetchWalletBalance, refetchVaultBalance, fetchWalletTokens, refetchVaultTokens, fetchChainSpecificData, getCurrentChainConfig, getActiveRpcUrl, getActiveContractAddress, chainTransactionStates, isLoading, isSimulating, hasRefreshedAfterConfirmation, lastTransactionHash, isWritePending, isConfirming, isConfirmed, hash, isCurrentChainTransaction, isWritePendingForCurrentChain, isConfirmingForCurrentChain, isTransactionLoading, setIsLoading, setLastTransactionHash]);
+
   // CRITICAL FIX: Create a chain-aware public client that always uses the correct chain
   const createChainAwarePublicClient = useCallback(() => {
     const rpcUrl = getActiveRpcUrl();
@@ -2192,10 +2620,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       throw new Error(`Invalid RPC URL for ${activeChain}`);
     }
     
+    // Determine chain ID based on active chain and network mode
     const chainId = activeChain === 'ETH' 
-      ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)  // ETH mainnet vs Sepolia
-      : (currentNetwork.mode === 'mainnet' ? 56 : 97);      // BSC mainnet vs testnet
-    
+      ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)      // ETH mainnet vs Sepolia
+      : activeChain === 'BSC'
+      ? (currentNetwork.mode === 'mainnet' ? 56 : 97)           // BSC mainnet vs testnet
+      : (currentNetwork.mode === 'mainnet' ? 8453 : 84532);     // BASE mainnet vs Sepolia
     
     // Create the transport with explicit typing
     const transport = http(rpcUrl as `http://${string}` | `https://${string}`);
@@ -2204,11 +2634,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
       transport,
       chain: {
         id: chainId,
-        name: activeChain === 'ETH' ? 'Ethereum' : 'Binance Smart Chain',
-        network: activeChain === 'ETH' ? 'ethereum' : 'bsc',
+        name: activeChain === 'ETH' ? 'Ethereum' : activeChain === 'BSC' ? 'Binance Smart Chain' : 'Base',
+        network: activeChain === 'ETH' ? 'ethereum' : activeChain === 'BSC' ? 'bsc' : 'base',
         nativeCurrency: {
-          name: activeChain === 'ETH' ? 'Ether' : 'BNB',
-          symbol: activeChain === 'ETH' ? 'ETH' : 'BNB',
+          name: activeChain === 'ETH' ? 'Ether' : activeChain === 'BSC' ? 'BNB' : 'Ether',
+          symbol: activeChain === 'ETH' ? 'ETH' : activeChain === 'BSC' ? 'BNB' : 'ETH',
           decimals: 18,
         },
         rpcUrls: {
@@ -2219,40 +2649,40 @@ export const useVault = (activeChain: 'ETH' | 'BSC' = 'ETH') => {
     });
   }, [activeChain, currentNetwork.mode]);
 
-    return {
-      isConnected,
-      walletBalance: walletBalanceFormatted,
-      vaultBalance: vaultBalanceFormatted,
-      currentFee: currentFeeFormatted,
-      isLoading: isTransactionLoading,
+  return {
+    isConnected,
+    walletBalance: walletBalanceFormatted,
+    vaultBalance: vaultBalanceFormatted,
+    currentFee: currentFeeFormatted,
+    isLoading: isTransactionLoading,
       isSimulating, // Add simulation state for UI
-      depositETH,
-      withdrawETH,
-      transferETH,
+    depositETH,
+    withdrawETH,
+    transferETH,
       // Token functions
-      approveToken,
-      depositToken,
+    approveToken,
+    depositToken,
       depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
       depositTokenWithDelay, // SIMPLE: 3-second delay approach
       withdrawToken, // NEW: Token withdrawal function with approval
       transferInternalToken, // NEW: Token transfer function
-      // Transaction status for UI feedback
-      isPending: isWritePending,
-      isConfirming,
-      isConfirmed,
-      hash,
+      // Transaction status for UI feedback (chain-specific)
+    isPending: isWritePendingForCurrentChain,
+    isConfirming: isConfirmingForCurrentChain,
+    isConfirmed,
+    hash,
       // Token detection data
-      walletTokens,
-      vaultTokens,
-      isLoadingWalletTokens,
-      isLoadingVaultTokens,
-      isLoadingTokens,
-      refetchWalletTokens: fetchWalletTokens,
+    walletTokens,
+    vaultTokens,
+    isLoadingWalletTokens,
+    isLoadingVaultTokens,
+    isLoadingTokens,
+    refetchWalletTokens: fetchWalletTokens,
       refetchVaultTokens: fetchVaultTokensSigned, // CRITICAL FIX: Use our working function instead of Wagmi refetch
       // Network switching functions
-      currentNetwork,
-      isSwitchingNetwork,
-      autoSwitchNetwork,
+    currentNetwork,
+    isSwitchingNetwork,
+    autoSwitchNetwork,
       getTargetChain: getTargetChain,
       isOnCorrectNetwork, // Add this line
       forceNetworkSwitch, // Add this line
