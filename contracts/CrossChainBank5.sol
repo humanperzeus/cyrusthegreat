@@ -9,8 +9,9 @@ import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.so
 /**
  * @title CrossChainBank5
  * @notice A privacy‑first vault with a dynamic $0.10 fee (Chainlink price feed),
- *         native‑ and ERC‑20 support, internal‑ledger transfers and
- *         **O(1) token‑list cleanup** so the front‑end never sees a zero‑balance token.
+ *         native‑ and ERC‑20 support, internal‑ledger transfers,
+ *         **MULTI-TOKEN BATCH OPERATIONS** and **O(1) token‑list cleanup**
+ *         so the front‑end never sees a zero‑balance token.
  *
  * Features
  *  • Dynamic fee calculated from a native/USD Chainlink feed
@@ -18,6 +19,9 @@ import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.so
  *  • Private obfuscated balances (`vault`) + fee vault (`feeVault`)
  *  • Per‑user token enumeration (`_userTokens`) with constant‑time removal
  *  • Soft‑cap (`MAX_TOKENS_PER_USER`) + per‑tx new‑token cap (`MAX_NEW_TOKENS_PER_TX`)
+ *  • **MULTI-TOKEN BATCH OPERATIONS**: 1-5 custom tokens per transaction (no presets)
+ *  • **RATE LIMITING**: Anti-spam protection (100/sec, 1000/min)
+ *  • **ATOMIC OPERATIONS**: All-or-nothing multi-token transactions
  *  • Owner‑less after construction – only the fee collector can pull fees
  */
 contract CrossChainBank5 is ReentrancyGuard {
@@ -43,12 +47,24 @@ contract CrossChainBank5 is ReentrancyGuard {
     // token => (index+1) for O(1) removal; 0 = not present
     mapping(address => mapping(address => uint256)) private _tokenIdx;
 
+    // Rate limiting for anti-spam protection
+    mapping(address => uint256) private _transactionsPerSecond;
+    mapping(address => uint256) private _transactionsPerMinute;
+    mapping(address => uint256) private _lastTransactionSecond;
+    mapping(address => uint256) private _lastTransactionMinute;
+
     // --------------------------------------------------------------------
     //  CONSTANTS & SETTINGS
     // --------------------------------------------------------------------
     int256 private constant USD_FEE_CENTS = 10;          // $0.10 = 10 cents
     uint256 public constant MAX_TOKENS_PER_USER = 200;  // hard cap per address
     uint256 public constant MAX_NEW_TOKENS_PER_TX = 5;  // limit dummy‑spam per tx
+
+    // Rate limiting constants (matching Solana implementation)
+    uint256 public constant MAX_TRANSACTIONS_PER_SECOND = 100;
+    uint256 public constant MAX_TRANSACTIONS_PER_MINUTE = 1000;
+    uint256 public constant RATE_LIMIT_WINDOW_SECOND = 1;
+    uint256 public constant RATE_LIMIT_WINDOW_MINUTE = 60;
 
     // --------------------------------------------------------------------
     //  EVENTS
@@ -180,6 +196,48 @@ contract CrossChainBank5 is ReentrancyGuard {
 
         _userTokens[recipient].push(token);
         _tokenIdx[recipient][token] = _userTokens[recipient].length;
+    }
+
+    // --------------------------------------------------------------------
+    //  RATE LIMITING FUNCTIONS (Anti-spam protection)
+    // --------------------------------------------------------------------
+    /**
+     * @dev Checks and updates rate limiting for anti-spam protection
+     */
+    function _checkAndUpdateRateLimit() internal {
+        uint256 currentTime = block.timestamp;
+
+        // Reset counters if time windows have passed
+        if (currentTime >= _lastTransactionSecond[msg.sender] + RATE_LIMIT_WINDOW_SECOND) {
+            _transactionsPerSecond[msg.sender] = 0;
+            _lastTransactionSecond[msg.sender] = currentTime;
+        }
+
+        if (currentTime >= _lastTransactionMinute[msg.sender] + RATE_LIMIT_WINDOW_MINUTE) {
+            _transactionsPerMinute[msg.sender] = 0;
+            _lastTransactionMinute[msg.sender] = currentTime;
+        }
+
+        // Check rate limits
+        require(_transactionsPerSecond[msg.sender] < MAX_TRANSACTIONS_PER_SECOND, "Rate limit exceeded (per second)");
+        require(_transactionsPerMinute[msg.sender] < MAX_TRANSACTIONS_PER_MINUTE, "Rate limit exceeded (per minute)");
+
+        // Update counters
+        _transactionsPerSecond[msg.sender]++;
+        _transactionsPerMinute[msg.sender]++;
+    }
+
+    /**
+     * @dev Validates input arrays for multi-token operations
+     */
+    function _validateMultiTokenInput(address[] calldata tokens, uint256[] calldata amounts) internal pure {
+        require(tokens.length > 0 && tokens.length <= 5, "Invalid token count (1-5 tokens allowed)");
+        require(tokens.length == amounts.length, "Token and amount arrays must have same length");
+
+        for (uint256 i = 0; i < amounts.length; i++) {
+            require(amounts[i] > 0, "Zero amount not allowed");
+            require(tokens[i] != address(0), "Invalid token address");
+        }
     }
 
     // --------------------------------------------------------------------
@@ -357,6 +415,163 @@ contract CrossChainBank5 is ReentrancyGuard {
         _addTokenForRecipient(to, token);
 
         emit InternalTransfer(token, msg.sender, to, amount);
+    }
+
+    // --------------------------------------------------------------------
+    //  MULTI-TOKEN OPERATIONS (Custom Bundle Support)
+    // --------------------------------------------------------------------
+
+    /**
+     * @notice Deposit multiple custom tokens in a single transaction
+     * @dev Supports 1-5 different tokens per transaction with custom bundles (no presets)
+     * @param tokens Array of token addresses to deposit (address(0) for native ETH)
+     * @param amounts Array of amounts to deposit for each token
+     */
+    function depositMultipleTokens(
+        address[] calldata tokens,
+        uint256[] calldata amounts
+    ) external payable nonReentrant {
+        _validateMultiTokenInput(tokens, amounts);
+        _checkAndUpdateRateLimit();
+
+        _chargeFeeFromWallet();
+
+        // Count new tokens for this transaction
+        uint256 newTokensInTx = 0;
+
+        // Process each token deposit
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 amount = amounts[i];
+
+            if (token == address(0)) {
+                // Native ETH deposit
+                uint256 fee = _getDynamicFeeInWei();
+                require(msg.value >= fee, "Insufficient fee sent");
+                require(amount > fee, "Amount must exceed fee");
+
+                unchecked {
+                    vault[_key(msg.sender, address(0))] += amount;
+                }
+                feeVault[_key(feeCollector, address(0))] += fee;
+
+                if (_tokenIdx[msg.sender][address(0)] == 0) {
+                    newTokensInTx++;
+                }
+                _trackToken(address(0), newTokensInTx);
+            } else {
+                // ERC20 token deposit
+                IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+
+                unchecked {
+                    vault[_key(msg.sender, token)] += amount;
+                }
+
+                if (_tokenIdx[msg.sender][token] == 0) {
+                    newTokensInTx++;
+                }
+                _trackToken(token, newTokensInTx);
+            }
+
+            emit Deposit(token, msg.sender, amount);
+        }
+    }
+
+    /**
+     * @notice Withdraw multiple custom tokens in a single transaction
+     * @dev Supports 1-5 different tokens per transaction with custom bundles (no presets)
+     * @param tokens Array of token addresses to withdraw (address(0) for native ETH)
+     * @param amounts Array of amounts to withdraw for each token
+     */
+    function withdrawMultipleTokens(
+        address[] calldata tokens,
+        uint256[] calldata amounts
+    ) external payable nonReentrant {
+        _validateMultiTokenInput(tokens, amounts);
+        _checkAndUpdateRateLimit();
+
+        _chargeFeeFromWallet();
+
+        // First pass: Validate all balances before any withdrawal
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 amount = amounts[i];
+            bytes32 userKey = _key(msg.sender, token);
+            require(vault[userKey] >= amount, "Insufficient balance for token");
+        }
+
+        // Second pass: Perform all withdrawals (atomic operation)
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 amount = amounts[i];
+
+            bytes32 userKey = _key(msg.sender, token);
+            unchecked {
+                vault[userKey] -= amount;
+            }
+
+            // Auto-cleanup if balance is now zero
+            _removeTokenIfZero(token);
+
+            if (token == address(0)) {
+                // Native ETH withdrawal
+                (bool success, ) = payable(msg.sender).call{value: amount}("");
+                require(success, "ETH transfer failed");
+            } else {
+                // ERC20 token withdrawal
+                IERC20(token).safeTransfer(msg.sender, amount);
+            }
+
+            emit Withdraw(token, msg.sender, amount);
+        }
+    }
+
+    /**
+     * @notice Transfer multiple custom tokens internally to another user (anonymous)
+     * @dev Supports 1-5 different tokens per transaction with custom bundles (no presets)
+     * @param tokens Array of token addresses to transfer (address(0) for native ETH)
+     * @param to Recipient address
+     * @param amounts Array of amounts to transfer for each token
+     */
+    function transferMultipleTokensInternal(
+        address[] calldata tokens,
+        address to,
+        uint256[] calldata amounts
+    ) external payable nonReentrant {
+        require(to != address(0) && to != msg.sender, "Invalid recipient");
+        _validateMultiTokenInput(tokens, amounts);
+        _checkAndUpdateRateLimit();
+
+        _chargeFeeFromWallet();
+
+        // First pass: Validate all sender balances before any transfer
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 amount = amounts[i];
+            bytes32 fromKey = _key(msg.sender, token);
+            require(vault[fromKey] >= amount, "Insufficient balance for token");
+        }
+
+        // Second pass: Perform all transfers (atomic operation)
+        for (uint256 i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            uint256 amount = amounts[i];
+
+            bytes32 fromKey = _key(msg.sender, token);
+            bytes32 toKey = _key(to, token);
+
+            unchecked {
+                vault[fromKey] -= amount;
+                vault[toKey] += amount;
+            }
+
+            // Clean up sender if needed
+            _removeTokenIfZero(token);
+            // Ensure the recipient's list contains the token
+            _addTokenForRecipient(to, token);
+
+            emit InternalTransfer(token, msg.sender, to, amount);
+        }
     }
 
     // --------------------------------------------------------------------
