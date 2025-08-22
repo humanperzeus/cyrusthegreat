@@ -307,8 +307,9 @@ contract CrossChainBank5 is ReentrancyGuard {
 
     /**
      * @dev Enhanced fee validation for security
+     * Note: Not view function to allow event emission for monitoring
      */
-    function _validateFeeCalculation(uint256 expectedFee) internal view {
+    function _validateFeeCalculation(uint256 expectedFee) internal {
         uint256 calculatedFee = _getDynamicFeeInWei();
 
         // Enhanced fee validation
@@ -890,7 +891,7 @@ contract CrossChainBank5 is ReentrancyGuard {
 
         require(_checkVaultExpansionNeeded(msg.sender), "Expansion not needed yet");
 
-        address expansionVault = _createExpansionVault(msg.sender);
+        _createExpansionVault(msg.sender);
 
         // Emit additional event for user notification
         emit VaultExpansionNeeded(msg.sender, _getRequiredTokensForExpansion(msg.sender), _userTokens[msg.sender].length);
