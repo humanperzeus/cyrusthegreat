@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 /**
- * @title CrossChainBank5
+ * @title CrossChainBank8
  * @notice A privacy‑first vault with a dynamic $0.10 fee (Chainlink price feed),
  *         native‑ and ERC‑20 support, internal‑ledger transfers,
  *         **MULTI-TOKEN BATCH OPERATIONS** and **O(1) token‑list cleanup**
@@ -24,7 +24,7 @@ import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.so
  *  • **ATOMIC OPERATIONS**: All-or-nothing multi-token transactions
  *  • Owner‑less after construction – only the fee collector can pull fees
  */
-contract CrossChainBank5 is ReentrancyGuard {
+contract CrossChainBank8 is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // --------------------------------------------------------------------
