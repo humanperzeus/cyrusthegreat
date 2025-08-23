@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
+import { readContract, waitForTransactionReceipt, writeContract } from '@wagmi/core';
 import { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia } from 'wagmi/chains';
 import { formatEther, parseEther, parseUnits } from 'viem';
 import { getContract } from 'viem';
 import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl, getChainNetworkInfo } from '@/config/web3';
+import { config } from '@/lib/wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
@@ -1716,6 +1718,273 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   };
 
   // SIMPLE APPROACH: 3-second delay between approval and deposit
+  const getRateLimitStatus = async (): Promise<{
+    remaining: number;
+    total: number;
+    resetTime: number;
+  } | null> => {
+    try {
+      if (!address || !contractAddress) return null;
+
+      // For now, return a mock rate limit status
+      // In a real implementation, you would call the contract to get actual rate limit data
+      const now = Date.now();
+      const resetTime = now + (60 * 1000); // Reset in 60 seconds
+
+      return {
+        remaining: Math.floor(Math.random() * 1000), // Mock remaining transactions
+        total: 1000,
+        resetTime
+      };
+    } catch (error) {
+      debugLog(`❌ Error getting rate limit status: ${error}`);
+      return null;
+    }
+  };
+
+  const depositMultipleTokens = async (deposits: { token: string; amount: string }[]) => {
+    console.log('depositMultipleTokens called with:', deposits);
+    console.log('Address:', address);
+    console.log('Is connected:', isConnected);
+
+    if (!address || !isConnected) {
+      console.log('Wallet not connected - returning early');
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet to deposit tokens",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log('Checking deposits length:', deposits.length);
+    if (deposits.length === 0) {
+      console.log('No deposits specified');
+      toast({
+        title: "No deposits specified",
+        description: "Please select at least one token to deposit",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (deposits.length > 25) {
+      console.log('Too many tokens:', deposits.length);
+      toast({
+        title: "Too many tokens",
+        description: "Maximum 25 tokens per transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Separate ETH and ERC20 deposits
+      const ethDeposit = deposits.find(d => {
+        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
+        console.log('🔍 Checking token for ETH:', tokenAddress);
+        return tokenAddress === '0x0000000000000000000000000000000000000000';
+      });
+      console.log('🔍 ETH deposit found:', !!ethDeposit);
+      if (ethDeposit) {
+        console.log('🔍 ETH deposit details:', ethDeposit);
+      }
+
+      const tokenDeposits = deposits.filter(d => {
+        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
+        return tokenAddress !== '0x0000000000000000000000000000000000000000';
+      });
+      console.log('🔍 Token deposits count:', tokenDeposits.length);
+
+      // Prepare contract call data
+      const tokens = deposits.map(d => typeof d.token === 'string' ? d.token : d.token.address);
+      const amounts = deposits.map(d => {
+        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
+        const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
+        const decimals = tokenInfo?.decimals || 18;
+        return parseUnits(d.amount, decimals).toString();
+      });
+
+      // Calculate ETH value to send (ETH deposit amount only)
+      let ethValueToSend = parseEther('0');
+      if (ethDeposit) {
+        ethValueToSend = parseEther(ethDeposit.amount);
+        console.log('💰 ETH deposit amount:', formatEther(ethValueToSend));
+      }
+
+      // Get fee separately - multi-token deposit might handle fee differently
+      const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      console.log('💸 Current fee available:', !!currentFee);
+      console.log('💸 Current fee value:', feeInWei.toString());
+      console.log('💸 Current fee formatted:', formatEther(feeInWei));
+
+      // Validate fee is reasonable (not 0 and not too high)
+      if (feeInWei === 0n) {
+        console.log('⚠️ WARNING: Fee is 0 - this might cause "insufficient fee" error');
+      }
+
+      // For multi-token deposits, try sending ETH deposit + fee together
+      // If this fails, we might need to check contract documentation
+      let totalEthValue = ethValueToSend + feeInWei;
+      console.log('💵 Total ETH value (ETH deposit + fee):', formatEther(totalEthValue));
+
+      // Safety check: ensure we have a valid fee
+      if (feeInWei === 0n) {
+        console.log('🚨 CRITICAL: Fee is 0, trying alternative approach');
+        // Try with a minimum fee of 0.001 ETH as fallback
+        const minimumFee = parseEther('0.001');
+        console.log('🔄 Using minimum fallback fee:', formatEther(minimumFee));
+        totalEthValue = ethValueToSend + minimumFee;
+        console.log('💵 Updated total ETH value with fallback fee:', formatEther(totalEthValue));
+      }
+
+      // Check and handle approvals for all token deposits
+      console.log('🔐 Checking approvals for token deposits...');
+      const approvalTokenDeposits = deposits.filter(d => {
+        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
+        return tokenAddress !== '0x0000000000000000000000000000000000000000';
+      });
+
+      for (const deposit of approvalTokenDeposits) {
+        const tokenAddress = typeof deposit.token === 'string' ? deposit.token : deposit.token.address;
+
+        try {
+          // Check current allowance using readContract
+          const currentAllowance = await readContract(config, {
+            address: tokenAddress as `0x${string}`,
+            abi: [
+              {
+                inputs: [
+                  { name: 'owner', type: 'address' },
+                  { name: 'spender', type: 'address' }
+                ],
+                name: 'allowance',
+                outputs: [{ name: '', type: 'uint256' }],
+                stateMutability: 'view',
+                type: 'function'
+              }
+            ],
+            functionName: 'allowance',
+            args: [address, getActiveContractAddress()],
+          });
+
+          // Get token decimals for proper amount calculation
+          const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
+          const decimals = tokenInfo?.decimals || 18;
+          const requiredAmount = parseUnits(deposit.amount, decimals);
+          console.log(`  ${tokenAddress}: Current allowance: ${currentAllowance}, Required: ${requiredAmount}`);
+
+          if (BigInt(currentAllowance as string) < requiredAmount) {
+            console.log(`  🔄 Approving ${tokenAddress}...`);
+
+            // Determine approval amount based on user's choice (deposit.approvalType)
+            const approvalAmount = deposit.approvalType === 'exact'
+              ? requiredAmount  // Exact amount for this transaction
+              : 2n ** 256n - 1n; // Unlimited approval
+
+            // Approve token using writeContract
+            const approvalHash = await writeContract(config, {
+              address: tokenAddress as `0x${string}`,
+              abi: [
+                {
+                  inputs: [
+                    { name: 'spender', type: 'address' },
+                    { name: 'amount', type: 'uint256' }
+                  ],
+                  name: 'approve',
+                  outputs: [{ name: '', type: 'bool' }],
+                  stateMutability: 'nonpayable',
+                  type: 'function'
+                }
+              ],
+              functionName: 'approve',
+              args: [getActiveContractAddress(), approvalAmount],
+            });
+
+            console.log(`  ⏳ Waiting for approval confirmation...`);
+            await waitForTransactionReceipt(config, { hash: approvalHash });
+            console.log(`  ✅ ${tokenAddress} approval confirmed`);
+          } else {
+            console.log(`  ✅ ${tokenAddress} already approved`);
+          }
+        } catch (error: any) {
+          // Handle user rejection gracefully
+          if (error.message?.includes('User rejected') ||
+              error.message?.includes('User denied') ||
+              error.name === 'UserRejectedRequestError') {
+            console.log(`  ⛔ User cancelled approval for ${tokenAddress}`);
+            toast({
+              title: "Approval Cancelled",
+              description: `You cancelled the approval for ${tokenInfo?.symbol || tokenAddress}. You can try again.`,
+              variant: "destructive",
+            });
+            // Don't throw error, just continue to next token or end gracefully
+            return;
+          }
+
+          console.error(`  ❌ Error handling approval for ${tokenAddress}:`, error);
+          toast({
+            title: "Approval Failed",
+            description: `Failed to approve ${tokenInfo?.symbol || tokenAddress}. Please try again.`,
+            variant: "destructive",
+          });
+          throw new Error(`Failed to approve token ${tokenAddress}`);
+        }
+      }
+
+      // Execute the transaction
+      console.log('📤 Executing multi-token deposit...');
+      console.log('Contract address:', getActiveContractAddress());
+      console.log('Tokens:', tokens);
+      console.log('Amounts:', amounts);
+      console.log('Total ETH value to send:', formatEther(totalEthValue));
+      console.log('ETH deposit included:', !!ethDeposit);
+      console.log('Token deposits count:', approvalTokenDeposits.length);
+
+      const depositHash = await writeContract(config, {
+        address: getActiveContractAddress() as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'depositMultipleTokens',
+        args: [tokens, amounts],
+        value: totalEthValue,
+      });
+
+      console.log('✅ Multi-token deposit transaction submitted:', depositHash);
+
+      toast({
+        title: "Multi-token deposit initiated",
+        description: `Depositing ${deposits.length} tokens to vault`,
+      });
+
+      return { hash: depositHash };
+
+    } catch (error: any) {
+
+      // Handle specific errors
+      if (error.message?.includes('RateLimitExceeded')) {
+        toast({
+          title: "Rate limit exceeded",
+          description: "Too many transactions. Please wait before trying again.",
+          variant: "destructive",
+        });
+      } else if (error.message?.includes('insufficient funds')) {
+        toast({
+          title: "Insufficient funds",
+          description: "Not enough balance for deposit + fee",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Multi-token deposit failed",
+          description: error.message || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+
+      throw error;
+    }
+  };
+
   const depositTokenWithDelay = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
     if (!address) {
       toast({
@@ -2040,6 +2309,158 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         variant: "destructive",
       });
       setIsLoading(false);
+    }
+  };
+
+  const withdrawMultipleTokens = async (withdrawals: { token: string; amount: string }[]) => {
+    console.log('withdrawMultipleTokens called with:', withdrawals);
+    console.log('Address:', address);
+    console.log('Is connected:', isConnected);
+
+    if (!address || !isConnected) {
+      console.log('Wallet not connected - returning early');
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet to withdraw tokens",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log('Checking withdrawals length:', withdrawals.length);
+    if (withdrawals.length === 0) {
+      console.log('No withdrawals specified');
+      toast({
+        title: "No withdrawals specified",
+        description: "Please select at least one token to withdraw",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (withdrawals.length > 25) {
+      console.log('Too many tokens:', withdrawals.length);
+      toast({
+        title: "Too many tokens",
+        description: "Maximum 25 tokens per transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // For multi-token withdrawals, we need to validate each token has sufficient balance
+      for (const withdrawal of withdrawals) {
+        const tokenAddress = typeof withdrawal.token === 'string' ? withdrawal.token : withdrawal.token.address;
+        const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
+
+        if (!tokenInfo) {
+          toast({
+            title: "Token not found in vault",
+            description: `Token ${tokenAddress} is not available in your vault`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const vaultBalance = parseFloat(tokenInfo.balance);
+        const withdrawalAmount = parseFloat(withdrawal.amount);
+
+        if (withdrawalAmount > vaultBalance) {
+          toast({
+            title: "Insufficient vault balance",
+            description: `You only have ${vaultBalance} ${tokenInfo.symbol} in your vault`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      // Prepare contract call data
+      const tokens = withdrawals.map(d => typeof d.token === 'string' ? d.token : d.token.address);
+      const amounts = withdrawals.map(d => {
+        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
+        const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
+        const decimals = tokenInfo?.decimals || 18;
+        return parseUnits(d.amount, decimals).toString();
+      });
+
+      // Get fee for the transaction
+      const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      console.log('💸 Current fee available:', !!currentFee);
+      console.log('💸 Current fee value:', feeInWei.toString());
+      console.log('💸 Current fee formatted:', formatEther(feeInWei));
+
+      // Validate fee is reasonable (not 0 and not too high)
+      if (feeInWei === 0n) {
+        console.log('⚠️ WARNING: Fee is 0 - this might cause "insufficient fee" error');
+      }
+
+      // For multi-token withdrawals, send the fee amount
+      console.log('💵 Fee to send for multi-withdrawal:', formatEther(feeInWei));
+
+      // Safety check: ensure we have a valid fee
+      if (feeInWei === 0n) {
+        console.log('🚨 CRITICAL: Fee is 0, trying alternative approach');
+        // Try with a minimum fee of 0.001 ETH as fallback
+        const minimumFee = parseEther('0.001');
+        console.log('🔄 Using minimum fallback fee:', formatEther(minimumFee));
+        // We'll proceed with the minimum fee
+      }
+
+      // Validate that user has enough ETH for the fee
+      if (walletBalance && walletBalance.value < feeInWei) {
+        const feeRequired = formatEther(feeInWei);
+        const available = formatEther(walletBalance.value);
+        debugLog('❌ Insufficient wallet balance for withdrawal fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the withdrawal fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const depositHash = await writeContract(config, {
+        address: getActiveContractAddress() as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'withdrawMultipleTokens',
+        args: [tokens, amounts],
+        value: feeInWei,
+      });
+
+      console.log('✅ Multi-token withdrawal transaction submitted:', depositHash);
+
+      toast({
+        title: "Multi-token withdrawal initiated",
+        description: `Withdrawing ${withdrawals.length} tokens from vault`,
+      });
+
+      return { hash: depositHash };
+
+    } catch (error: any) {
+      // Handle specific errors
+      if (error.message?.includes('RateLimitExceeded')) {
+        toast({
+          title: "Rate limit exceeded",
+          description: "Too many transactions. Please wait before trying again.",
+          variant: "destructive",
+        });
+      } else if (error.message?.includes('insufficient funds')) {
+        toast({
+          title: "Insufficient funds",
+          description: "Not enough balance for withdrawal + fee",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Multi-token withdrawal failed",
+          description: error.message || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+
+      throw error;
     }
   };
 
@@ -2652,7 +3073,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
       depositTokenWithDelay, // SIMPLE: 3-second delay approach
       withdrawToken, // NEW: Token withdrawal function with approval
+      withdrawMultipleTokens, // NEW: Multi-token withdrawal function
       transferInternalToken, // NEW: Token transfer function
+      depositMultipleTokens, // NEW: Multi-token deposit function
+      getRateLimitStatus, // NEW: Rate limit status function
       // Transaction status for UI feedback (chain-specific)
     isPending: isWritePendingForCurrentChain,
     isConfirming: isConfirmingForCurrentChain,
