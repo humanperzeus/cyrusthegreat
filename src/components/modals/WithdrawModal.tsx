@@ -4,14 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowUpDown, Loader2, Info } from "lucide-react";
+import { ArrowUpDown, Loader2, Info, Coins } from "lucide-react";
 import { getChainConfig } from "@/config/web3";
+import { MultiTokenWithdrawModal } from "./MultiTokenWithdrawModal";
 
 interface WithdrawModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onWithdraw: (amount: string) => void;
   onTokenWithdraw?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
+  onMultiTokenWithdraw?: (withdrawals: { token: string; amount: string }[]) => Promise<void>;
   vaultBalance: string;
   currentFee?: string;
   isLoading: boolean;
@@ -24,6 +26,13 @@ interface WithdrawModalProps {
   tokenBalance?: string;
   // Chain-aware props
   activeChain?: 'ETH' | 'BSC' | 'BASE';
+  // Multi-token functionality
+  vaultTokens?: Array<{address: string, symbol: string, balance: string, decimals: number}>;
+  rateLimitStatus?: {
+    remaining: number;
+    total: number;
+    resetTime: number;
+  };
 }
 
 export function WithdrawModal({
@@ -31,6 +40,7 @@ export function WithdrawModal({
   onOpenChange,
   onWithdraw,
   onTokenWithdraw,
+  onMultiTokenWithdraw,
   vaultBalance,
   currentFee = "0.00",
   isLoading,
@@ -40,9 +50,13 @@ export function WithdrawModal({
   tokenSymbol,
   tokenAddress,
   tokenBalance,
-  activeChain
+  activeChain,
+  vaultTokens = [],
+  rateLimitStatus
 }: WithdrawModalProps) {
   const [amount, setAmount] = useState("");
+  const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
+  const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
   // Auto-close modal after successful transaction
   useEffect(() => {
@@ -51,11 +65,26 @@ export function WithdrawModal({
       const timer = setTimeout(() => {
         onOpenChange(false);
         setAmount(""); // Reset amount
+        setIsMultiTokenMode(false); // Reset multi-token mode
       }, 1500);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isTransactionConfirmed, isLoading, onOpenChange]);
+
+  // Reset multi-token mode when modal opens/closes
+  useEffect(() => {
+    if (!open) {
+      setIsMultiTokenMode(false);
+      setShowMultiTokenModal(false);
+    }
+  }, [open]);
+
+  const handleMultiTokenWithdraw = async (withdrawals: { token: string; amount: string }[]) => {
+    if (onMultiTokenWithdraw) {
+      await onMultiTokenWithdraw(withdrawals);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,13 +106,29 @@ export function WithdrawModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-gradient-card border-vault-primary/30">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
-            <ArrowUpDown className="w-6 h-6 text-vault-success" />
-            {isTokenWithdraw 
-              ? `Withdraw ${tokenSymbol} from Vault` 
-              : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} from Vault`
-            }
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
+              <ArrowUpDown className="w-6 h-6 text-vault-success" />
+              {isTokenWithdraw
+                ? `Withdraw ${tokenSymbol} from Vault`
+                : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} from Vault`
+              }
+            </DialogTitle>
+
+            {/* Multi-Token Toggle */}
+            {onMultiTokenWithdraw && vaultTokens.length > 0 && (
+              <Button
+                type="button"
+                variant={isMultiTokenMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsMultiTokenMode(!isMultiTokenMode)}
+                className="flex items-center space-x-1"
+              >
+                <Coins className="h-4 w-4" />
+                <span className="text-xs">{isMultiTokenMode ? 'Single' : 'Multi'}</span>
+              </Button>
+            )}
+          </div>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -174,47 +219,88 @@ export function WithdrawModal({
               </AlertDescription>
             </Alert>
 
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => onOpenChange(false)}
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={() => {
-                  if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
-                    onTokenWithdraw(tokenAddress, amount, tokenSymbol);
-                  } else {
-                    onWithdraw(amount);
-                  }
-                }} 
-                disabled={!amount || isLoading || isSimulating}
-                className="w-full"
-              >
-                {isSimulating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Checking...
-                  </>
-                ) : isLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Withdrawing...
-                  </>
-                ) : (
-                  isTokenWithdraw 
-                    ? `Withdraw ${tokenSymbol}` 
-                    : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
-                )}
-              </Button>
-            </div>
+            {/* Single Token Withdraw Button */}
+            {!isMultiTokenMode && (
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
+                      onTokenWithdraw(tokenAddress, amount, tokenSymbol);
+                    } else {
+                      onWithdraw(amount);
+                    }
+                  }}
+                  disabled={!amount || isLoading || isSimulating}
+                  className="flex-1"
+                >
+                  {isSimulating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Checking...
+                    </>
+                  ) : isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Withdrawing...
+                    </>
+                  ) : (
+                    isTokenWithdraw
+                      ? `Withdraw ${tokenSymbol}`
+                      : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Multi-Token Withdraw Button */}
+            {isMultiTokenMode && (
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => setShowMultiTokenModal(true)}
+                  disabled={isLoading}
+                  className="flex-1"
+                  variant="default"
+                >
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  Open Multi-Token Withdraw
+                  <span className="ml-2 text-xs bg-background/20 px-2 py-1 rounded">
+                    {vaultTokens.length} tokens
+                  </span>
+                </Button>
+              </div>
+            )}
           </div>
         </form>
       </DialogContent>
+
+      {/* Multi-Token Withdraw Modal */}
+      {showMultiTokenModal && onMultiTokenWithdraw && (
+        <MultiTokenWithdrawModal
+          isOpen={showMultiTokenModal}
+          onClose={() => setShowMultiTokenModal(false)}
+          availableTokens={vaultTokens}
+          onWithdraw={handleMultiTokenWithdraw}
+          isLoading={isLoading}
+          rateLimitStatus={rateLimitStatus}
+        />
+      )}
     </Dialog>
   );
 };

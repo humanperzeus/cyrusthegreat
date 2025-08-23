@@ -21,13 +21,13 @@ const Index = () => {
     debugLog(`💾 Chain preference saved to localStorage: ${activeChain}`);
   }, [activeChain]);
   
-  const { 
-    walletBalance, 
-    vaultBalance, 
-    currentFee, 
-    isLoading, 
-    depositETH, 
-    withdrawETH, 
+  const {
+    walletBalance,
+    vaultBalance,
+    currentFee,
+    isLoading,
+    depositETH,
+    withdrawETH,
     transferETH,
     isConnected,
     isSimulating, // Add simulation state
@@ -42,7 +42,10 @@ const Index = () => {
     depositToken,
     depositTokenWithDelay,
     withdrawToken,
+    withdrawMultipleTokens, // NEW: Multi-token withdrawal function
     transferInternalToken, // Add transferInternalToken to the hook
+    depositMultipleTokens, // NEW: Multi-token deposit function
+    getRateLimitStatus, // NEW: Rate limit status function
     // Network switching functions
     currentNetwork,
     isSwitchingNetwork,
@@ -52,7 +55,30 @@ const Index = () => {
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
-  
+
+  // Multi-token functionality state
+  const [rateLimitStatus, setRateLimitStatus] = useState<{
+    remaining: number;
+    total: number;
+    resetTime: number;
+  } | null>(null);
+
+  // Fetch rate limit status on component mount and when dependencies change
+  useEffect(() => {
+    const fetchRateLimitStatus = async () => {
+      try {
+        const status = await getRateLimitStatus();
+        setRateLimitStatus(status);
+      } catch (error) {
+        console.error('Failed to fetch rate limit status:', error);
+      }
+    };
+
+    if (isConnected && getRateLimitStatus) {
+      fetchRateLimitStatus();
+    }
+  }, [isConnected, getRateLimitStatus, activeChain]);
+
   // State for token deposit modal
   const [tokenDepositInfo, setTokenDepositInfo] = useState<{
     symbol: string;
@@ -102,6 +128,13 @@ const Index = () => {
   const handleTokenDepositFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
     // Call the simple delay deposit function with string amount (function handles decimals internally)
     depositTokenWithDelay(tokenAddress, amount, tokenSymbol);
+  };
+
+  // Handle multi-token deposit from modal
+  const handleMultiTokenDepositFromModal = (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => {
+    console.log('handleMultiTokenDepositFromModal called with:', deposits);
+    // Call the multi-token deposit function
+    depositMultipleTokens(deposits);
   };
 
   // Handle token withdraw click
@@ -164,6 +197,7 @@ const Index = () => {
         onOpenChange={setDepositModalOpen}
         onDeposit={depositETH}
         onTokenDeposit={handleTokenDepositFromModal}
+        onMultiTokenDeposit={handleMultiTokenDepositFromModal}
         isLoading={isLoading}
         isSimulating={isSimulating}
         walletBalance={walletBalance}
@@ -176,6 +210,9 @@ const Index = () => {
         tokenBalance={tokenDepositInfo?.balance}
         // Chain-aware props
         activeChain={activeChain}
+        // Multi-token functionality
+        availableTokens={walletTokens}
+        rateLimitStatus={rateLimitStatus}
       />
 
       <WithdrawModal
@@ -183,6 +220,7 @@ const Index = () => {
         onOpenChange={setWithdrawModalOpen}
         onWithdraw={withdrawETH}
         onTokenWithdraw={handleTokenWithdrawFromModal}
+        onMultiTokenWithdraw={withdrawMultipleTokens}
         isLoading={isLoading}
         vaultBalance={vaultBalance}
         currentFee={currentFee}
@@ -194,6 +232,9 @@ const Index = () => {
         tokenBalance={tokenWithdrawInfo?.balance}
         // Chain-aware props
         activeChain={activeChain}
+        // Multi-token functionality
+        vaultTokens={vaultTokens}
+        rateLimitStatus={rateLimitStatus}
       />
 
       <TransferModal
