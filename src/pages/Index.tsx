@@ -44,6 +44,7 @@ const Index = () => {
     withdrawToken,
     withdrawMultipleTokens, // NEW: Multi-token withdrawal function
     transferInternalToken, // Add transferInternalToken to the hook
+    transferMultipleTokens, // NEW: Multi-token transfer function
     depositMultipleTokens, // NEW: Multi-token deposit function
     getRateLimitStatus, // NEW: Rate limit status function
     // Network switching functions
