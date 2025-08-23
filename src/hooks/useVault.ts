@@ -2464,6 +2464,165 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   };
 
+  const transferMultipleTokens = async (transfers: { token: string; amount: string }[], to: string) => {
+    console.log('transferMultipleTokens called with:', transfers, 'to:', to);
+    console.log('Address:', address);
+    console.log('Is connected:', isConnected);
+
+    if (!address || !isConnected) {
+      console.log('Wallet not connected - returning early');
+      toast({
+        title: "Wallet not connected",
+        description: "Please connect your wallet to transfer tokens",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!to || to.trim() === "") {
+      toast({
+        title: "Invalid recipient",
+        description: "Please provide a valid recipient address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log('Checking transfers length:', transfers.length);
+    if (transfers.length === 0) {
+      console.log('No transfers specified');
+      toast({
+        title: "No transfers specified",
+        description: "Please select at least one token to transfer",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (transfers.length > 25) {
+      console.log('Too many tokens:', transfers.length);
+      toast({
+        title: "Too many tokens",
+        description: "Maximum 25 tokens per transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Validate recipient address format
+      if (!to.match(/^0x[a-fA-F0-9]{40}$/)) {
+        toast({
+          title: "Invalid recipient address",
+          description: "Please provide a valid Ethereum address",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate each token has sufficient balance
+      for (const transfer of transfers) {
+        const tokenAddress = typeof transfer.token === 'string' ? transfer.token : transfer.token.address;
+        const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
+
+        if (!tokenInfo) {
+          toast({
+            title: "Token not found in vault",
+            description: `Token ${tokenAddress} is not available in your vault`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const vaultBalance = parseFloat(tokenInfo.balance);
+        const transferAmount = parseFloat(transfer.amount);
+
+        if (transferAmount > vaultBalance) {
+          toast({
+            title: "Insufficient vault balance",
+            description: `You only have ${vaultBalance} ${tokenInfo.symbol} in your vault`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      // Prepare contract call data
+      const tokens = transfers.map(t => typeof t.token === 'string' ? t.token : t.token.address);
+      const amounts = transfers.map(t => {
+        const tokenAddress = typeof t.token === 'string' ? t.token : t.token.address;
+        const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
+        const decimals = tokenInfo?.decimals || 18;
+        return parseUnits(t.amount, decimals).toString();
+      });
+
+      // Get fee for the transaction
+      const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      console.log('💸 Current fee available:', !!currentFee);
+      console.log('💸 Current fee value:', feeInWei.toString());
+      console.log('💸 Current fee formatted:', formatEther(feeInWei));
+
+      // Validate fee is reasonable
+      if (feeInWei === 0n) {
+        console.log('⚠️ WARNING: Fee is 0 - this might cause "insufficient fee" error');
+      }
+
+      // Validate that user has enough ETH for the fee
+      if (walletBalance && walletBalance.value < feeInWei) {
+        const feeRequired = formatEther(feeInWei);
+        const available = formatEther(walletBalance.value);
+        debugLog('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the transfer fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const transferHash = await writeContract(config, {
+        address: getActiveContractAddress() as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'transferMultipleTokensInternal',
+        args: [tokens, to, amounts],
+        value: feeInWei,
+      });
+
+      console.log('✅ Multi-token transfer transaction submitted:', transferHash);
+
+      toast({
+        title: "Multi-token transfer initiated",
+        description: `Transferring ${transfers.length} tokens to ${to.slice(0, 6)}...${to.slice(-4)}`,
+      });
+
+      return { hash: transferHash };
+
+    } catch (error: any) {
+      // Handle specific errors
+      if (error.message?.includes('RateLimitExceeded')) {
+        toast({
+          title: "Rate limit exceeded",
+          description: "Too many transactions. Please wait before trying again.",
+          variant: "destructive",
+        });
+      } else if (error.message?.includes('insufficient funds')) {
+        toast({
+          title: "Insufficient funds",
+          description: "Not enough balance for transfer + fee",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Multi-token transfer failed",
+          description: error.message || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+
+      throw error;
+    }
+  };
+
   // Token Transfer Function
   const transferInternalToken = async (
     tokenAddress: string,
@@ -3075,6 +3234,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       withdrawToken, // NEW: Token withdrawal function with approval
       withdrawMultipleTokens, // NEW: Multi-token withdrawal function
       transferInternalToken, // NEW: Token transfer function
+      transferMultipleTokens, // NEW: Multi-token transfer function
       depositMultipleTokens, // NEW: Multi-token deposit function
       getRateLimitStatus, // NEW: Rate limit status function
       // Transaction status for UI feedback (chain-specific)

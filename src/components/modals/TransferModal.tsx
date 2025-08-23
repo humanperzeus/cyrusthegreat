@@ -4,14 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowUpDown, Loader2, Shield, Info } from "lucide-react";
+import { ArrowUpDown, Loader2, Shield, Info, Coins } from "lucide-react";
 import { getChainConfig } from "@/config/web3";
+import { MultiTokenTransferModal } from "./MultiTokenTransferModal";
 
 interface TransferModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onTransfer: (to: string, amount: string) => void;
   onTokenTransfer?: (to: string, amount: string) => void;
+  onMultiTokenTransfer?: (transfers: { token: string; amount: string }[], to: string) => Promise<void>;
   vaultBalance: string;
   currentFee?: string;
   isLoading: boolean;
@@ -24,6 +26,13 @@ interface TransferModalProps {
   tokenBalance?: string;
   // Chain-aware props
   activeChain?: 'ETH' | 'BSC' | 'BASE';
+  // Multi-token functionality
+  vaultTokens?: Array<{address: string, symbol: string, balance: string, decimals: number}>;
+  rateLimitStatus?: {
+    remaining: number;
+    total: number;
+    resetTime: number;
+  };
 }
 
 export function TransferModal({
@@ -31,6 +40,7 @@ export function TransferModal({
   onOpenChange,
   onTransfer,
   onTokenTransfer,
+  onMultiTokenTransfer,
   vaultBalance,
   currentFee = "0.00",
   isLoading,
@@ -40,10 +50,14 @@ export function TransferModal({
   tokenSymbol,
   tokenAddress,
   tokenBalance,
-  activeChain
+  activeChain,
+  vaultTokens = [],
+  rateLimitStatus
 }: TransferModalProps) {
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
+  const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
+  const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
   // Auto-close modal after successful transaction
   useEffect(() => {
@@ -53,11 +67,26 @@ export function TransferModal({
         onOpenChange(false);
         setTo(""); // Reset form
         setAmount("");
+        setIsMultiTokenMode(false); // Reset multi-token mode
       }, 1500);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isTransactionConfirmed, isLoading, onOpenChange]);
+
+  // Reset multi-token mode when modal opens/closes
+  useEffect(() => {
+    if (!open) {
+      setIsMultiTokenMode(false);
+      setShowMultiTokenModal(false);
+    }
+  }, [open]);
+
+  const handleMultiTokenTransfer = async (transfers: { token: string; amount: string }[], recipient: string) => {
+    if (onMultiTokenTransfer) {
+      await onMultiTokenTransfer(transfers, recipient);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,13 +108,29 @@ export function TransferModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-gradient-card border-vault-secondary/30">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
-            <Shield className="w-6 h-6 text-vault-secondary" />
-            {isTokenTransfer 
-              ? `Anonymous ${tokenSymbol} Transfer` 
-              : `Anonymous ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} Transfer`
-            }
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
+              <Shield className="w-6 h-6 text-vault-secondary" />
+              {isTokenTransfer
+                ? `Anonymous ${tokenSymbol} Transfer`
+                : `Anonymous ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} Transfer`
+              }
+            </DialogTitle>
+
+            {/* Multi-Token Toggle */}
+            {onMultiTokenTransfer && vaultTokens.length > 0 && (
+              <Button
+                type="button"
+                variant={isMultiTokenMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsMultiTokenMode(!isMultiTokenMode)}
+                className="flex items-center space-x-1"
+              >
+                <Coins className="h-4 w-4" />
+                <span className="text-xs">{isMultiTokenMode ? 'Single' : 'Multi'}</span>
+              </Button>
+            )}
+          </div>
         </DialogHeader>
         
         <div className="bg-vault-secondary/10 border border-vault-secondary/20 rounded-lg p-4 mb-4">
@@ -197,46 +242,87 @@ export function TransferModal({
             </AlertDescription>
           </Alert>
 
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => onOpenChange(false)}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                if (isTokenTransfer && onTokenTransfer) {
-                  onTokenTransfer(to, amount);
-                } else {
-                  onTransfer(to, amount);
-                }
-              }} 
-              disabled={!to || !amount || isLoading || isSimulating}
-              className="w-full"
-            >
-              {isSimulating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Checking...
-                </>
-              ) : isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Transferring...
-                </>
-              ) : (
-                isTokenTransfer 
-                  ? `Transfer ${tokenSymbol}` 
-                  : `Transfer ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
-              )}
-            </Button>
-          </div>
+          {/* Single Token Transfer Button */}
+          {!isMultiTokenMode && (
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => onOpenChange(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (isTokenTransfer && onTokenTransfer) {
+                    onTokenTransfer(to, amount);
+                  } else {
+                    onTransfer(to, amount);
+                  }
+                }}
+                disabled={!to || !amount || isLoading || isSimulating}
+                className="flex-1"
+              >
+                {isSimulating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Checking...
+                  </>
+                ) : isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Transferring...
+                  </>
+                ) : (
+                  isTokenTransfer
+                    ? `Transfer ${tokenSymbol}`
+                    : `Transfer ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Multi-Token Transfer Button */}
+          {isMultiTokenMode && (
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => setShowMultiTokenModal(true)}
+                disabled={isLoading}
+                className="flex-1"
+                variant="default"
+              >
+                <Shield className="h-4 w-4 mr-2" />
+                Open Multi-Token Transfer
+                <span className="ml-2 text-xs bg-background/20 px-2 py-1 rounded">
+                  {vaultTokens.length} tokens
+                </span>
+              </Button>
+            </div>
+          )}
         </form>
       </DialogContent>
+
+      {/* Multi-Token Transfer Modal */}
+      {showMultiTokenModal && onMultiTokenTransfer && (
+        <MultiTokenTransferModal
+          isOpen={showMultiTokenModal}
+          onClose={() => setShowMultiTokenModal(false)}
+          availableTokens={vaultTokens}
+          onTransfer={handleMultiTokenTransfer}
+          isLoading={isLoading}
+          rateLimitStatus={rateLimitStatus}
+        />
+      )}
     </Dialog>
   );
 };

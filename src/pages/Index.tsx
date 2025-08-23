@@ -253,6 +253,10 @@ const Index = () => {
         tokenBalance={tokenTransferInfo?.balance}
         // Chain-aware props
         activeChain={activeChain}
+        // Multi-token functionality
+        onMultiTokenTransfer={transferMultipleTokens}
+        vaultTokens={vaultTokens}
+        rateLimitStatus={rateLimitStatus}
       />
     </>
   );
