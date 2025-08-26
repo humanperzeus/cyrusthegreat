@@ -3,6 +3,8 @@ use anchor_spl::token::{self, Token, TokenAccount, Mint};
 use anchor_spl::associated_token::AssociatedToken;
 use pyth_sdk_solana::state::SolanaPriceAccount;
 use pyth_sdk_solana::Price;
+use std::convert::TryInto;
+use anchor_lang::system_program;
 
 // Constants - Performance optimized
 const MAX_TRANSACTIONS_PER_SECOND: u8 = 100;
@@ -800,6 +802,178 @@ pub mod crosschain_bank5_optimized {
         Ok(())
     }
 
+    // Time-Locked Vault Functions - Christmas gift example (unlock on Dec 25, 2025)
+
+    // Create a time-locked vault (e.g., for Christmas gift)
+    pub fn create_time_locked_vault(
+        ctx: Context<CreateTimeLockedVault>,
+        unlock_timestamp: i64, // e.g., 1735344000 for Dec 25, 2025
+        description: String,
+    ) -> Result<()> {
+        require!(unlock_timestamp > Clock::get()?.unix_timestamp, BankError::InvalidInput);
+        require!(description.len() <= 256, BankError::InvalidInput);
+
+        let vault = &mut ctx.accounts.vault;
+        vault.version = 1;
+        vault.owner = ctx.accounts.owner.key();
+        vault.recipient = ctx.accounts.recipient.key();
+        vault.unlock_timestamp = unlock_timestamp;
+        vault.created_timestamp = Clock::get()?.unix_timestamp;
+        vault.token = ctx.accounts.token_mint.as_ref().map(|m| m.key()).unwrap_or(system_program::ID);
+        vault.amount = 0; // Will be funded separately
+        vault.claimed = false;
+        vault.description = description;
+        vault.bump = ctx.bumps.vault;
+
+        emit!(TimeLockedVaultCreatedEvent {
+            vault: vault.key(),
+            owner: vault.owner,
+            recipient: vault.recipient,
+            token: vault.token,
+            amount: vault.amount,
+            unlock_timestamp: vault.unlock_timestamp,
+            description: vault.description.clone(),
+        });
+
+        Ok(())
+    }
+
+    // Fund a time-locked vault
+    pub fn fund_time_locked_vault(ctx: Context<FundTimeLockedVault>, amount: u64) -> Result<()> {
+        require!(amount > 0, BankError::ZeroDeposit);
+        require!(!ctx.accounts.vault.claimed, BankError::InvalidInput);
+        require!(ctx.accounts.vault.owner == ctx.accounts.funder.key(), BankError::NotAuthorized);
+
+        let current_time = Clock::get()?.unix_timestamp;
+
+        // Check vault state first before mutable borrow
+        require!(current_time < ctx.accounts.vault.unlock_timestamp, BankError::InvalidInput);
+
+        let vault_info = ctx.accounts.vault.to_account_info();
+        let vault = &mut ctx.accounts.vault;
+        let token = vault.token; // Copy token before using vault_info
+
+        if token == system_program::ID {
+            // Fund with SOL
+            require!(ctx.accounts.funder.lamports() >= amount, BankError::InsufficientBalance);
+
+            // Transfer SOL to vault
+            **ctx.accounts.funder.to_account_info().try_borrow_mut_lamports()? -= amount;
+            **vault_info.try_borrow_mut_lamports()? += amount;
+        } else {
+            // Fund with SPL token
+            if let (Some(funder_token), Some(vault_token)) = (
+                &ctx.accounts.funder_token_account,
+                &ctx.accounts.vault_token_account,
+            ) {
+                token::transfer(
+                    CpiContext::new(
+                        ctx.accounts.token_program.to_account_info(),
+                        token::Transfer {
+                            from: funder_token.to_account_info(),
+                            to: vault_token.to_account_info(),
+                            authority: ctx.accounts.funder.to_account_info(),
+                        },
+                    ),
+                    amount,
+                )?;
+            }
+        }
+
+        vault.amount = vault.amount.checked_add(amount).ok_or(BankError::Overflow)?;
+
+        Ok(())
+    }
+
+    // Claim a time-locked vault (only after unlock time)
+    pub fn claim_time_locked_vault(ctx: Context<ClaimTimeLockedVault>) -> Result<()> {
+        let current_time = Clock::get()?.unix_timestamp;
+
+        // Copy all values we need before any borrowing
+        let vault_info = ctx.accounts.vault.to_account_info();
+        let vault_data = ctx.accounts.vault.clone();
+        let amount = vault_data.amount;
+        let vault_bump = vault_data.bump;
+        let vault_owner = vault_data.owner;
+        let vault_recipient = vault_data.recipient;
+        let token = vault_data.token;
+
+        require!(!vault_data.claimed, BankError::InvalidInput);
+        require!(vault_data.recipient == ctx.accounts.recipient.key(), BankError::NotAuthorized);
+        require!(current_time >= vault_data.unlock_timestamp, BankError::InvalidInput);
+        require!(amount > 0, BankError::ZeroWithdrawal);
+
+        if token == system_program::ID {
+            // Claim SOL
+            require!(vault_info.lamports() >= amount, BankError::InsufficientBalance);
+
+            // Transfer SOL to recipient
+            **vault_info.try_borrow_mut_lamports()? -= amount;
+            **ctx.accounts.recipient.to_account_info().try_borrow_mut_lamports()? += amount;
+        } else {
+            // Claim SPL token
+            if let (Some(vault_token), Some(recipient_token)) = (
+                &ctx.accounts.vault_token_account,
+                &ctx.accounts.recipient_token_account,
+            ) {
+                token::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.to_account_info(),
+                        token::Transfer {
+                            from: vault_token.to_account_info(),
+                            to: recipient_token.to_account_info(),
+                            authority: ctx.accounts.vault.to_account_info(),
+                        },
+                        &[&[
+                            b"time_locked_vault",
+                            vault_owner.as_ref(),
+                            vault_recipient.as_ref(),
+                            &[vault_bump],
+                        ]],
+                    ),
+                    amount,
+                )?;
+            }
+        }
+
+        // Mark vault as claimed
+        let mut vault = &mut ctx.accounts.vault;
+        vault.claimed = true;
+
+        emit!(TimeLockedVaultClaimedEvent {
+            vault: vault.key(),
+            recipient: vault_recipient,
+            token: token,
+            amount,
+            claimed_timestamp: current_time,
+        });
+
+        Ok(())
+    }
+
+    // Get time-locked vault information
+    pub fn get_time_locked_vault_info(ctx: Context<GetTimeLockedVaultInfo>) -> Result<TimeLockedVaultInfo> {
+        let vault = &ctx.accounts.vault;
+        let current_time = Clock::get()?.unix_timestamp;
+
+        Ok(TimeLockedVaultInfo {
+            owner: vault.owner,
+            recipient: vault.recipient,
+            unlock_timestamp: vault.unlock_timestamp,
+            created_timestamp: vault.created_timestamp,
+            token: vault.token,
+            amount: vault.amount,
+            claimed: vault.claimed,
+            description: vault.description.clone(),
+            time_until_unlock: if current_time < vault.unlock_timestamp {
+                Some(vault.unlock_timestamp - current_time)
+            } else {
+                None
+            },
+            can_claim: !vault.claimed && current_time >= vault.unlock_timestamp,
+        })
+    }
+
     // Get current fee - Price feed integration
     pub fn get_current_fee(ctx: Context<GetCurrentFee>) -> Result<u64> {
         let bank = &ctx.accounts.bank;
@@ -1094,6 +1268,35 @@ pub struct ExpansionVault {
     pub version: u8,
 }
 
+// Time-locked vault information return type
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct TimeLockedVaultInfo {
+    pub owner: Pubkey,
+    pub recipient: Pubkey,
+    pub unlock_timestamp: i64,
+    pub created_timestamp: i64,
+    pub token: Pubkey,
+    pub amount: u64,
+    pub claimed: bool,
+    pub description: String,
+    pub time_until_unlock: Option<i64>, // None if already unlocked
+    pub can_claim: bool,
+}
+
+#[account]
+pub struct TimeLockedVault {
+    pub version: u8,
+    pub owner: Pubkey,        // Person who created/funded the vault
+    pub recipient: Pubkey,    // Person who can claim after unlock time
+    pub unlock_timestamp: i64, // Unix timestamp when vault unlocks (e.g., 1735344000 for Dec 25, 2025)
+    pub created_timestamp: i64,
+    pub token: Pubkey,        // Token address (SOL = system program ID)
+    pub amount: u64,          // Amount locked in vault
+    pub claimed: bool,        // Has the vault been claimed?
+    pub description: String,  // Optional message (max 256 chars)
+    pub bump: u8,             // PDA bump
+}
+
 // Events - optimized for performance
 #[event]
 pub struct BankInitializedEvent {
@@ -1142,6 +1345,26 @@ pub struct ExpansionVaultCreatedEvent {
     pub starter_vault: Pubkey,
     pub expansion_vault: Pubkey,
     pub total_capacity: u16,
+}
+
+#[event]
+pub struct TimeLockedVaultCreatedEvent {
+    pub vault: Pubkey,
+    pub owner: Pubkey,
+    pub recipient: Pubkey,
+    pub token: Pubkey,
+    pub amount: u64,
+    pub unlock_timestamp: i64,
+    pub description: String,
+}
+
+#[event]
+pub struct TimeLockedVaultClaimedEvent {
+    pub vault: Pubkey,
+    pub recipient: Pubkey,
+    pub token: Pubkey,
+    pub amount: u64,
+    pub claimed_timestamp: i64,
 }
 
 #[event]
@@ -1444,6 +1667,72 @@ pub struct TransferMultipleTokensInternal<'info> {
     pub token_mint_3: Option<Account<'info, Mint>>,
     pub token_mint_4: Option<Account<'info, Mint>>,
     pub token_mint_5: Option<Account<'info, Mint>>,
+}
+
+#[derive(Accounts)]
+pub struct CreateTimeLockedVault<'info> {
+    #[account(mut)]
+    pub bank: Account<'info, Bank>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        init,
+        payer = owner,
+        space = 8 + 32 + 32 + 8 + 8 + 32 + 8 + 1 + (4 + 256) + 1, // String takes 4 + 256 bytes
+        seeds = [b"time_locked_vault", owner.key().as_ref(), recipient.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, TimeLockedVault>,
+    /// CHECK: Recipient account (can be different from owner)
+    pub recipient: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+    // Optional token account for funding (only if token != SOL)
+    pub owner_token_account: Option<Account<'info, TokenAccount>>,
+    #[account(
+        init_if_needed,
+        payer = owner,
+        associated_token::mint = token_mint,
+        associated_token::authority = vault,
+    )]
+    pub vault_token_account: Option<Account<'info, TokenAccount>>,
+    pub token_mint: Option<Account<'info, Mint>>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+}
+
+#[derive(Accounts)]
+pub struct FundTimeLockedVault<'info> {
+    #[account(mut)]
+    pub vault: Account<'info, TimeLockedVault>,
+    #[account(mut)]
+    pub funder: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    // Optional accounts for token funding
+    #[account(mut)]
+    pub funder_token_account: Option<Account<'info, TokenAccount>>,
+    #[account(mut)]
+    pub vault_token_account: Option<Account<'info, TokenAccount>>,
+    pub token_mint: Option<Account<'info, Mint>>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimTimeLockedVault<'info> {
+    #[account(mut)]
+    pub vault: Account<'info, TimeLockedVault>,
+    #[account(mut)]
+    pub recipient: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    // Optional accounts for token claiming
+    #[account(mut)]
+    pub vault_token_account: Option<Account<'info, TokenAccount>>,
+    #[account(mut)]
+    pub recipient_token_account: Option<Account<'info, TokenAccount>>,
+    pub token_mint: Option<Account<'info, Mint>>,
+}
+
+#[derive(Accounts)]
+pub struct GetTimeLockedVaultInfo<'info> {
+    pub vault: Account<'info, TimeLockedVault>,
 }
 
 #[derive(Accounts)]

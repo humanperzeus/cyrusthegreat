@@ -117,8 +117,8 @@ export function TransferModal({
               }
             </DialogTitle>
 
-            {/* Multi-Token Toggle */}
-            {onMultiTokenTransfer && vaultTokens.length > 0 && (
+            {/* Multi-Token Toggle - Only for token transfers */}
+            {isTokenTransfer && onMultiTokenTransfer && vaultTokens.length > 0 && (
               <Button
                 type="button"
                 variant={isMultiTokenMode ? "default" : "outline"}
@@ -285,7 +285,7 @@ export function TransferModal({
           )}
 
           {/* Multi-Token Transfer Button */}
-          {isMultiTokenMode && (
+          {isMultiTokenMode && isTokenTransfer && (
             <div className="flex gap-3">
               <Button
                 type="button"
@@ -313,7 +313,7 @@ export function TransferModal({
       </DialogContent>
 
       {/* Multi-Token Transfer Modal */}
-      {showMultiTokenModal && onMultiTokenTransfer && (
+      {showMultiTokenModal && onMultiTokenTransfer && isTokenTransfer && (
         <MultiTokenTransferModal
           isOpen={showMultiTokenModal}
           onClose={() => setShowMultiTokenModal(false)}

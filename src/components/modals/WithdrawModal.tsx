@@ -115,8 +115,8 @@ export function WithdrawModal({
               }
             </DialogTitle>
 
-            {/* Multi-Token Toggle */}
-            {onMultiTokenWithdraw && vaultTokens.length > 0 && (
+            {/* Multi-Token Toggle - Only for token withdrawals */}
+            {isTokenWithdraw && onMultiTokenWithdraw && vaultTokens.length > 0 && (
               <Button
                 type="button"
                 variant={isMultiTokenMode ? "default" : "outline"}
@@ -262,7 +262,7 @@ export function WithdrawModal({
             )}
 
             {/* Multi-Token Withdraw Button */}
-            {isMultiTokenMode && (
+            {isMultiTokenMode && isTokenWithdraw && (
               <div className="flex gap-3">
                 <Button
                   type="button"
@@ -291,7 +291,7 @@ export function WithdrawModal({
       </DialogContent>
 
       {/* Multi-Token Withdraw Modal */}
-      {showMultiTokenModal && onMultiTokenWithdraw && (
+      {showMultiTokenModal && onMultiTokenWithdraw && isTokenWithdraw && (
         <MultiTokenWithdrawModal
           isOpen={showMultiTokenModal}
           onClose={() => setShowMultiTokenModal(false)}
