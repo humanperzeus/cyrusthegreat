@@ -7,17 +7,18 @@ import { useVault } from "@/hooks/useVault";
 import { parseEther } from "viem";
 import { debugLog } from "@/lib/utils";
 
+
 const Index = () => {
   // Chain switching state with persistence
   const [activeChain, setActiveChain] = useState<'ETH' | 'BSC' | 'BASE'>(() => {
     // Try to restore from localStorage, fallback to ETH
-    const saved = localStorage.getItem('vaultwhisper-active-chain');
+    const saved = localStorage.getItem('cyrusthegreat-active-chain');
     return (saved as 'ETH' | 'BSC' | 'BASE') || 'ETH';
   });
 
   // Save chain preference to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('vaultwhisper-active-chain', activeChain);
+    localStorage.setItem('cyrusthegreat-active-chain', activeChain);
     debugLog(`💾 Chain preference saved to localStorage: ${activeChain}`);
   }, [activeChain]);
   

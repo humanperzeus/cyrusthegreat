@@ -11,10 +11,10 @@ import { useAccount } from "wagmi";
 import { debugLog } from "@/lib/utils";
 
 // Import our new modular components
-import { BalanceDisplay } from "../shared/BalanceDisplay";
+import { BalanceDisplayMigrated } from "../shared/BalanceDisplayMigrated";
 import { ChainIndicator } from "../shared/ChainIndicator";
 // Import existing token components (we'll create these next)
-import { TokenList } from "../tokens/TokenList";
+import { TokenListMigrated } from "../tokens/TokenListMigrated";
 import { OperationButtons } from "../operations/OperationButtons";
 
 interface VaultCoreProps {
@@ -116,7 +116,7 @@ export function VaultCoreModular({
         <div className="flex justify-center">
           <div className="relative">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              VaultWhisper
+              CyrusTheGreat
             </h1>
             <div className="absolute -top-2 -right-2 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
           </div>
@@ -157,13 +157,12 @@ export function VaultCoreModular({
         />
       )}
 
-      {/* Balance Display - New Modular Component */}
+      {/* Balance Display - Migrated Modular Component */}
       {isConnected && (
-        <BalanceDisplay
-          walletBalance={walletBalance}
-          vaultBalance={vaultBalance}
+        <BalanceDisplayMigrated
           chain={activeChain}
-          isLoading={isLoading}
+          showRefreshButtons={true}
+          showMigrationInfo={true}
         />
       )}
 
@@ -177,28 +176,28 @@ export function VaultCoreModular({
             </TabsList>
 
             <TabsContent value="wallet" className="space-y-4">
-              <TokenList
-                tokens={walletTokens}
+              <TokenListMigrated
+                chain={activeChain}
                 type="wallet"
-                isLoading={isLoadingWalletTokens}
                 onRefresh={refetchWalletTokens}
                 onTokenDeposit={onTokenDeposit}
                 onTokenWithdraw={onTokenWithdraw}
                 onTokenTransfer={onTokenTransfer}
-                chain={activeChain}
+                showRefreshButtons={true}
+                showMigrationInfo={true}
               />
             </TabsContent>
 
             <TabsContent value="vault" className="space-y-4">
-              <TokenList
-                tokens={vaultTokens}
+              <TokenListMigrated
+                chain={activeChain}
                 type="vault"
-                isLoading={isLoadingVaultTokens}
                 onRefresh={refetchVaultTokens}
                 onTokenDeposit={onTokenDeposit}
                 onTokenWithdraw={onTokenWithdraw}
                 onTokenTransfer={onTokenTransfer}
-                chain={activeChain}
+                showRefreshButtons={true}
+                showMigrationInfo={true}
               />
             </TabsContent>
           </Tabs>
