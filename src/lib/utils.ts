@@ -55,21 +55,82 @@ export const formatTokenBalance = (balance: number | string, decimals: number = 
     return '0'.padEnd(decimals + 1, '0');
   }
   
+  // CRITICAL FIX: Prevent rounding down of small balances
+  // For very small balances, show more precision to avoid "0.000000" display
+  if (numBalance < 0.000001 && decimals >= 6) {
+    // For balances smaller than 0.000001, show up to 12 decimal places
+    return numBalance.toFixed(Math.min(12, decimals));
+  }
+  
+  // CRITICAL FIX: For tokens with 6 decimals (like PYUSD), show more precision for small amounts
+  if (decimals === 6 && numBalance < 0.000001) {
+    // Show up to 9 decimal places for very small 6-decimal tokens
+    return numBalance.toFixed(9);
+  }
+  
   // Use token-specific precision for calculations
   return numBalance.toFixed(decimals);
 };
 
 /**
- * Get default precision for a token type
+ * Fetch token decimals from contract
+ * @param tokenAddress - The token contract address
+ * @param publicClient - Viem public client for contract calls
+ * @returns Promise<number> - The token's decimal places
+ */
+export const fetchTokenDecimals = async (
+  tokenAddress: string, 
+  publicClient: any
+): Promise<number> => {
+  try {
+    // Standard ERC20 decimals() function
+    const decimals = await publicClient.readContract({
+      address: tokenAddress as `0x${string}`,
+      abi: [{
+        constant: true,
+        inputs: [],
+        name: "decimals",
+        outputs: [{ name: "", type: "uint8" }],
+        type: "function"
+      }],
+      functionName: "decimals"
+    });
+    
+    console.log(`✅ Fetched decimals for ${tokenAddress}: ${decimals}`);
+    return Number(decimals);
+  } catch (error) {
+    console.error(`❌ Failed to fetch decimals for ${tokenAddress}:`, error);
+    
+    // Fallback: try to get from Alchemy if available
+    try {
+      const response = await fetch(`/api/alchemy/getTokenMetadata?address=${tokenAddress}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.decimals !== undefined) {
+          console.log(`✅ Got decimals from Alchemy for ${tokenAddress}: ${data.decimals}`);
+          return data.decimals;
+        }
+      }
+    } catch (alchemyError) {
+      console.error(`❌ Alchemy fallback failed for ${tokenAddress}:`, alchemyError);
+    }
+    
+    // Last resort: return 18 (most common for ERC20)
+    console.warn(`⚠️ Using fallback decimals (18) for ${tokenAddress}`);
+    return 18;
+  }
+};
+
+/**
+ * Get default precision for a token type (DEPRECATED - use fetchTokenDecimals instead)
  * @param symbol - Token symbol
  * @returns Default decimal places (fallback only)
  * 
- * NOTE: This is a fallback function. In production, always get decimals
- * from the RPC call via alchemy_getTokenMetadata or contract calls.
+ * NOTE: This function is deprecated. Use fetchTokenDecimals to get actual decimals
+ * from the contract or RPC calls.
  */
 export const getDefaultTokenDecimals = (symbol: string): number => {
-  // Always default to 18 for safety - the actual decimals should come from RPC
-  // This function is only used as a last resort fallback
+  console.warn(`⚠️ getDefaultTokenDecimals is deprecated for ${symbol}. Use fetchTokenDecimals instead.`);
   return 18;
 };
 

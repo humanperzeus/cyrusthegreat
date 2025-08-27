@@ -57,7 +57,19 @@ export function MultiTokenDepositModal({
   const [isValidating, setIsValidating] = useState(false);
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
-  const MIN_DEPOSIT = "0.0001";
+  
+  // CRITICAL FIX: Dynamic minimum deposit based on token decimals
+  const getMinDeposit = (decimals: number): string => {
+    // For tokens with 6 decimals (like PYUSD), use 0.000001
+    // For tokens with 18 decimals (like ETH), use 0.000000000000000001
+    if (decimals <= 6) {
+      return '0.000001'; // 6 decimal precision
+    } else if (decimals <= 12) {
+      return '0.000000001'; // 9 decimal precision
+    } else {
+      return '0.000000000000000001'; // 18 decimal precision
+    }
+  };
 
   // Use utility function for token-specific precision
   const formatBalance = (balance: number, decimals: number = 18): string => {
@@ -72,21 +84,15 @@ export function MultiTokenDepositModal({
     }
   }, [isOpen]);
 
-  // Debug: Monitor deposits state changes
-  useEffect(() => {
-    console.log('📊 Deposits state changed:', {
-      count: deposits.length,
-      deposits: deposits.map(d => ({ symbol: d.token.symbol, address: d.token.address, amount: d.amount, isValid: d.isValid }))
-    });
-  }, [deposits]);
-
   const validateDeposit = (token: Token, amount: string): { isValid: boolean; error?: string } => {
     if (!amount || parseFloat(amount) <= 0) {
       return { isValid: false, error: "Amount must be greater than 0" };
     }
 
-    if (parseFloat(amount) < parseFloat(MIN_DEPOSIT)) {
-      return { isValid: false, error: `Minimum deposit is ${MIN_DEPOSIT}` };
+    // CRITICAL FIX: Use dynamic minimum based on token decimals
+    const minDeposit = getMinDeposit(token.decimals);
+    if (parseFloat(amount) < parseFloat(minDeposit)) {
+      return { isValid: false, error: `Minimum deposit is ${minDeposit} ${token.symbol}` };
     }
 
     const balance = parseFloat(token.balance);
@@ -107,18 +113,13 @@ export function MultiTokenDepositModal({
   };
 
   const addTokenToDeposit = (token: Token) => {
-    console.log('➕ Adding token to deposit:', { symbol: token.symbol, address: token.address });
-    console.log('📊 Current deposits count:', deposits.length);
-    
     if (deposits.length >= MAX_TOKENS) {
-      console.log('❌ Max tokens reached:', deposits.length);
       return;
     }
 
     // Check if token is already added
     const validation = validateTokenSelection(token);
     if (!validation.isValid) {
-      console.log('❌ Token validation failed:', validation.error);
       return; // Don't add if validation fails
     }
 
@@ -129,12 +130,7 @@ export function MultiTokenDepositModal({
       approvalType: 'exact' // Default to exact approval for security
     };
 
-    console.log('✅ Adding new deposit:', { symbol: token.symbol, address: token.address });
-    setDeposits(prev => {
-      const newDeposits = [...prev, newDeposit];
-      console.log('📊 Updated deposits array:', newDeposits.map(d => ({ symbol: d.token.symbol, address: d.token.address })));
-      return newDeposits;
-    });
+    setDeposits(prev => [...prev, newDeposit]);
     setSelectedToken(null);
   };
 
@@ -164,19 +160,11 @@ export function MultiTokenDepositModal({
 
 
   const isFormValid = () => {
-    console.log('🔍 Form validation check:', {
-      depositsLength: deposits.length,
-      deposits: deposits.map(d => ({ symbol: d.token.symbol, amount: d.amount, isValid: d.isValid }))
-    });
     return deposits.length > 0 && deposits.every(d => d.isValid && d.amount);
   };
 
   const handleDeposit = () => {
     if (!isFormValid()) {
-      console.log('❌ Form validation failed:', {
-        depositsLength: deposits.length,
-        deposits: deposits.map(d => ({ symbol: d.token.symbol, amount: d.amount, isValid: d.isValid }))
-      });
       return;
     }
 
@@ -187,11 +175,6 @@ export function MultiTokenDepositModal({
         amount: d.amount,
         approvalType: d.approvalType
       }));
-
-      console.log('🚀 Sending deposit data to parent:', {
-        count: depositData.length,
-        data: depositData.map(d => ({ token: d.token, amount: d.amount }))
-      });
 
       onDeposit(depositData);
       // Don't close modal immediately - let wagmi hooks handle transaction state

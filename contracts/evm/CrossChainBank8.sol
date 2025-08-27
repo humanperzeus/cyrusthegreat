@@ -233,8 +233,7 @@ contract CrossChainBank8 is ReentrancyGuard {
 
         for (uint256 i = 0; i < amounts.length; i++) {
             require(amounts[i] > 0, "Zero amount not allowed");
-            // FIXED: Allow address(0) for native ETH in multi-token operations
-            // require(tokens[i] != address(0), "Invalid token address");
+            require(tokens[i] != address(0), "Invalid token address");
         }
 
         emit BatchOperation(msg.sender, tokens.length);

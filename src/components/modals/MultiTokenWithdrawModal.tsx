@@ -55,7 +55,19 @@ export function MultiTokenWithdrawModal({
   const [isValidating, setIsValidating] = useState(false);
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
-  const MIN_WITHDRAW = "0.0001";
+  
+  // CRITICAL FIX: Dynamic minimum withdrawal based on token decimals
+  const getMinWithdraw = (decimals: number): string => {
+    // For tokens with 6 decimals (like PYUSD), use 0.000001
+    // For tokens with 18 decimals (like ETH), use 0.000000000000000001
+    if (decimals <= 6) {
+      return '0.000001'; // 6 decimal precision
+    } else if (decimals <= 12) {
+      return '0.000000001'; // 9 decimal precision
+    } else {
+      return '0.000000000000000001'; // 18 decimal precision
+    }
+  };
 
   // Use utility function for token-specific precision
   const formatBalance = (balance: number, decimals: number = 18): string => {
@@ -75,8 +87,10 @@ export function MultiTokenWithdrawModal({
       return { isValid: false, error: "Amount must be greater than 0" };
     }
 
-    if (parseFloat(amount) < parseFloat(MIN_WITHDRAW)) {
-      return { isValid: false, error: `Minimum withdrawal is ${MIN_WITHDRAW}` };
+    // CRITICAL FIX: Use dynamic minimum based on token decimals
+    const minWithdraw = getMinWithdraw(token.decimals);
+    if (parseFloat(amount) < parseFloat(minWithdraw)) {
+      return { isValid: false, error: `Minimum withdrawal is ${minWithdraw} ${token.symbol}` };
     }
 
     const balance = parseFloat(token.balance);
