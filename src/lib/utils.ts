@@ -66,10 +66,20 @@ export const formatTokenBalance = (balance: number | string, decimals: number = 
       const remainder = rawBalanceBigInt % divisor;
       
       if (remainder === 0n) {
+        // For tokens with specific decimals (like PYUSD with 6), always show decimal places
+        if (decimals === 6) {
+          return quotient.toString() + '.000000';
+        }
         return quotient.toString();
       } else {
-        // Format with proper decimal places
-        const remainderStr = remainder.toString().padStart(decimals, '0');
+        // Format with proper decimal places, but trim unnecessary trailing zeros
+        let remainderStr = remainder.toString().padStart(decimals, '0');
+        
+        // Trim trailing zeros for cleaner display
+        while (remainderStr.endsWith('0') && remainderStr.length > 1) {
+          remainderStr = remainderStr.slice(0, -1);
+        }
+        
         return quotient.toString() + '.' + remainderStr;
       }
     } else {
