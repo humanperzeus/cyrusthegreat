@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatTokenBalance } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ export function WithdrawModal({
   tokenSymbol,
   tokenAddress,
   tokenBalance,
+  tokenDecimals,
   activeChain,
   vaultTokens = [],
   rateLimitStatus
@@ -85,8 +87,10 @@ export function WithdrawModal({
   };
 
   const setMaxAmount = () => {
-    if (isTokenWithdraw && tokenBalance) {
-      setAmount(tokenBalance);
+    if (isTokenWithdraw && tokenBalance && tokenDecimals) {
+      // CRITICAL FIX: Use formatted balance for MAX button, not raw balance
+      const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
+      setAmount(formattedBalance);
     } else {
       setAmount(vaultBalance);
     }

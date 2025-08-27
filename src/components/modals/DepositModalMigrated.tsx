@@ -4,6 +4,8 @@
  */
 
 import { useState, useEffect } from "react";
+import { formatTokenBalance } from "@/lib/utils";
+import { parseEther, formatEther } from "viem";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,10 +79,12 @@ export function DepositModalMigrated({
     refetchWalletTokens
   } = tokenManager;
 
-  // Get specific token balance if token deposit
-  const tokenBalance = isTokenDeposit && tokenAddress
-    ? walletTokens.find(t => t.address === tokenAddress)?.balance || "0"
-    : "0";
+  // Get specific token balance and decimals if token deposit
+  const tokenData = isTokenDeposit && tokenAddress
+    ? walletTokens.find(t => t.address === tokenAddress)
+    : null;
+  const tokenBalance = tokenData?.balance || "0";
+  const tokenDecimals = tokenData?.decimals || 18;
 
   // Auto-close modal after successful transaction
   useEffect(() => {
@@ -122,9 +126,26 @@ export function DepositModalMigrated({
   };
 
   const handleMaxDeposit = () => {
-    // For fees added on top, we need to leave room for the fee
-    const maxAmount = Math.max(0, Number(walletBalance) - Number(currentFee));
-    setAmount(maxAmount.toFixed(6));
+    // CRITICAL FIX: For ETH, preserve full precision when calculating max amount
+    // Convert to BigInt for precise arithmetic, then format for display
+    try {
+      const walletBalanceWei = parseEther(walletBalance);
+      const feeWei = parseEther(currentFee);
+      const maxAmountWei = walletBalanceWei - feeWei;
+      
+      if (maxAmountWei > 0n) {
+        // Format with full precision using formatEther
+        const maxAmountFormatted = formatEther(maxAmountWei);
+        setAmount(maxAmountFormatted);
+      } else {
+        setAmount("0");
+      }
+    } catch (error) {
+      console.error('❌ Error calculating max ETH amount:', error);
+      // Fallback to simple calculation
+      const maxAmount = Math.max(0, Number(walletBalance) - Number(currentFee));
+      setAmount(maxAmount.toString());
+    }
   };
 
   const handleRefresh = () => {
@@ -238,7 +259,15 @@ export function DepositModalMigrated({
               />
               <Button
                 variant="outline"
-                onClick={isTokenDeposit ? () => setAmount(tokenBalance || "0") : handleMaxDeposit}
+                onClick={isTokenDeposit ? () => {
+                  // CRITICAL FIX: Use formatted balance for MAX button, not raw balance
+                  if (tokenBalance && tokenDecimals) {
+                    const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
+                    setAmount(formattedBalance);
+                  } else {
+                    setAmount(tokenBalance || "0");
+                  }
+                } : handleMaxDeposit}
                 disabled={isLoading}
               >
                 Max

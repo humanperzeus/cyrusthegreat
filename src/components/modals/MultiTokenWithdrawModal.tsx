@@ -242,7 +242,11 @@ export function MultiTokenWithdrawModal({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => updateWithdrawalAmount(index, withdrawal.token.balance)}
+                            onClick={() => {
+                              // CRITICAL FIX: Use formatted balance for MAX button, not raw balance
+                              const formattedBalance = formatTokenBalance(withdrawal.token.balance, withdrawal.token.decimals);
+                              updateWithdrawalAmount(index, formattedBalance);
+                            }}
                             disabled={isLoading}
                             className="px-2 py-1 h-8 text-xs"
                           >
