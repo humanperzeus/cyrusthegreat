@@ -66,19 +66,8 @@ export function DepositModal({
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
-  // Auto-close modal after successful transaction
-  useEffect(() => {
-    if (isTransactionConfirmed && !isLoading) {
-      // Wait a moment for user to see success message, then close
-      const timer = setTimeout(() => {
-        onOpenChange(false);
-        setAmount(""); // Reset amount
-        setIsMultiTokenMode(false); // Reset multi-token mode
-      }, 1500);
-
-      return () => clearTimeout(timer);
-    }
-  }, [isTransactionConfirmed, isLoading, onOpenChange]);
+  // Auto-close modal after successful transaction (now handled centrally in Index.tsx)
+  // Removed to prevent conflicts with centralized modal management
 
   // Reset multi-token mode when modal opens/closes
   useEffect(() => {
@@ -304,7 +293,11 @@ export function DepositModal({
       {showMultiTokenModal && onMultiTokenDeposit && isTokenDeposit && (
         <MultiTokenDepositModal
           isOpen={showMultiTokenModal}
-          onClose={() => setShowMultiTokenModal(false)}
+          onClose={() => {
+            setShowMultiTokenModal(false);
+            // Auto-refresh balances when multi-token modal closes
+            // Note: The parent modal will also refresh when it closes
+          }}
           availableTokens={availableTokens}
           onDeposit={handleMultiTokenDeposit}
           isLoading={isLoading}

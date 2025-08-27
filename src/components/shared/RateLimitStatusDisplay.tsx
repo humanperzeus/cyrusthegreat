@@ -41,8 +41,9 @@ export function RateLimitStatusDisplay({
       setTimeRemaining(remaining);
     };
 
-    updateTimeRemaining();
-    const interval = setInterval(updateTimeRemaining, 1000);
+    // DISABLED: Timer to prevent RPC spam
+    // updateTimeRemaining();
+    // const interval = setInterval(updateTimeRemaining, 5000);
 
     return () => clearInterval(interval);
   }, [rateLimitStatus?.resetTime]);
