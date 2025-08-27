@@ -93,8 +93,10 @@ export function DepositModal({
 
   const handleMaxDeposit = () => {
     if (isTokenDeposit && tokenBalance) {
-      // For tokens, use the full balance (fee is paid separately)
-      setAmount(tokenBalance);
+      // For tokens, use the formatted balance (fee is paid separately)
+      const tokenDecimals = availableTokens?.find(t => t.address === tokenAddress)?.decimals || 18;
+      const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
+      setAmount(formattedBalance);
     } else {
       // For ETH, leave room for the fee
       const maxAmount = Math.max(0, Number(walletBalance) - Number(currentFee));
