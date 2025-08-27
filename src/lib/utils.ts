@@ -46,6 +46,24 @@ export const debugError = (...args: any[]): void => {
  * @param decimals - The token's decimal places
  * @returns Formatted balance string with correct precision
  */
+// CRITICAL FIX: Helper function to convert BigInt to full precision string
+export const bigIntToFullPrecisionString = (value: bigint): string => {
+  try {
+    // Method 1: Direct toString(10) - preferred
+    const directString = value.toString(10);
+    if (!directString.includes('e+') && !directString.includes('E+')) {
+      return directString;
+    }
+    
+    // Method 2: Hex conversion fallback
+    const hexString = value.toString(16);
+    return BigInt('0x' + hexString).toString(10);
+  } catch (error) {
+    console.error('❌ Failed to convert BigInt to string:', error);
+    return '0';
+  }
+};
+
 export const formatTokenBalance = (balance: number | string, decimals: number = 18): string => {
   // CRITICAL FIX: Handle raw balances (like from Alchemy API) vs human-readable balances
   

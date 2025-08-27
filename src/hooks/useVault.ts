@@ -9,7 +9,7 @@ import { config } from '@/lib/wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
-import { debugLog, debugWarn, debugError, weiToEtherFullPrecision, fetchTokenDecimals, fetchTokenSymbol, formatTokenBalance } from '@/lib/utils';
+import { debugLog, debugWarn, debugError, weiToEtherFullPrecision, fetchTokenDecimals, fetchTokenSymbol, formatTokenBalance, bigIntToFullPrecisionString } from '@/lib/utils';
 
 // Add window.ethereum type
 declare global {
@@ -590,8 +590,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           hasScientificNotation: tokenBalance.toString().includes('e+') || tokenBalance.toString().includes('E+')
         });
         
-        // Store the raw balance as a string to preserve full precision
-        humanBalance = tokenBalance.toString();
+        // CRITICAL FIX: Use the robust BigInt to string conversion function
+        // This prevents scientific notation and preserves full precision
+        humanBalance = bigIntToFullPrecisionString(tokenBalance);
         
         // CRITICAL: Verify we're not losing precision
         if (humanBalance.includes('e+') || humanBalance.includes('E+')) {
