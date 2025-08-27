@@ -7,7 +7,7 @@ import { WalletConnector } from "./WalletConnector";
 import { useAccount } from "wagmi";
 import { switchToChain, getActiveChainInfo, getChainConfig } from "@/config/web3";
 import { Badge } from "@/components/ui/badge";
-import { debugLog, formatTokenBalance } from "@/lib/utils";
+import { debugLog, debugError, formatTokenBalance } from "@/lib/utils";
 
 interface VaultCoreProps {
   walletBalance: string;
@@ -21,9 +21,9 @@ interface VaultCoreProps {
   onWithdraw: () => void;
   onTransfer: () => void;
   // Token operation handlers
-  onTokenDeposit: (token: { symbol: string; address: string; balance: string }) => void;
-  onTokenWithdraw: (token: { symbol: string; address: string; balance: string }) => void;
-  onTokenTransfer: (token: { symbol: string; address: string; balance: string }) => void;
+  onTokenDeposit: (token: { symbol: string; address: string; balance: string; decimals: number }) => void;
+  onTokenWithdraw: (token: { symbol: string; address: string; balance: string; decimals: number }) => void;
+  onTokenTransfer: (token: { symbol: string; address: string; balance: string; decimals: number }) => void;
   // Token display props
   walletTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
   vaultTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
@@ -174,7 +174,7 @@ export const VaultCore = ({
   } | null>(null);
 
   // Handle token deposit click
-  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     // CRITICAL FIX: Ensure we're using the full precision balance for deposit
     // The token.balance might be truncated, so we need to get the fresh data
     debugLog(`🔍 Token deposit requested for ${token.symbol}:`, {
@@ -560,7 +560,20 @@ export const VaultCore = ({
                         </div>
                                                 <div>
                           <div className="font-semibold text-foreground">{token.symbol}</div>
-                          <div className="text-sm text-vault-success font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
+                          <div className="text-sm text-vault-success font-bold">
+                            {(() => {
+                              // DEBUG: Log the exact values being passed to formatTokenBalance
+                              console.log(`🔍 VaultCore display for ${token.symbol}:`, {
+                                rawBalance: token.balance,
+                                rawBalanceType: typeof token.balance,
+                                rawBalanceLength: token.balance?.length,
+                                decimals: token.decimals,
+                                hasScientificNotation: token.balance?.includes('e+') || token.balance?.includes('E+')
+                              });
+                              
+                              return formatTokenBalance(token.balance, token.decimals);
+                            })()}
+                          </div>
                           {/* DEBUG: Show raw balance to verify precision */}
                           <div className="text-xs text-muted-foreground">
                             Raw: {token.balance}
