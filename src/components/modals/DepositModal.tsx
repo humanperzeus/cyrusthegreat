@@ -210,6 +210,29 @@ export function DepositModal({
             </div>
           </div>
 
+          {/* ✅ NEW: Show error when insufficient balance */}
+          {isTokenDeposit && tokenBalance && availableTokens.length > 0 && amount && !isNaN(Number(amount)) && (() => {
+            try {
+              const tokenData = availableTokens.find(t => t.address === tokenAddress);
+              if (!tokenData) return null;
+              
+              const userBalance = parseFloat(tokenBalance);
+              const requestedAmount = parseFloat(amount);
+              
+              if (requestedAmount > userBalance) {
+                return (
+                  <div className="text-red-600 text-sm text-center p-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                    ❌ Insufficient Balance: You only have {formatTokenBalance(tokenBalance, tokenData.decimals)} {tokenSymbol}. 
+                    Cannot deposit {amount} {tokenSymbol}.
+                  </div>
+                );
+              }
+              return null;
+            } catch (error) {
+              return null; // If validation fails, don't show error (fail-safe)
+            }
+          })()}
+
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Wallet Balance:</span>
@@ -276,7 +299,26 @@ export function DepositModal({
                   onDeposit(amount);
                 }
               }}
-              disabled={isLoading || !amount || Number(amount) <= 0}
+              disabled={
+                isLoading || 
+                !amount || 
+                Number(amount) <= 0 ||
+                // ✅ NEW: Check if user has sufficient token balance
+                (isTokenDeposit && tokenBalance && availableTokens.length > 0 && (() => {
+                  try {
+                    const tokenData = availableTokens.find(t => t.address === tokenAddress);
+                    if (!tokenData) return false;
+                    
+                    const userBalance = parseFloat(tokenBalance);
+                    const requestedAmount = parseFloat(amount);
+                    
+                    // If requested amount exceeds user balance, disable button
+                    return requestedAmount > userBalance;
+                  } catch (error) {
+                    return false; // If validation fails, allow button (fail-safe)
+                  }
+                })())
+              }
               className="w-full"
             >
               {isSimulating ? (
