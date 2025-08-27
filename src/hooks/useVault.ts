@@ -1099,17 +1099,18 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             }
           }
 
-          // Calculate human-readable balance with token-specific precision
-          const humanBalance = balanceDecimal / Math.pow(10, decimals);
+          // CRITICAL FIX: Store raw balance as string to preserve full precision
+          // Only format for display when needed, not during storage
+          const rawBalance = balanceDecimal.toString();
           
           processedTokens.push({
             address: token.contractAddress,
             symbol: symbol,
-            balance: humanBalance.toFixed(decimals), // Use actual token decimals
+            balance: rawBalance, // Store raw balance to preserve precision
             decimals: decimals
           });
           
-          debugLog(`✅ Token processed: ${symbol} = ${humanBalance.toFixed(decimals)} (${decimals} decimals)`);
+          debugLog(`✅ Token processed: ${symbol} = ${rawBalance} raw units (${decimals} decimals)`);
         }
       } catch (error) {
         debugError(`❌ Error processing token ${token.contractAddress}:`, error);

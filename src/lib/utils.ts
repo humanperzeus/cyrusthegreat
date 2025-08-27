@@ -44,12 +44,27 @@ export const debugError = (...args: any[]): void => {
 
 /**
  * Format balance with token-specific precision
- * @param balance - The balance amount
+ * @param balance - The balance amount (can be raw units or human-readable)
  * @param decimals - The token's decimal places
  * @returns Formatted balance string with correct precision
  */
 export const formatTokenBalance = (balance: number | string, decimals: number = 18): string => {
-  const numBalance = typeof balance === 'string' ? parseFloat(balance) : balance;
+  // CRITICAL FIX: Handle raw balances (like from Alchemy API) vs human-readable balances
+  let numBalance: number;
+  
+  if (typeof balance === 'string') {
+    // Check if this looks like a raw balance (very large number)
+    const rawBalance = parseFloat(balance);
+    if (rawBalance > 1000000) { // Likely raw units
+      // Convert raw units to human-readable
+      numBalance = rawBalance / Math.pow(10, decimals);
+    } else {
+      // Already human-readable
+      numBalance = rawBalance;
+    }
+  } else {
+    numBalance = balance;
+  }
   
   if (numBalance === 0) {
     return '0'.padEnd(decimals + 1, '0');
