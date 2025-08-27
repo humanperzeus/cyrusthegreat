@@ -71,10 +71,7 @@ export function MultiTokenDepositModal({
     }
   };
 
-  // Use utility function for token-specific precision
-  const formatBalance = (balance: number, decimals: number = 18): string => {
-    return formatTokenBalance(balance, decimals);
-  };
+
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -101,7 +98,7 @@ export function MultiTokenDepositModal({
     const balanceInSmallestUnit = BigInt(Math.floor(parseFloat(token.balance) * Math.pow(10, token.decimals)));
     
     if (amountInSmallestUnit > balanceInSmallestUnit) {
-      return { isValid: false, error: `Insufficient balance. Max: ${formatBalance(parseFloat(token.balance), token.decimals)}` };
+      return { isValid: false, error: `Insufficient balance. Max: ${formatTokenBalance(token.balance, token.decimals)}` };
     }
 
     return { isValid: true };
@@ -270,7 +267,7 @@ export function MultiTokenDepositModal({
                           </Button>
                         </div>
                         <div className="text-sm text-gray-600">
-                          Balance: {formatBalance(parseFloat(deposit.token.balance), deposit.token.decimals)} {deposit.token.symbol}
+                                                        Balance: {formatTokenBalance(deposit.token.balance, deposit.token.decimals)} {deposit.token.symbol}
                         </div>
                       </div>
                       <Button

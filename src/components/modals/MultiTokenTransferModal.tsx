@@ -101,7 +101,7 @@ export function MultiTokenTransferModal({
     const balanceInSmallestUnit = BigInt(Math.floor(parseFloat(token.balance) * Math.pow(10, token.decimals)));
     
     if (amountInSmallestUnit > balanceInSmallestUnit) {
-      return { isValid: false, error: `Insufficient vault balance. Max: ${formatBalance(parseFloat(token.balance), token.decimals)}` };
+      return { isValid: false, error: `Insufficient vault balance. Max: ${formatTokenBalance(token.balance, token.decimals)}` };
     }
 
     return { isValid: true };
@@ -291,7 +291,7 @@ export function MultiTokenTransferModal({
                           </Button>
                         </div>
                         <div className="text-sm text-gray-600">
-                          Vault Balance: {formatBalance(parseFloat(transfer.token.balance), transfer.token.decimals)} {transfer.token.symbol}
+                                                        Vault Balance: {formatTokenBalance(transfer.token.balance, transfer.token.decimals)} {transfer.token.symbol}
                         </div>
                       </div>
                       <Button
@@ -333,7 +333,7 @@ export function MultiTokenTransferModal({
                       <div>
                         <div className="font-medium text-sm">{token.symbol}</div>
                         <div className="text-xs text-muted-foreground">
-                          {formatBalance(parseFloat(token.balance), token.decimals)} available
+                                                      {formatTokenBalance(token.balance, token.decimals)} available
                         </div>
                       </div>
                     </div>
