@@ -1642,6 +1642,54 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       const amountWei = parseUnits(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
 
+      // ✅ NEW: PRE-SIMULATION - Check if transaction will succeed
+      debugLog(`🔍 Pre-simulating token deposit transaction...`);
+      try {
+        const { request } = await publicClient.simulateContract({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'depositToken',
+          args: [tokenAddress, amountWei],
+          account: address,
+          value: currentFee as bigint,
+        });
+        debugLog(`✅ Pre-simulation successful - transaction will succeed`);
+      } catch (simulationError) {
+        debugError('❌ Pre-simulation failed:', simulationError);
+        
+        // Check if it's a balance/allowance issue
+        if (simulationError instanceof Error) {
+          if (simulationError.message.includes('insufficient') || simulationError.message.includes('balance')) {
+            toast({
+              title: "Insufficient Balance",
+              description: `You don't have enough ${tokenSymbol} to deposit this amount.`,
+              variant: "destructive",
+            });
+          } else if (simulationError.message.includes('allowance') || simulationError.message.includes('approve')) {
+            toast({
+              title: "Approval Required",
+              description: `Please approve ${tokenSymbol} spending first.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Transaction Will Fail",
+              description: `Pre-simulation failed: ${simulationError.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Transaction Will Fail",
+            description: "Pre-simulation failed - transaction would not succeed",
+            variant: "destructive",
+          });
+        }
+        
+        setIsLoading(false);
+        return; // ❌ Block transaction - user saves gas
+      }
+
       // Step 3: First approve the token
       const approved = await approveToken(tokenAddress, amountWei);
       if (!approved) {
@@ -1882,6 +1930,28 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                 variant: "destructive",
               });
               return;
+            }
+            
+            // ✅ NEW: PRE-SIMULATION - Check if ETH deposit will succeed
+            console.log('🔍 Pre-simulating ETH deposit transaction...');
+            try {
+              const { request } = await publicClient.simulateContract({
+                address: getActiveContractAddress() as `0x${string}`,
+                abi: VAULT_ABI,
+                functionName: 'depositETH',
+                args: [],
+                account: address,
+                value: totalEthValue,
+              });
+              console.log('✅ ETH deposit pre-simulation successful');
+            } catch (simulationError) {
+              console.error('❌ ETH deposit pre-simulation failed:', simulationError);
+              toast({
+                title: "ETH Deposit Will Fail",
+                description: "Pre-simulation failed - transaction would not succeed",
+                variant: "destructive",
+              });
+              return; // ❌ Block transaction - user saves gas
             }
             
             // Execute ETH deposit
@@ -2411,6 +2481,48 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         });
         setIsLoading(false);
         return;
+      }
+
+      // ✅ NEW: PRE-SIMULATION - Check if withdrawal will succeed
+      debugLog(`🔍 Pre-simulating token withdrawal transaction...`);
+      try {
+        const { request } = await publicClient.simulateContract({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'withdrawToken',
+          args: [tokenAddress, amountWei],
+          account: address,
+          value: feeWei,
+        });
+        debugLog(`✅ Pre-simulation successful - withdrawal will succeed`);
+      } catch (simulationError) {
+        debugError('❌ Pre-simulation failed:', simulationError);
+        
+        // Check if it's a vault balance issue
+        if (simulationError instanceof Error) {
+          if (simulationError.message.includes('insufficient') || simulationError.message.includes('balance')) {
+            toast({
+              title: "Insufficient Vault Balance",
+              description: `You don't have enough ${tokenSymbol} in the vault to withdraw this amount.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Withdrawal Will Fail",
+              description: `Pre-simulation failed: ${simulationError.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Withdrawal Will Fail",
+            description: "Pre-simulation failed - withdrawal would not succeed",
+            variant: "destructive",
+          });
+        }
+        
+        setIsLoading(false);
+        return; // ❌ Block transaction - user saves gas
       }
 
       // Call the vault withdraw function WITH ETH fee
@@ -2947,6 +3059,48 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         });
         setIsLoading(false);
         return;
+      }
+
+      // ✅ NEW: PRE-SIMULATION - Check if transfer will succeed
+      debugLog(`🔍 Pre-simulating token transfer transaction...`);
+      try {
+        const { request } = await publicClient.simulateContract({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'transferInternalToken',
+          args: [tokenAddress, to, amountWei],
+          account: address,
+          value: feeWei,
+        });
+        debugLog(`✅ Pre-simulation successful - transfer will succeed`);
+      } catch (simulationError) {
+        debugError('❌ Pre-simulation failed:', simulationError);
+        
+        // Check if it's a vault balance issue
+        if (simulationError instanceof Error) {
+          if (simulationError.message.includes('insufficient') || simulationError.message.includes('balance')) {
+            toast({
+              title: "Insufficient Vault Balance",
+              description: `You don't have enough ${tokenSymbol} in the vault to transfer this amount.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Transfer Will Fail",
+              description: `Pre-simulation failed: ${simulationError.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Transfer Will Fail",
+            description: "Pre-simulation failed - transfer would not succeed",
+            variant: "destructive",
+          });
+        }
+        
+        setIsLoading(false);
+        return; // ❌ Block transaction - user saves gas
       }
 
       // Step 5: Execute token transfer (like your working project)
