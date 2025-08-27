@@ -18,6 +18,7 @@ import {
   Zap,
   Shield
 } from "lucide-react";
+import { formatTokenBalance } from "@/lib/utils";
 
 interface TokenTransaction {
   token: {
@@ -161,12 +162,12 @@ export function BatchTransactionPreview({
                   </div>
 
                   <div className="text-right">
-                    <div className={`font-mono ${hasInsufficient ? 'text-red-600' : 'text-gray-900'}`}>
-                      {amount.toFixed(6)} {token.token.symbol}
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      Balance: {balance.toFixed(6)} ({percentageOfBalance.toFixed(1)}%)
-                    </div>
+                                      <div className={`font-mono ${hasInsufficient ? 'text-red-600' : 'text-gray-900'}`}>
+                    {formatTokenBalance(amount, token.token.decimals)} {token.token.symbol}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    Balance: {formatTokenBalance(balance, token.token.decimals)} ({percentageOfBalance.toFixed(1)}%)
+                  </div>
                     {token.valueUSD && (
                       <div className="text-xs text-green-600">
                         ≈ ${parseFloat(token.valueUSD).toFixed(2)}

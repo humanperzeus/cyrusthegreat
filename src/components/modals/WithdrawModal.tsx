@@ -153,7 +153,7 @@ export function WithdrawModal({
                 <Input
                   id="amount"
                   type="number"
-                  step="0.000001"
+                  step="0.000000000000000001"
                   placeholder="0.0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}

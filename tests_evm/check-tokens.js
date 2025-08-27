@@ -276,9 +276,9 @@ class TokenChecker {
                 return quotientStr + '.000000';
             }
             
-            // Take first 6 decimal places
-            const decimalPart = remainderStr.substring(0, 6).padEnd(6, '0');
-            return quotientStr + '.' + decimalPart;
+            // Take first N decimal places based on token decimals
+            const decimalPart = remainder.toString().padStart(decimals, '0');
+            return quotient.toString() + '.' + decimalPart;
         } catch (error) {
             return '0.000000';
         }

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Trash2 } from "lucide-react";
+import { formatTokenBalance } from "@/lib/utils";
 
 interface Token {
   address: string;
@@ -38,33 +39,9 @@ export function TokenList({
   const [searchTerm, setSearchTerm] = useState("");
   const [newTokenAddress, setNewTokenAddress] = useState("");
 
-  // Simple balance formatting function - clean and minimal
+  // Use utility function for token-specific precision
   const formatBalance = (balance: number, decimals: number = 18): string => {
-    if (balance === 0) return "0";
-
-    // If it's a whole number, show no decimals
-    if (Number.isInteger(balance)) {
-      return balance.toString();
-    }
-
-    // For very small amounts, show significant decimals
-    if (balance < 0.0001) {
-      return balance.toFixed(6);
-    }
-
-    // For amounts less than 1, show up to 4 decimals
-    if (balance < 1) {
-      return balance.toFixed(4);
-    }
-
-    // For amounts less than 1000, show up to 2 decimals (but remove .00)
-    if (balance < 1000) {
-      const fixed = balance.toFixed(2);
-      return fixed.endsWith('.00') ? Math.floor(balance).toString() : fixed;
-    }
-
-    // For larger amounts, just show as plain number (no commas)
-    return Math.floor(balance).toString();
+    return formatTokenBalance(balance, decimals);
   };
 
   const filteredTokens = tokens.filter(token =>

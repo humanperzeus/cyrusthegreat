@@ -150,7 +150,7 @@ export const useTokenManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'):
         processedTokens.push({
           address: contractAddress,
           symbol,
-          balance: humanBalance.toFixed(4).replace(/\.?0+$/, ''),
+          balance: humanBalance.toFixed(decimals), // Use actual token decimals
           decimals
         });
       } catch (error) {
