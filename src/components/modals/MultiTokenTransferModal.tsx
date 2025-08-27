@@ -283,7 +283,11 @@ export function MultiTokenTransferModal({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => updateTransferAmount(index, transfer.token.balance)}
+                            onClick={() => {
+                              // CRITICAL FIX: Use formatted balance for MAX button, not raw balance
+                              const formattedBalance = formatTokenBalance(transfer.token.balance, transfer.token.decimals);
+                              updateTransferAmount(index, formattedBalance);
+                            }}
                             disabled={isLoading}
                             className="px-2 py-1 h-8 text-xs"
                           >

@@ -88,8 +88,10 @@ export function TransferModal({
   };
 
   const setMaxAmount = () => {
-    if (isTokenTransfer && tokenBalance) {
-      setAmount(tokenBalance);
+    if (isTokenTransfer && tokenBalance && tokenDecimals) {
+      // CRITICAL FIX: Use formatted balance for MAX button, not raw balance
+      const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
+      setAmount(formattedBalance);
     } else {
       setAmount(vaultBalance);
     }
