@@ -600,13 +600,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
               expectedFormat: `${quotient}.${remainder.toString().padStart(tokenDecimals, '0')}`
             });
             
-            if (remainder === 0n) {
-              humanBalance = quotient.toString();
-            } else {
-              // Format with proper decimal places
-              const remainderStr = remainder.toString().padStart(tokenDecimals, '0');
-              humanBalance = quotient.toString() + '.' + remainderStr;
-            }
+            // Always show decimal places for consistency, even when remainder is 0
+            const remainderStr = remainder.toString().padStart(tokenDecimals, '0');
+            humanBalance = quotient.toString() + '.' + remainderStr;
           }
         } else {
           humanBalance = '0';
