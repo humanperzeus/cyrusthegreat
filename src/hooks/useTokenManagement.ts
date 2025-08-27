@@ -146,11 +146,13 @@ export const useTokenManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'):
           }
         }
 
-        const humanBalance = balanceDecimal / Math.pow(10, decimals);
+        // CRITICAL FIX: Preserve full precision by storing raw balance
+        // Only format for display when needed, not during storage
+        const rawBalance = balanceDecimal.toString();
         processedTokens.push({
           address: contractAddress,
           symbol,
-          balance: humanBalance.toFixed(decimals), // Use actual token decimals
+          balance: rawBalance, // Store raw balance to preserve full precision
           decimals
         });
       } catch (error) {

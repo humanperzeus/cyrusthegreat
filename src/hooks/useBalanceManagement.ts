@@ -40,15 +40,13 @@ export const useBalanceManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'
   const [isLoadingVaultBalance, setIsLoadingVaultBalance] = useState(false);
   const [isLoadingFee, setIsLoadingFee] = useState(false);
 
-  // Format balance with token-specific precision for calculations
+  // CRITICAL FIX: Preserve full precision - don't truncate during storage
+  // Only format for display when needed, not during calculations
   const formatBalance = useCallback((balance: string, decimals: number = 18): string => {
-    if (!balance || balance === '0') return '0'.padEnd(decimals + 1, '0');
-
-    const numBalance = parseFloat(balance);
-    if (numBalance === 0) return '0'.padEnd(decimals + 1, '0');
-
-    // Use token-specific precision for calculations
-    return numBalance.toFixed(decimals);
+    if (!balance || balance === '0') return '0';
+    
+    // Don't truncate - return the full precision balance
+    return balance;
   }, []);
 
   // Check if user has sufficient balance

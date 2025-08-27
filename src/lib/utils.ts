@@ -49,44 +49,50 @@ export const debugError = (...args: any[]): void => {
 export const formatTokenBalance = (balance: number | string, decimals: number = 18): string => {
   // CRITICAL FIX: Handle raw balances (like from Alchemy API) vs human-readable balances
   if (typeof balance === 'string') {
-    // CRITICAL FIX: Check for scientific notation first, then check for human-readable
+    // CRITICAL FIX: Check for scientific notation first
     if (balance.includes('e+') || balance.includes('E+')) {
       // Scientific notation - always process
+      const balanceStr = parseFloat(balance).toLocaleString('fullwide', { useGrouping: false });
+      const rawBalanceBigInt = BigInt(balanceStr);
+      const divisor = BigInt(10 ** decimals);
+      const quotient = rawBalanceBigInt / divisor;
+      const remainder = rawBalanceBigInt % divisor;
+      
+      if (remainder === 0n) {
+        return quotient.toString();
+      } else {
+        let remainderStr = remainder.toString().padStart(decimals, '0');
+        while (remainderStr.endsWith('0') && remainderStr.length > 1) {
+          remainderStr = remainderStr.slice(0, -1);
+        }
+        return quotient.toString() + '.' + remainderStr;
+      }
     } else if (balance.includes('.')) {
       // Already human-readable - return as is
       return balance;
-    }
-    
-    // Everything else is treated as raw balance that needs conversion
-    // Even small numbers like "1", "100", "10000" are raw units that need conversion
-    // This is the key fix - we no longer use size-based heuristics
-    
-    // Convert scientific notation to regular decimal string first
-    let balanceStr = balance;
-    if (balance.includes('e+') || balance.includes('E+')) {
-      // Convert scientific notation to full decimal string
-      balanceStr = parseFloat(balance).toLocaleString('fullwide', { useGrouping: false });
-    }
-    
-    // CRITICAL FIX: Use BigInt division to preserve full precision
-    const rawBalanceBigInt = BigInt(balanceStr);
-    const divisor = BigInt(10 ** decimals);
-    const quotient = rawBalanceBigInt / divisor;
-    const remainder = rawBalanceBigInt % divisor;
-    
-    if (remainder === 0n) {
-      // Clean whole numbers - no unnecessary decimal places
-      return quotient.toString();
     } else {
-      // Format with proper decimal places, but trim unnecessary trailing zeros
-      let remainderStr = remainder.toString().padStart(decimals, '0');
+      // CRITICAL FIX: This is a raw balance that needs conversion
+      // Examples: "509287390999000000000026", "100000000", "1"
       
-      // Trim trailing zeros for cleaner display
-      while (remainderStr.endsWith('0') && remainderStr.length > 1) {
-        remainderStr = remainderStr.slice(0, -1);
+      const rawBalanceBigInt = BigInt(balance);
+      const divisor = BigInt(10 ** decimals);
+      const quotient = rawBalanceBigInt / divisor;
+      const remainder = rawBalanceBigInt % divisor;
+      
+      if (remainder === 0n) {
+        // Clean whole numbers - no unnecessary decimal places
+        return quotient.toString();
+      } else {
+        // Format with proper decimal places, but trim unnecessary trailing zeros
+        let remainderStr = remainder.toString().padStart(decimals, '0');
+        
+        // Trim trailing zeros for cleaner display
+        while (remainderStr.endsWith('0') && remainderStr.length > 1) {
+          remainderStr = remainderStr.slice(0, -1);
+        }
+        
+        return quotient.toString() + '.' + remainderStr;
       }
-      
-      return quotient.toString() + '.' + remainderStr;
     }
   } else {
     // Number input - convert to string

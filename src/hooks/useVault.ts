@@ -577,33 +577,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         const tokenSymbol = await fetchTokenSymbol(tokenAddr, publicClient);
         debugLog(`✅ Fetched symbol: ${tokenSymbol}`);
         
-        // CRITICAL FIX: Use token-specific decimals instead of always using formatEther (18 decimals)
+        // CRITICAL FIX: Store raw balance to preserve full precision
+        // Only format for display when needed, not during storage
         let humanBalance: string;
         if (tokenBalance) {
-          if (tokenDecimals === 18) {
-            // For 18-decimal tokens (like ETH), use formatEther
-            humanBalance = formatEther(tokenBalance as bigint);
-          } else {
-            // For other decimal tokens (like PYUSD with 6 decimals), use parseUnits
-            const balanceBigInt = tokenBalance as bigint;
-            const divisor = BigInt(10 ** tokenDecimals);
-            const quotient = balanceBigInt / divisor;
-            const remainder = balanceBigInt % divisor;
-            
-            // DEBUG: Log the raw values to understand the calculation
-            debugLog(`🔍 Balance calculation for ${tokenSymbol}:`, {
-              rawBalance: balanceBigInt.toString(),
-              tokenDecimals,
-              divisor: divisor.toString(),
-              quotient: quotient.toString(),
-              remainder: remainder.toString(),
-              expectedFormat: `${quotient}.${remainder.toString().padStart(tokenDecimals, '0')}`
-            });
-            
-            // Always show decimal places for consistency, even when remainder is 0
-            const remainderStr = remainder.toString().padStart(tokenDecimals, '0');
-            humanBalance = quotient.toString() + '.' + remainderStr;
-          }
+          // Store the raw balance as a string to preserve full precision
+          humanBalance = tokenBalance.toString();
         } else {
           humanBalance = '0';
         }
