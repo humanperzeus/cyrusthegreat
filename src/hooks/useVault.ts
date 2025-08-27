@@ -1980,8 +1980,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             console.log(`  🔄 Approving ${tokenAddress}...`);
 
             // Determine approval amount based on user's choice (deposit.approvalType)
+            // CRITICAL FIX: Add precision buffer for exact approvals to prevent leftover dust
             const approvalAmount = deposit.approvalType === 'exact'
-              ? requiredAmount  // Exact amount for this transaction
+              ? requiredAmount + (requiredAmount / 10000n)  // Add 0.01% buffer for exact
               : 2n ** 256n - 1n; // Unlimited approval
 
             // Approve token using writeContract
@@ -2122,8 +2123,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       const amountWei = parseUnits(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
 
-      // Step 3: Send approval transaction
-      debugLog(`🔐 Sending approval transaction for ${tokenSymbol}...`);
+      // Step 3: Send approval transaction with precision buffer
+      // CRITICAL FIX: Approve slightly more to account for precision differences
+      // This prevents the "leftover dust" issue where small amounts can't be deposited
+      const approvalAmount = amountWei + (amountWei / 10000n); // Add 0.01% buffer
+      debugLog(`🔐 Approval amount with buffer:`, approvalAmount.toString());
       
       await writeVaultContract({
         address: tokenAddress as `0x${string}`,
@@ -2144,7 +2148,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         functionName: 'approve',
         args: [
           getActiveContractAddress() as `0x${string}`,
-          amountWei // Use proper amount
+          approvalAmount // Use buffered amount for approval
         ],
         chain: getTargetChain(),
         account: address,
@@ -2271,7 +2275,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     try {
       debugLog(`🔐 Executing approval + auto-deposit for ${tokenSymbol}...`);
       
-      // Step 1: Send approval transaction
+      // Step 1: Send approval transaction with precision buffer
+      // CRITICAL FIX: Approve slightly more to account for precision differences
+      const approvalAmount = amount + (amount / 10000n); // Add 0.01% buffer
+      debugLog(`🔐 Approval amount with buffer:`, approvalAmount.toString());
+      
       await writeVaultContract({
         address: tokenAddress as `0x${string}`,
         abi: [
@@ -2291,7 +2299,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         functionName: 'approve',
         args: [
           getActiveContractAddress() as `0x${string}`,
-          amount
+          approvalAmount // Use buffered amount for approval
         ],
         chain: getTargetChain(),
         account: address,
