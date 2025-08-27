@@ -7,7 +7,7 @@ import { WalletConnector } from "./WalletConnector";
 import { useAccount } from "wagmi";
 import { switchToChain, getActiveChainInfo, getChainConfig } from "@/config/web3";
 import { Badge } from "@/components/ui/badge";
-import { debugLog } from "@/lib/utils";
+import { debugLog, formatTokenBalance } from "@/lib/utils";
 
 interface VaultCoreProps {
   walletBalance: string;
@@ -313,7 +313,7 @@ export const VaultCore = ({
                               </div>
                               <div>
                                 <div className="font-semibold text-foreground">{token.symbol}</div>
-                                <div className="text-sm text-vault-warning font-bold">{token.balance}</div>
+                                <div className="text-sm text-vault-warning font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
                               </div>
                             </div>
                             <Button
@@ -385,7 +385,7 @@ export const VaultCore = ({
                               </div>
                               <div>
                                 <div className="font-semibold text-foreground">{token.symbol}</div>
-                                <div className="text-sm text-vault-success font-bold">{token.balance}</div>
+                                <div className="text-sm text-vault-success font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
                               </div>
                             </div>
                             <div className="flex space-x-2">
@@ -480,7 +480,7 @@ export const VaultCore = ({
                         </div>
                         <div>
                           <div className="font-semibold text-foreground">{token.symbol}</div>
-                          <div className="text-sm text-vault-warning font-bold">{token.balance}</div>
+                                                          <div className="text-sm text-vault-warning font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
                         </div>
                       </div>
                       <Button
@@ -552,7 +552,7 @@ export const VaultCore = ({
                         </div>
                         <div>
                           <div className="font-semibold text-foreground">{token.symbol}</div>
-                          <div className="text-sm text-vault-success font-bold">{token.balance}</div>
+                                                          <div className="text-sm text-vault-success font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -661,7 +661,7 @@ export const VaultCore = ({
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="text-right mr-3">
-                    <div className="font-semibold text-vault-warning">{token.balance}</div>
+                                                <div className="font-semibold text-vault-warning">{formatTokenBalance(token.balance, token.decimals)}</div>
                   </div>
                   <Button
                     size="sm"
@@ -721,7 +721,7 @@ export const VaultCore = ({
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="text-right mr-3">
-                    <div className="font-semibold text-vault-success">{token.balance}</div>
+                                                <div className="font-semibold text-vault-success">{formatTokenBalance(token.balance, token.decimals)}</div>
                   </div>
                   <Button
                     size="sm"
@@ -796,7 +796,7 @@ export const VaultCore = ({
                     </div>
                     <div>
                       <div className="font-semibold text-foreground">{token.symbol}</div>
-                      <div className="text-lg font-bold text-vault-warning">{token.balance}</div>
+                                                <div className="text-lg font-bold text-vault-warning">{formatTokenBalance(token.balance, token.decimals)}</div>
                       <a
                         href={`${chainConfig.etherscanUrl}/address/${token.address}`}
                         target="_blank"
@@ -858,7 +858,7 @@ export const VaultCore = ({
                     </div>
                     <div>
                       <div className="font-semibold text-foreground">{token.symbol}</div>
-                      <div className="text-lg font-bold text-vault-success">{token.balance}</div>
+                                                <div className="text-lg font-bold text-vault-success">{formatTokenBalance(token.balance, token.decimals)}</div>
                       <a
                         href={`${chainConfig.etherscanUrl}/address/${token.address}`}
                         target="_blank"
