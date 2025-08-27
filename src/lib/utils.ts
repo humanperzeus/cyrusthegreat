@@ -37,9 +37,7 @@ export const debugWarn = (...args: any[]): void => {
  * But can be controlled by VITE_LOG_MODE if needed
  */
 export const debugError = (...args: any[]): void => {
-  if (shouldLog()) {
-    console.error(...args);
-  }
+  console.error(...args);
 };
 
 /**
@@ -50,41 +48,31 @@ export const debugError = (...args: any[]): void => {
  */
 export const formatTokenBalance = (balance: number | string, decimals: number = 18): string => {
   // CRITICAL FIX: Handle raw balances (like from Alchemy API) vs human-readable balances
-  let numBalance: number;
-  
   if (typeof balance === 'string') {
     // Check if this looks like a raw balance (very large number)
     const rawBalance = parseFloat(balance);
     if (rawBalance > 1000000) { // Likely raw units
-      // Convert raw units to human-readable
-      numBalance = rawBalance / Math.pow(10, decimals);
+      // CRITICAL FIX: Use BigInt division to preserve full precision
+      const rawBalanceBigInt = BigInt(balance);
+      const divisor = BigInt(10 ** decimals);
+      const quotient = rawBalanceBigInt / divisor;
+      const remainder = rawBalanceBigInt % divisor;
+      
+      if (remainder === 0n) {
+        return quotient.toString();
+      } else {
+        // Format with proper decimal places
+        const remainderStr = remainder.toString().padStart(decimals, '0');
+        return quotient.toString() + '.' + remainderStr;
+      }
     } else {
       // Already human-readable
-      numBalance = rawBalance;
+      return balance;
     }
   } else {
-    numBalance = balance;
+    // Number input - convert to string
+    return balance.toString();
   }
-  
-  if (numBalance === 0) {
-    return '0'.padEnd(decimals + 1, '0');
-  }
-  
-  // CRITICAL FIX: Prevent rounding down of small balances
-  // For very small balances, show more precision to avoid "0.000000" display
-  if (numBalance < 0.000001 && decimals >= 6) {
-    // For balances smaller than 0.000001, show up to 12 decimal places
-    return numBalance.toFixed(Math.min(12, decimals));
-  }
-  
-  // CRITICAL FIX: For tokens with 6 decimals (like PYUSD), show more precision for small amounts
-  if (decimals === 6 && numBalance < 0.000001) {
-    // Show up to 9 decimal places for very small 6-decimal tokens
-    return numBalance.toFixed(9);
-  }
-  
-  // Use token-specific precision for calculations
-  return numBalance.toFixed(decimals);
 };
 
 /**
