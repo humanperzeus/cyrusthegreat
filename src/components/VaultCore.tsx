@@ -89,6 +89,20 @@ export const VaultCore = ({
   activeChain,
   setActiveChain,
 }: VaultCoreProps) => {
+  
+  // DEBUG: Log what VaultCore receives
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      debugLog('🔍 VaultCore received vaultTokens:', {
+        count: vaultTokens.length,
+        tokens: vaultTokens.map(t => ({
+          symbol: t.symbol,
+          balance: t.balance,
+          decimals: t.decimals
+        }))
+      });
+    }
+  }, [vaultTokens]);
   const { isConnected } = useAccount();
   
   // Display mode state

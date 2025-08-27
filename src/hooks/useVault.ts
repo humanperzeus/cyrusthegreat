@@ -1248,6 +1248,17 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           }
           
           debugLog('✅ Final processed vault tokens:', processedTokens);
+          
+          // DEBUG: Log the state update
+          debugLog('🔄 Setting vault tokens state:', {
+            count: processedTokens.length,
+            tokens: processedTokens.map(t => ({
+              symbol: t.symbol,
+              balance: t.balance,
+              decimals: t.decimals
+            }))
+          });
+          
           setVaultTokens(processedTokens);
         };
         
