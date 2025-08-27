@@ -857,7 +857,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   const [isLoadingTokens, setIsLoadingTokens] = useState(false); // Keep for backward compatibility
 
   // CRITICAL FIX: Use full precision formatting instead of formatEther which rounds
-  const walletBalanceFormatted = walletBalance ? weiToEtherFullPrecision(walletBalance.value) : '0.000000000000000000';
+  const walletBalanceFormatted = walletBalance ? formatTokenBalance(walletBalance.value.toString(), 18) : '0';
   
   // Debug logging to see what vaultBalanceData we're processing
   if (process.env.NODE_ENV === 'development' && vaultBalanceData) {
@@ -869,7 +869,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   }
   
   // TEMPORARY TEST: Compare our function with formatEther to see the difference
-  const vaultBalanceFormatted = vaultBalanceData ? weiToEtherFullPrecision(vaultBalanceData as bigint) : '0.000000000000000000';
+      const vaultBalanceFormatted = vaultBalanceData ? formatTokenBalance(vaultBalanceData.toString(), 18) : '0';
   const vaultBalanceFormattedOld = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.000000000000000000';
   
   // Debug logging to see the final formatted result
@@ -879,7 +879,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     console.log('🔍 useVault vaultBalanceFormatted (RAW):', vaultBalanceData?.toString());
   }
   
-  const currentFeeFormatted = currentFee ? weiToEtherFullPrecision(currentFee as bigint) : '0.000000000000000000';
+  const currentFeeFormatted = currentFee ? formatTokenBalance(currentFee.toString(), 18) : '0';
 
   // Essential logging only - only log when state changes significantly
   if (process.env.NODE_ENV === 'development') {
