@@ -559,59 +559,68 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         const rpcUrl = getActiveRpcUrl();
 
         
-        // Use Alchemy API for both ETH and BSC chains - it works for both!
-        const metadataResponse = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'alchemy_getTokenMetadata',
-            params: [tokenAddr]
-          })
-        });
-
-        if (metadataResponse && metadataResponse.ok) {
-          const metadata = await metadataResponse.json();
-
-          
-          if (metadata.result) {
-            const processedToken = {
-              address: tokenAddr,
-              symbol: metadata.result.symbol || 'UNKNOWN',
-              balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-              decimals: metadata.result.decimals || 18
-            };
-            
-            processedTokens.push(processedToken);
-            // Only log significant token processing to reduce spam
-            if (parseFloat(processedToken.balance) > 0.001) {
-              debugLog(`✅ Token processed: ${processedToken.symbol} = ${processedToken.balance}`);
-            }
+        // CRITICAL FIX: Use our fetchTokenDecimals function instead of Alchemy metadata
+        // This ensures we get the correct decimals directly from the token contract
+        debugLog(`🚀 About to fetch token info for ${tokenAddr}...`);
+        
+        // Check if publicClient is available
+        if (!publicClient) {
+          debugError(`❌ No publicClient available for ${tokenAddr}`);
+          throw new Error('No publicClient available');
+        }
+        
+        debugLog(`🔧 Using publicClient for ${tokenAddr}:`, publicClient);
+        
+        const tokenDecimals = await fetchTokenDecimals(tokenAddr, publicClient);
+        debugLog(`✅ Fetched decimals: ${tokenDecimals}`);
+        
+        const tokenSymbol = await fetchTokenSymbol(tokenAddr, publicClient);
+        debugLog(`✅ Fetched symbol: ${tokenSymbol}`);
+        
+        // CRITICAL FIX: Use token-specific decimals instead of always using formatEther (18 decimals)
+        let humanBalance: string;
+        if (tokenBalance) {
+          if (tokenDecimals === 18) {
+            // For 18-decimal tokens (like ETH), use formatEther
+            humanBalance = formatEther(tokenBalance as bigint);
           } else {
-            // Fallback if no result in metadata
-            debugWarn(`⚠️ No metadata result for token ${tokenAddr}, using fallback`);
-            const fallbackToken = {
-              address: tokenAddr,
-              symbol: 'UNKNOWN',
-              balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-              decimals: 18
-            };
-            processedTokens.push(fallbackToken);
+            // For other decimal tokens (like PYUSD with 6 decimals), use parseUnits
+            const balanceBigInt = tokenBalance as bigint;
+            const divisor = BigInt(10 ** tokenDecimals);
+            const quotient = balanceBigInt / divisor;
+            const remainder = balanceBigInt % divisor;
+            
+            // DEBUG: Log the raw values to understand the calculation
+            debugLog(`🔍 Balance calculation for ${tokenSymbol}:`, {
+              rawBalance: balanceBigInt.toString(),
+              tokenDecimals,
+              divisor: divisor.toString(),
+              quotient: quotient.toString(),
+              remainder: remainder.toString(),
+              expectedFormat: `${quotient}.${remainder.toString().padStart(tokenDecimals, '0')}`
+            });
+            
+            if (remainder === 0n) {
+              humanBalance = quotient.toString();
+            } else {
+              // Format with proper decimal places
+              const remainderStr = remainder.toString().padStart(tokenDecimals, '0');
+              humanBalance = quotient.toString() + '.' + remainderStr;
+            }
           }
         } else {
-          // Fallback if metadata fetch fails
-          debugWarn(`⚠️ Failed to fetch metadata for token ${tokenAddr}, using fallback`);
-          const fallbackToken = {
-            address: tokenAddr,
-            symbol: 'UNKNOWN',
-            balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-            decimals: 18
-          };
-          processedTokens.push(fallbackToken);
-      }
+          humanBalance = '0';
+        }
+        
+        const processedToken = {
+          address: tokenAddr,
+          symbol: tokenSymbol,
+          balance: humanBalance,
+          decimals: tokenDecimals
+        };
+        
+        processedTokens.push(processedToken);
+        debugLog(`✅ Token processed with ${tokenDecimals} decimals:`, processedToken);
     } catch (error) {
         debugError(`❌ Error processing token ${tokenAddr}:`, error);
         // Error fallback
@@ -1133,144 +1142,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       debugLog('🔍 Balances is array:', Array.isArray(tokenBalances));
       
       if (Array.isArray(tokenAddresses) && Array.isArray(tokenBalances)) {
-        // Process tokens with real metadata
-        const processVaultTokens = async () => {
-          debugLog('🔄 Starting vault token processing...');
-          const processedTokens = [];
-          
-          for (let i = 0; i < tokenAddresses.length; i++) {
-            const tokenAddr = tokenAddresses[i];
-            const tokenBalance = tokenBalances[i];
-            
-            // Skip native ETH (address 0) - it's already displayed in top balance
-            if (tokenAddr === '0x0000000000000000000000000000000000000000') {
-              debugLog('⏭️ Skipping native ETH (address 0) - already displayed in top balance');
-              continue;
-            }
-            
-            try {
-              // DEBUG: Log the raw balance from contract
-              debugLog(`🔍 Raw balance from contract for ${tokenAddr}:`, {
-                rawBalance: tokenBalance?.toString(),
-                rawBalanceType: typeof tokenBalance,
-                rawBalanceBigInt: tokenBalance ? (tokenBalance as bigint).toString() : 'undefined'
-              });
-              
-              // CRITICAL FIX: Use our fetchTokenDecimals function instead of Alchemy metadata
-              // This ensures we get the correct decimals directly from the token contract
-              debugLog(`🚀 About to fetch token info for ${tokenAddr}...`);
-              
-              // Check if publicClient is available
-              if (!publicClient) {
-                debugError(`❌ No publicClient available for ${tokenAddr}`);
-                throw new Error('No publicClient available');
-              }
-              
-              debugLog(`🔧 Using publicClient for ${tokenAddr}:`, publicClient);
-              
-              const tokenDecimals = await fetchTokenDecimals(tokenAddr, publicClient);
-              debugLog(`✅ Fetched decimals: ${tokenDecimals}`);
-              
-              const tokenSymbol = await fetchTokenSymbol(tokenAddr, publicClient);
-              debugLog(`✅ Fetched symbol: ${tokenSymbol}`);
-              
-              debugLog(`🔍 Fetched token info for ${tokenAddr}:`, {
-                symbol: tokenSymbol,
-                decimals: tokenDecimals
-              });
-
-              if (metadataResponse.ok) {
-                const metadata = await metadataResponse.json();
-
-                
-                // CRITICAL FIX: Use fetched decimals and symbol instead of metadata
-                if (tokenDecimals && tokenSymbol) {
-                  // CRITICAL FIX: Use token-specific decimals instead of always using formatEther (18 decimals)
-                  let humanBalance: string;
-                  if (tokenBalance) {
-                    if (tokenDecimals === 18) {
-                      // For 18-decimal tokens (like ETH), use formatEther
-                      humanBalance = formatEther(tokenBalance as bigint);
-                    } else {
-                      // For other decimal tokens (like PYUSD with 6 decimals), use parseUnits
-                      const balanceBigInt = tokenBalance as bigint;
-                      const divisor = BigInt(10 ** tokenDecimals);
-                      const quotient = balanceBigInt / divisor;
-                      const remainder = balanceBigInt % divisor;
-                      
-                      // DEBUG: Log the raw values to understand the calculation
-                      debugLog(`🔍 Balance calculation for ${tokenSymbol}:`, {
-                        rawBalance: balanceBigInt.toString(),
-                        tokenDecimals,
-                        divisor: divisor.toString(),
-                        quotient: quotient.toString(),
-                        remainder: remainder.toString(),
-                        expectedFormat: `${quotient}.${remainder.toString().padStart(tokenDecimals, '0')}`
-                      });
-                      
-                      if (remainder === 0n) {
-                        humanBalance = quotient.toString();
-                      } else {
-                        // Format with proper decimal places
-                        const remainderStr = remainder.toString().padStart(tokenDecimals, '0');
-                        humanBalance = quotient.toString() + '.' + remainderStr;
-                      }
-                    }
-                  } else {
-                    humanBalance = '0';
-                  }
-                  
-                  const processedToken = {
-                    address: tokenAddr,
-                    symbol: tokenSymbol,
-                    balance: humanBalance,
-                    decimals: tokenDecimals
-                  };
-                  
-                  processedTokens.push(processedToken);
-                  debugLog(`✅ Token processed with ${tokenDecimals} decimals:`, processedToken);
-                }
-              } else {
-                // Fallback if metadata fetch fails - assume 18 decimals for safety
-                const fallbackToken = {
-                  address: tokenAddr,
-                  symbol: 'UNKNOWN',
-                  balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-                  decimals: 18
-                };
-                processedTokens.push(fallbackToken);
-                debugLog(`⚠️ Token fallback (18 decimals):`, fallbackToken);
-              }
-            } catch (error) {
-              debugError(`❌ Error fetching metadata for token ${tokenAddr}:`, error);
-              // Fallback on error - assume 18 decimals for safety
-              const errorToken = {
-                address: tokenAddr,
-                symbol: 'UNKNOWN',
-                balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-                decimals: 18
-              };
-              processedTokens.push(errorToken);
-              debugLog(`❌ Token error fallback (18 decimals):`, errorToken);
-            }
-          }
-          
-          debugLog('✅ Final processed vault tokens:', processedTokens);
-          
-          // DEBUG: Log the state update
-          debugLog('🔄 Setting vault tokens state:', {
-            count: processedTokens.length,
-            tokens: processedTokens.map(t => ({
-              symbol: t.symbol,
-              balance: t.balance,
-              decimals: t.decimals
-            }))
-          });
-          
-          setVaultTokens(processedTokens);
-        };
-        
-        processVaultTokens();
+        // CRITICAL FIX: Use the working processVaultTokensFromSignedCall function instead
+        // The old processVaultTokens function was never used and had bugs
+        debugLog('🔄 Using processVaultTokensFromSignedCall for vault token processing...');
+        await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
       } else {
         debugLog('❌ Vault tokens data structure invalid:', { tokenAddresses, tokenBalances });
         setVaultTokens([]);
