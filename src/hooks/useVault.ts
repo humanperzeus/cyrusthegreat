@@ -2349,6 +2349,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
 
     try {
+      // Validate that no ETH/native tokens are included in multi-token withdrawals
+      const ethWithdrawal = withdrawals.find(withdrawal => {
+        const tokenAddress = typeof withdrawal.token === 'string' ? withdrawal.token : withdrawal.token.address;
+        return tokenAddress === '0x0000000000000000000000000000000000000000';
+      });
+
+      if (ethWithdrawal) {
+        toast({
+          title: "ETH withdrawal not supported",
+          description: "ETH/native tokens cannot be withdrawn via multi-token operations. Use the single ETH withdrawal instead.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // For multi-token withdrawals, we need to validate each token has sufficient balance
       for (const withdrawal of withdrawals) {
         const tokenAddress = typeof withdrawal.token === 'string' ? withdrawal.token : withdrawal.token.address;

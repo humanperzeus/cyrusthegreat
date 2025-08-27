@@ -197,7 +197,11 @@ export function MultiTokenDepositModal({
     }
   };
 
+  // Filter out ETH/native tokens and already selected tokens
   const availableTokensForSelection = availableTokens.filter(token =>
+    // Exclude ETH/native token (0x0 address)
+    token.address !== '0x0000000000000000000000000000000000000000' &&
+    // Exclude already selected tokens
     !deposits.some(d => d.token.address === token.address)
   );
 
