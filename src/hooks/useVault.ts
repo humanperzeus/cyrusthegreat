@@ -577,15 +577,31 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         const tokenSymbol = await fetchTokenSymbol(tokenAddr, publicClient);
         debugLog(`✅ Fetched symbol: ${tokenSymbol}`);
         
-        // CRITICAL FIX: Store raw balance to preserve full precision
-        // Only format for display when needed, not during storage
-        let humanBalance: string;
-        if (tokenBalance) {
-          // Store the raw balance as a string to preserve full precision
-          humanBalance = tokenBalance.toString();
+              // CRITICAL FIX: Store raw balance to preserve full precision
+      // Only format for display when needed, not during storage
+      let humanBalance: string;
+      if (tokenBalance) {
+        // DEBUG: Log the exact type and value to identify precision loss
+        debugLog(`🔍 Token balance processing for ${tokenSymbol}:`, {
+          tokenBalanceType: typeof tokenBalance,
+          tokenBalanceValue: tokenBalance.toString(),
+          tokenBalanceLength: tokenBalance.toString().length,
+          isBigInt: tokenBalance instanceof BigInt,
+          hasScientificNotation: tokenBalance.toString().includes('e+') || tokenBalance.toString().includes('E+')
+        });
+        
+        // Store the raw balance as a string to preserve full precision
+        humanBalance = tokenBalance.toString();
+        
+        // CRITICAL: Verify we're not losing precision
+        if (humanBalance.includes('e+') || humanBalance.includes('E+')) {
+          debugError(`🚨 PRECISION LOSS DETECTED for ${tokenSymbol}! Balance converted to scientific notation:`, humanBalance);
         } else {
-          humanBalance = '0';
+          debugLog(`✅ Full precision preserved for ${tokenSymbol}:`, humanBalance);
         }
+      } else {
+        humanBalance = '0';
+      }
         
         const processedToken = {
           address: tokenAddr,
@@ -683,7 +699,20 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Process the result directly
       if (result && Array.isArray(result)) {
-        const [tokenAddresses, tokenBalances] = result;
+        // CRITICAL FIX: Explicitly assert BigInt typing to prevent precision loss
+        const [tokenAddresses, tokenBalances] = result as [`0x${string}`[], bigint[]];
+        
+        // DEBUG: Log the raw types and values to identify precision loss
+        debugLog('🔍 Raw vault tokens result types:', {
+          tokenAddressesType: typeof tokenAddresses,
+          tokenBalancesType: typeof tokenBalances,
+          tokenAddressesLength: tokenAddresses?.length,
+          tokenBalancesLength: tokenBalances?.length,
+          firstBalanceType: typeof tokenBalances?.[0],
+          firstBalanceValue: tokenBalances?.[0]?.toString(),
+          firstBalanceLength: tokenBalances?.[0]?.toString()?.length
+        });
+        
         debugLog('🔍 Raw vault tokens result:', { tokenAddresses, tokenBalances });
         
         // Process tokens with real metadata using the new function
