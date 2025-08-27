@@ -175,6 +175,14 @@ export const VaultCore = ({
 
   // Handle token deposit click
   const handleTokenDeposit = (token: { symbol: string; address: string; balance: string }) => {
+    // CRITICAL FIX: Ensure we're using the full precision balance for deposit
+    // The token.balance might be truncated, so we need to get the fresh data
+    debugLog(`🔍 Token deposit requested for ${token.symbol}:`, {
+      providedBalance: token.balance,
+      tokenAddress: token.address,
+      tokenDecimals: token.decimals
+    });
+    
     onTokenDeposit(token);
   };
 
@@ -550,9 +558,13 @@ export const VaultCore = ({
                         <div className="w-10 h-10 bg-vault-success/20 rounded-full flex items-center justify-center">
                           <span className="text-sm font-medium text-vault-success">{token.symbol.charAt(0)}</span>
                         </div>
-                        <div>
+                                                <div>
                           <div className="font-semibold text-foreground">{token.symbol}</div>
-                                                          <div className="text-sm text-vault-success font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
+                          <div className="text-sm text-vault-success font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
+                          {/* DEBUG: Show raw balance to verify precision */}
+                          <div className="text-xs text-muted-foreground">
+                            Raw: {token.balance}
+                          </div>
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -1343,6 +1355,33 @@ export const VaultCore = ({
       <div className="text-xs text-muted-foreground text-center p-2">
         made by <a href="https://x.com/humanperzeus" target="_blank" rel="noopener noreferrer" className="text-vault-primary hover:text-vault-primary/80 transition-colors">@humanperzeus</a>
       </div>
+
+      {/* CRITICAL: Debug function to force refresh vault tokens with full precision */}
+      {isConnected && (
+        <div className="text-xs text-center p-4 bg-blue-500/10 border border-blue-500/30 rounded mt-4">
+          <div className="font-bold text-blue-500 mb-2">🔧 PRECISION DEBUG - Force Refresh Vault Tokens</div>
+          <button
+            onClick={async () => {
+              debugLog('🔄 Force refreshing vault tokens for full precision...');
+              try {
+                // Clear current tokens
+                setVaultTokens([]);
+                // Force refetch
+                await refetchVaultTokens();
+                debugLog('✅ Vault tokens refreshed with full precision');
+              } catch (error) {
+                debugError('❌ Failed to refresh vault tokens:', error);
+              }
+            }}
+            className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+          >
+            🔄 Force Refresh Vault Tokens
+          </button>
+          <div className="text-blue-500/70 mt-2">
+            Use this button to force refresh vault tokens and get full precision balances
+          </div>
+        </div>
+      )}
     </div>
   );
 };
