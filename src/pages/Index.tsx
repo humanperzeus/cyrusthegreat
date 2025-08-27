@@ -7,6 +7,18 @@ import { useVault } from "@/hooks/useVault";
 import { parseEther } from "viem";
 import { debugLog } from "@/lib/utils";
 
+  // DISABLED: Debounce utility function to prevent RPC spam
+  // const debounce = <T extends (...args: any[]) => any>(
+  //   func: T,
+  //   wait: number
+  // ): ((...args: Parameters<T>) => void) => {
+  //   let timeout: NodeJS.Timeout;
+  //   return (...args: Parameters<T>) => {
+  //     clearTimeout(timeout);
+  //     timeout = setTimeout(() => func(...args), wait);
+  //   };
+  // };
+
 
 const Index = () => {
   // Chain switching state with persistence
@@ -65,21 +77,48 @@ const Index = () => {
     resetTime: number;
   } | null>(null);
 
-  // Fetch rate limit status on component mount and when dependencies change
-  useEffect(() => {
-    const fetchRateLimitStatus = async () => {
-      try {
-        const status = await getRateLimitStatus();
-        setRateLimitStatus(status);
-      } catch (error) {
-        console.error('Failed to fetch rate limit status:', error);
-      }
-    };
+  // DISABLED: Debounced refresh function to prevent RPC spam
+  // const debouncedRefresh = useCallback(
+  //   debounce(() => {
+  //     refetchWalletTokens();
+  //     refetchVaultTokens();
+  //   }, 300),
+  //   [refetchWalletTokens, refetchVaultTokens]
+  // );
 
-    if (isConnected && getRateLimitStatus) {
-      fetchRateLimitStatus();
+  // Auto-close modals when transaction is confirmed
+  useEffect(() => {
+    if (isConfirmed) {
+      // Close all modals when transaction is confirmed
+      setDepositModalOpen(false);
+      setWithdrawModalOpen(false);
+      setTransferModalOpen(false);
+      
+      // DISABLED: All refresh logic to prevent RPC spam
+      // The useVault hook already handles smart refresh after transactions
+      // No need for duplicate refresh calls from Index.tsx
     }
-  }, [isConnected, getRateLimitStatus, activeChain]);
+  }, [isConfirmed]);
+
+  // DISABLED: Rate limit status fetching to prevent RPC spam
+  // useEffect(() => {
+  //   const timeoutId = setTimeout(() => {
+  //     const fetchRateLimitStatus = async () => {
+  //       try {
+  //         const status = await getRateLimitStatus();
+  //         setRateLimitStatus(status);
+  //       } catch (error) {
+  //         console.error('Failed to fetch rate limit status:', error);
+  //       }
+  //     };
+
+  //     if (isConnected && getRateLimitStatus) {
+  //       fetchRateLimitStatus();
+  //       }
+  //     }, 2000); // 2 second delay to prevent rapid calls
+
+  //     return () => clearTimeout(timeoutId);
+  //   }, [isConnected, getRateLimitStatus, activeChain]);
 
   // State for token deposit modal
   const [tokenDepositInfo, setTokenDepositInfo] = useState<{
@@ -196,7 +235,11 @@ const Index = () => {
 
       <DepositModal
         open={depositModalOpen}
-        onOpenChange={setDepositModalOpen}
+        onOpenChange={(open) => {
+          setDepositModalOpen(open);
+          // DISABLED: All refresh logic to prevent RPC spam
+          // The useVault hook already handles smart refresh after transactions
+        }}
         onDeposit={depositETH}
         onTokenDeposit={handleTokenDepositFromModal}
         onMultiTokenDeposit={handleMultiTokenDepositFromModal}
@@ -219,7 +262,11 @@ const Index = () => {
 
       <WithdrawModal
         open={withdrawModalOpen}
-        onOpenChange={setWithdrawModalOpen}
+        onOpenChange={(open) => {
+          setWithdrawModalOpen(open);
+          // DISABLED: All refresh logic to prevent RPC spam
+          // The useVault hook already handles smart refresh after transactions
+        }}
         onWithdraw={withdrawETH}
         onTokenWithdraw={handleTokenWithdrawFromModal}
         onMultiTokenWithdraw={withdrawMultipleTokens}
@@ -241,7 +288,11 @@ const Index = () => {
 
       <TransferModal
         open={transferModalOpen}
-        onOpenChange={setTransferModalOpen}
+        onOpenChange={(open) => {
+          setTransferModalOpen(open);
+          // DISABLED: All refresh logic to prevent RPC spam
+          // The useVault hook already handles smart refresh after transactions
+        }}
         onTransfer={transferETH}
         isLoading={isLoading}
         vaultBalance={vaultBalance}

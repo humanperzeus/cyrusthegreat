@@ -117,28 +117,38 @@ export const VaultCore = ({
     });
   }, [isLoadingWalletTokens, isLoadingVaultTokens, activeTab, displayMode]);
 
-  // Debug: Track all tab changes with detailed context
+  // Debug: Track tab changes with reduced spam
   useEffect(() => {
-    debugLog('🎯 TAB CHANGE DETECTED:', {
-      timestamp: new Date().toISOString(),
-      previousTab: activeTab,
-      newTab: activeTab,
+    const currentTabState = {
+      activeTab,
       displayMode,
       isLoadingWalletTokens,
       isLoadingVaultTokens,
       walletTokensCount: walletTokens.length,
       vaultTokensCount: vaultTokens.length,
       isConnected
-    });
+    };
+    
+    // Only log if this is the first time or if tab actually changed
+    if (!window.lastTabState || window.lastTabState.activeTab !== activeTab) {
+      debugLog('🎯 TAB CHANGE DETECTED:', {
+        timestamp: new Date().toISOString(),
+        previousTab: window.lastTabState?.activeTab || 'none',
+        newTab: activeTab,
+        ...currentTabState
+      });
+      window.lastTabState = currentTabState;
+    }
 
-    // Log specific scenarios that might cause glitches
-    if (displayMode === 'native-tokens') {
+    // Log specific scenarios that might cause glitches (reduced frequency)
+    if (displayMode === 'native-tokens' && (!window.lastNativeTokensLog || Date.now() - window.lastNativeTokensLog > 5000)) {
       debugLog('🔧 NATIVE TOKENS MODE DEBUG:', {
         activeNativeTab: activeTab === 'wallet' ? 'tokens' : 'tokens',
         activeTab,
         isLoadingWalletTokens,
         isLoadingVaultTokens
       });
+      window.lastNativeTokensLog = Date.now();
     }
   }, [activeTab, displayMode, isLoadingWalletTokens, isLoadingVaultTokens, walletTokens.length, vaultTokens.length, isConnected]);
 

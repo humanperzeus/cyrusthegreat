@@ -536,7 +536,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             };
             
             processedTokens.push(processedToken);
-            debugLog(`✅ Token processed: ${processedToken.symbol} = ${processedToken.balance}`);
+            // Only log significant token processing to reduce spam
+            if (parseFloat(processedToken.balance) > 0.001) {
+              debugLog(`✅ Token processed: ${processedToken.symbol} = ${processedToken.balance}`);
+            }
           } else {
             // Fallback if no result in metadata
             debugWarn(`⚠️ No metadata result for token ${tokenAddr}, using fallback`);
@@ -802,15 +805,23 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   const vaultBalanceFormatted = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.00';
   const currentFeeFormatted = currentFee ? formatEther(currentFee as bigint) : '0.00';
 
-  // Essential logging only
+  // Essential logging only - only log when state changes significantly
   if (process.env.NODE_ENV === 'development') {
-    debugLog('Vault Hook State:', {
-      isConnected,
-      walletBalance: walletBalanceFormatted,
-      vaultBalance: vaultBalanceFormatted,
-      currentFee: currentFeeFormatted,
-      address
-    });
+    React.useEffect(() => {
+      const currentState = {
+        isConnected,
+        walletBalance: walletBalanceFormatted,
+        vaultBalance: vaultBalanceFormatted,
+        currentFee: currentFeeFormatted,
+        address
+      };
+      
+      // Only log if this is the first time or if state changed significantly
+      if (!(window as any).lastVaultState || JSON.stringify((window as any).lastVaultState) !== JSON.stringify(currentState)) {
+        debugLog('Vault Hook State:', currentState);
+        (window as any).lastVaultState = currentState;
+      }
+    }, [isConnected, walletBalanceFormatted, vaultBalanceFormatted, currentFeeFormatted, address]);
   }
 
   // Track when data loads/refetches (development only)
@@ -1724,7 +1735,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     resetTime: number;
   } | null> => {
     try {
-      if (!address || !contractAddress) return null;
+      if (!address) return null;
 
       // For now, return a mock rate limit status
       // In a real implementation, you would call the contract to get actual rate limit data
@@ -2755,12 +2766,24 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   }, [activeChain]);
 
+  // CRITICAL FIX: Reset refresh flag when new transaction starts (hash changes)
+  React.useEffect(() => {
+    if (hash) {
+      // New transaction started, reset the refresh flag
+      // This ensures each new transaction can trigger the refresh logic
+      setHasRefreshedAfterConfirmation(false);
+      if (process.env.NODE_ENV === 'development') {
+        debugLog(`🔄 New transaction started (hash: ${hash}), resetting refresh flag`);
+      }
+    }
+  }, [hash]);
+
   // Handle transaction state changes
   React.useEffect(() => {
     if (isConfirmed && !hasRefreshedAfterConfirmation) {
       debugLog('🔄 Transaction confirmed! Starting smart refetch...');
       
-      // Set flag to prevent multiple refreshes
+      // Set flag to prevent multiple refreshes for THIS transaction
       setHasRefreshedAfterConfirmation(true);
       
       toast({
@@ -3180,8 +3203,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
     };
     
-    // Debug buttons available (development only)
-    if (process.env.NODE_ENV === 'development') {
+    // Debug buttons available (development only) - only log once per session
+    if (process.env.NODE_ENV === 'development' && !(window as any).debugButtonsLogged) {
       debugLog('🔧 DEBUG BUTTONS AVAILABLE:');
       debugLog('  Button 1: window.debugTransactionStates.checkCurrentState()');
       debugLog('  Button 2: window.debugTransactionStates.testChainIsolation()');
@@ -3189,6 +3212,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       debugLog('  Button 4: window.debugTransactionStates.simulateTransaction()');
       debugLog('  Button 5: window.debugTransactionStates.deepInvestigation()');
       debugLog('  Button 6: window.debugTransactionStates.nuclearReset()');
+      (window as any).debugButtonsLogged = true;
     }
     
   }, [activeChain, address, isConnected, chainId, walletBalance, vaultBalanceData, currentFee, refetchWalletBalance, refetchVaultBalance, fetchWalletTokens, refetchVaultTokens, fetchChainSpecificData, getCurrentChainConfig, getActiveRpcUrl, getActiveContractAddress, chainTransactionStates, isLoading, isSimulating, hasRefreshedAfterConfirmation, lastTransactionHash, isWritePending, isConfirming, isConfirmed, hash, isCurrentChainTransaction, isWritePendingForCurrentChain, isConfirmingForCurrentChain, isTransactionLoading, setIsLoading, setLastTransactionHash]);
