@@ -52,8 +52,15 @@ export const formatTokenBalance = (balance: number | string, decimals: number = 
     // Check if this looks like a raw balance (very large number)
     const rawBalance = parseFloat(balance);
     if (rawBalance > 1000000) { // Likely raw units
+      // CRITICAL FIX: Convert scientific notation to regular decimal string first
+      let balanceStr = balance;
+      if (balance.includes('e+') || balance.includes('E+')) {
+        // Convert scientific notation to full decimal string
+        balanceStr = rawBalance.toLocaleString('fullwide', { useGrouping: false });
+      }
+      
       // CRITICAL FIX: Use BigInt division to preserve full precision
-      const rawBalanceBigInt = BigInt(balance);
+      const rawBalanceBigInt = BigInt(balanceStr);
       const divisor = BigInt(10 ** decimals);
       const quotient = rawBalanceBigInt / divisor;
       const remainder = rawBalanceBigInt % divisor;
