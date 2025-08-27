@@ -1108,8 +1108,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             }
           }
 
-          // CRITICAL FIX: Store raw balance as string to preserve full precision
-          // Use the robust BigInt to string conversion function
+          // CRITICAL FIX: Use the robust BigInt to string conversion function
+          // This prevents scientific notation and preserves full precision
           const rawBalance = bigIntToFullPrecisionString(balanceBigInt);
           
           processedTokens.push({
