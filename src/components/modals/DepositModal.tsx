@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatTokenBalance } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,9 +92,14 @@ export function DepositModal({
   };
 
   const handleMaxDeposit = () => {
-    // For fees added on top, we need to leave room for the fee
-    const maxAmount = Math.max(0, Number(walletBalance) - Number(currentFee));
-    setAmount(maxAmount.toFixed(6));
+    if (isTokenDeposit && tokenBalance) {
+      // For tokens, use the full balance (fee is paid separately)
+      setAmount(tokenBalance);
+    } else {
+      // For ETH, leave room for the fee
+      const maxAmount = Math.max(0, Number(walletBalance) - Number(currentFee));
+      setAmount(maxAmount.toFixed(6));
+    }
   };
 
   return (
@@ -171,12 +177,12 @@ export function DepositModal({
                 onChange={(e) => setAmount(e.target.value)}
                 step="0.001"
                 min="0"
-                max={isTokenDeposit ? tokenBalance : walletBalance}
+                max={isTokenDeposit ? (tokenBalance || "0") : walletBalance}
                 disabled={isLoading}
               />
               <Button 
                 variant="outline" 
-                onClick={isTokenDeposit ? () => setAmount(tokenBalance || "0") : handleMaxDeposit}
+                onClick={handleMaxDeposit}
                 disabled={isLoading}
               >
                 Max
@@ -189,8 +195,8 @@ export function DepositModal({
               <span>Wallet Balance:</span>
               <span className="font-mono">
                 {isTokenDeposit 
-                  ? `${tokenBalance} ${tokenSymbol}` 
-                  : `${walletBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                  ? `${formatTokenBalance(tokenBalance || "0", availableTokens?.find(t => t.address === tokenAddress)?.decimals || 18)} ${tokenSymbol}` 
+                  : `${formatTokenBalance(walletBalance, 18)} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
                 }
               </span>
             </div>
