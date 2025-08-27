@@ -143,26 +143,21 @@ export const VaultCore = ({
       isConnected
     };
     
-    // Only log if this is the first time or if tab actually changed
-    if (!window.lastTabState || window.lastTabState.activeTab !== activeTab) {
-      debugLog('🎯 TAB CHANGE DETECTED:', {
-        timestamp: new Date().toISOString(),
-        previousTab: window.lastTabState?.activeTab || 'none',
-        newTab: activeTab,
-        ...currentTabState
-      });
-      window.lastTabState = currentTabState;
-    }
+    // Log tab changes for debugging
+    debugLog('🎯 TAB CHANGE DETECTED:', {
+      timestamp: new Date().toISOString(),
+      newTab: activeTab,
+      ...currentTabState
+    });
 
     // Log specific scenarios that might cause glitches (reduced frequency)
-    if (displayMode === 'native-tokens' && (!window.lastNativeTokensLog || Date.now() - window.lastNativeTokensLog > 5000)) {
+    if (displayMode === 'native-tokens') {
       debugLog('🔧 NATIVE TOKENS MODE DEBUG:', {
         activeNativeTab: activeTab === 'wallet' ? 'tokens' : 'tokens',
         activeTab,
         isLoadingWalletTokens,
         isLoadingVaultTokens
       });
-      window.lastNativeTokensLog = Date.now();
     }
   }, [activeTab, displayMode, isLoadingWalletTokens, isLoadingVaultTokens, walletTokens.length, vaultTokens.length, isConnected]);
 
@@ -171,6 +166,7 @@ export const VaultCore = ({
     symbol: string;
     address: string;
     balance: string;
+    decimals: number;
   } | null>(null);
 
   // Handle token deposit click
@@ -187,12 +183,12 @@ export const VaultCore = ({
   };
 
   // Handle token withdraw click
-  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     onTokenWithdraw(token);
   };
 
   // Handle token transfer click
-  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     onTokenTransfer(token);
   };
 
@@ -1305,59 +1301,7 @@ export const VaultCore = ({
         </div>
       )}
 
-                    {/* DEBUG PANEL - Transaction State Investigation (TESTNET ONLY) */}
-              {isConnected && currentNetwork.networkMode === 'testnet' && (
-                <div className="text-xs text-center p-4 bg-red-500/10 border border-red-500/30 rounded">
-                  <div className="font-bold text-red-500 mb-2">🔧 DEBUG PANEL - Transaction State Investigation (TESTNET)</div>
-                  <div className="grid grid-cols-6 gap-2">
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.checkCurrentState()}
-                      className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                      title="Check current transaction state"
-                    >
-                      🔍 State
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.testChainIsolation()}
-                      className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
-                      title="Test chain state isolation"
-                    >
-                      🧪 Isolation
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.forceResetStates()}
-                      className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-                      title="Force reset all transaction states"
-                    >
-                      🚨 Reset
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.simulateTransaction()}
-                      className="px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
-                      title="Simulate transaction on current chain"
-                    >
-                      🎭 Simulate
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.deepInvestigation()}
-                      className="px-2 py-1 bg-orange-500 text-white text-white text-xs rounded hover:bg-orange-600"
-                      title="Deep state investigation"
-                    >
-                      🔬 Deep
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.nuclearReset()}
-                      className="px-2 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600"
-                      title="Nuclear reset - clear everything"
-                    >
-                      ☢️ Nuclear
-                    </button>
-                  </div>
-                  <div className="text-red-500/70 mt-2">
-                    Debug panel only visible on testnet - Use these buttons to debug transaction state pollution issues
-                  </div>
-                </div>
-              )}
+
 
       {/* v1.15 Release Information */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
@@ -1369,32 +1313,7 @@ export const VaultCore = ({
         made by <a href="https://x.com/humanperzeus" target="_blank" rel="noopener noreferrer" className="text-vault-primary hover:text-vault-primary/80 transition-colors">@humanperzeus</a>
       </div>
 
-      {/* CRITICAL: Debug function to force refresh vault tokens with full precision */}
-      {isConnected && (
-        <div className="text-xs text-center p-4 bg-blue-500/10 border border-blue-500/30 rounded mt-4">
-          <div className="font-bold text-blue-500 mb-2">🔧 PRECISION DEBUG - Force Refresh Vault Tokens</div>
-          <button
-            onClick={async () => {
-              debugLog('🔄 Force refreshing vault tokens for full precision...');
-              try {
-                // Clear current tokens
-                setVaultTokens([]);
-                // Force refetch
-                await refetchVaultTokens();
-                debugLog('✅ Vault tokens refreshed with full precision');
-              } catch (error) {
-                debugError('❌ Failed to refresh vault tokens:', error);
-              }
-            }}
-            className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
-          >
-            🔄 Force Refresh Vault Tokens
-          </button>
-          <div className="text-blue-500/70 mt-2">
-            Use this button to force refresh vault tokens and get full precision balances
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };
