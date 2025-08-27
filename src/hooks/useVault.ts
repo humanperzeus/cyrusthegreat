@@ -1126,35 +1126,40 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
   // Process vault tokens data from contract
   React.useEffect(() => {
-    debugLog('🔍 Vault tokens effect triggered with data:', vaultTokensData);
-    debugLog('🔍 Vault tokens data type:', typeof vaultTokensData);
-    debugLog('🔍 Vault tokens data is array:', Array.isArray(vaultTokensData));
-    
-    if (vaultTokensData && Array.isArray(vaultTokensData)) {
-      debugLog('🔍 Processing vault tokens data:', vaultTokensData);
+    const processVaultTokensData = async () => {
+      debugLog('🔍 Vault tokens effect triggered with data:', vaultTokensData);
+      debugLog('🔍 Vault tokens data type:', typeof vaultTokensData);
+      debugLog('🔍 Vault tokens data is array:', Array.isArray(vaultTokensData));
       
-      // The contract returns [address[] tokens, uint256[] balances]
-      const [tokenAddresses, tokenBalances] = vaultTokensData;
-      
-      debugLog('🔍 Token addresses:', tokenAddresses);
-      debugLog('🔍 Token balances:', tokenBalances);
-      debugLog('🔍 Addresses is array:', Array.isArray(tokenAddresses));
-      debugLog('🔍 Balances is array:', Array.isArray(tokenBalances));
-      
-      if (Array.isArray(tokenAddresses) && Array.isArray(tokenBalances)) {
-        // CRITICAL FIX: Use the working processVaultTokensFromSignedCall function instead
-        // The old processVaultTokens function was never used and had bugs
-        debugLog('🔄 Using processVaultTokensFromSignedCall for vault token processing...');
-        await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
+      if (vaultTokensData && Array.isArray(vaultTokensData)) {
+        debugLog('🔍 Processing vault tokens data:', vaultTokensData);
+        
+        // The contract returns [address[] tokens, uint256[] balances]
+        const [tokenAddresses, tokenBalances] = vaultTokensData;
+        
+        debugLog('🔍 Token addresses:', tokenAddresses);
+        debugLog('🔍 Token balances:', tokenBalances);
+        debugLog('🔍 Addresses is array:', Array.isArray(tokenAddresses));
+        debugLog('🔍 Balances is array:', Array.isArray(tokenBalances));
+        
+        if (Array.isArray(tokenAddresses) && Array.isArray(tokenBalances)) {
+          // CRITICAL FIX: Use the working processVaultTokensFromSignedCall function instead
+          // The old processVaultTokens function was never used and had bugs
+          debugLog('🔄 Using processVaultTokensFromSignedCall for vault token processing...');
+          await processVaultTokensFromSignedCall(tokenAddresses, tokenBalances);
+        } else {
+          debugLog('❌ Vault tokens data structure invalid:', { tokenAddresses, tokenBalances });
+          setVaultTokens([]);
+        }
       } else {
-        debugLog('❌ Vault tokens data structure invalid:', { tokenAddresses, tokenBalances });
+        // No vault tokens data available
         setVaultTokens([]);
+        debugLog('ℹ️ No vault tokens data available');
       }
-    } else {
-      // No vault tokens data available
-      setVaultTokens([]);
-      debugLog('ℹ️ No vault tokens data available');
-    }
+    };
+
+    // Call the async function
+    processVaultTokensData();
   }, [vaultTokensData]);
 
   // Auto-fetch wallet tokens when wallet connects
