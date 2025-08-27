@@ -144,7 +144,7 @@ const Index = () => {
   } | null>(null);
 
   // Handle token deposit click
-  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     setTokenDepositInfo(token);
     setDepositModalOpen(true);
   };

@@ -64,6 +64,15 @@ export function DepositModal({
   availableTokens = [],
   rateLimitStatus
 }: DepositModalProps) {
+  
+  // ✅ DEBUG: Log when this modal is rendered
+  console.log('🔍 DepositModal RENDERED:', {
+    open,
+    isTokenDeposit,
+    tokenSymbol,
+    tokenBalance,
+    availableTokensCount: availableTokens.length
+  });
   const [amount, setAmount] = useState("");
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
@@ -312,9 +321,18 @@ export function DepositModal({
                     const userBalance = parseFloat(tokenBalance);
                     const requestedAmount = parseFloat(amount);
                     
+                    // ✅ DEBUG: Log validation logic
+                    console.log('🔍 DepositModal VALIDATION:', {
+                      userBalance,
+                      requestedAmount,
+                      isInsufficient: requestedAmount > userBalance,
+                      willDisable: requestedAmount > userBalance
+                    });
+                    
                     // If requested amount exceeds user balance, disable button
                     return requestedAmount > userBalance;
                   } catch (error) {
+                    console.error('❌ DepositModal validation error:', error);
                     return false; // If validation fails, allow button (fail-safe)
                   }
                 })())
