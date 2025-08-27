@@ -1158,8 +1158,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
               
               // CRITICAL FIX: Use our fetchTokenDecimals function instead of Alchemy metadata
               // This ensures we get the correct decimals directly from the token contract
+              debugLog(`🚀 About to fetch token info for ${tokenAddr}...`);
+              
+              // Check if publicClient is available
+              if (!publicClient) {
+                debugError(`❌ No publicClient available for ${tokenAddr}`);
+                throw new Error('No publicClient available');
+              }
+              
+              debugLog(`🔧 Using publicClient for ${tokenAddr}:`, publicClient);
+              
               const tokenDecimals = await fetchTokenDecimals(tokenAddr, publicClient);
+              debugLog(`✅ Fetched decimals: ${tokenDecimals}`);
+              
               const tokenSymbol = await fetchTokenSymbol(tokenAddr, publicClient);
+              debugLog(`✅ Fetched symbol: ${tokenSymbol}`);
               
               debugLog(`🔍 Fetched token info for ${tokenAddr}:`, {
                 symbol: tokenSymbol,
