@@ -1075,12 +1075,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     
     for (const token of tokenBalances) {
       try {
-        // Parse hex balance to decimal
+        // CRITICAL FIX: Parse hex balance to BigInt to preserve full precision
         const balanceHex = token.tokenBalance;
-        const balanceDecimal = parseInt(balanceHex, 16);
+        const balanceBigInt = BigInt(balanceHex);
         
         // Only process tokens with balance > 0
-        if (balanceDecimal > 0) {
+        if (balanceBigInt > 0n) {
           // Fetch token metadata (symbol, decimals)
           const metadataResponse = await fetch(alchemyUrl, {
             method: 'POST',
@@ -1109,8 +1109,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           }
 
           // CRITICAL FIX: Store raw balance as string to preserve full precision
-          // Only format for display when needed, not during storage
-          const rawBalance = balanceDecimal.toString();
+          // Use the robust BigInt to string conversion function
+          const rawBalance = bigIntToFullPrecisionString(balanceBigInt);
           
           processedTokens.push({
             address: token.contractAddress,
