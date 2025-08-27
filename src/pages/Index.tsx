@@ -132,6 +132,7 @@ const Index = () => {
     symbol: string;
     address: string;
     balance: string;
+    decimals: number;
   } | null>(null);
 
   // State for token transfer modal
@@ -139,6 +140,7 @@ const Index = () => {
     symbol: string;
     address: string;
     balance: string;
+    decimals: number;
   } | null>(null);
 
   // Handle token deposit click
@@ -179,7 +181,7 @@ const Index = () => {
   };
 
   // Handle token withdraw click
-  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     setTokenWithdrawInfo(token);
     setWithdrawModalOpen(true);
   };
@@ -191,11 +193,12 @@ const Index = () => {
   };
 
   // Token transfer handler
-  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     setTokenTransferInfo({
       symbol: token.symbol,
       address: token.address,
-      balance: token.balance
+      balance: token.balance,
+      decimals: token.decimals
     });
     setTransferModalOpen(true);
   };
@@ -279,6 +282,7 @@ const Index = () => {
         tokenSymbol={tokenWithdrawInfo?.symbol}
         tokenAddress={tokenWithdrawInfo?.address}
         tokenBalance={tokenWithdrawInfo?.balance}
+        tokenDecimals={tokenWithdrawInfo?.decimals}
         // Chain-aware props
         activeChain={activeChain}
         // Multi-token functionality
@@ -304,6 +308,7 @@ const Index = () => {
         tokenSymbol={tokenTransferInfo?.symbol}
         tokenAddress={tokenTransferInfo?.address}
         tokenBalance={tokenTransferInfo?.balance}
+        tokenDecimals={tokenTransferInfo?.decimals}
         // Chain-aware props
         activeChain={activeChain}
         // Multi-token functionality

@@ -24,6 +24,7 @@ interface WithdrawModalProps {
   tokenSymbol?: string;
   tokenAddress?: string;
   tokenBalance?: string;
+  tokenDecimals?: number;
   // Chain-aware props
   activeChain?: 'ETH' | 'BSC' | 'BASE';
   // Multi-token functionality
@@ -173,7 +174,7 @@ export function WithdrawModal({
               </div>
               <p className="text-xs text-muted-foreground">
                 Available in vault: {isTokenWithdraw 
-                  ? `${tokenBalance} ${tokenSymbol}` 
+                  ? `${formatTokenBalance(tokenBalance, tokenDecimals)} ${tokenSymbol}` 
                   : `${vaultBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
                 }
               </p>

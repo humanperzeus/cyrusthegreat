@@ -1079,6 +1079,14 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         const balanceHex = token.tokenBalance;
         const balanceBigInt = BigInt(balanceHex);
         
+        // DEBUG: Log the exact values to verify precision preservation
+        debugLog(`🔍 Processing wallet token ${token.contractAddress}:`, {
+          hexBalance: balanceHex,
+          bigIntBalance: balanceBigInt.toString(),
+          bigIntLength: balanceBigInt.toString().length,
+          hasScientificNotation: balanceBigInt.toString().includes('e+') || balanceBigInt.toString().includes('E+')
+        });
+        
         // Only process tokens with balance > 0
         if (balanceBigInt > 0n) {
           // Fetch token metadata (symbol, decimals)

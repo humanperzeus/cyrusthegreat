@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatTokenBalance } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ interface TransferModalProps {
   tokenSymbol?: string;
   tokenAddress?: string;
   tokenBalance?: string;
+  tokenDecimals?: number;
   // Chain-aware props
   activeChain?: 'ETH' | 'BSC' | 'BASE';
   // Multi-token functionality
@@ -50,6 +52,7 @@ export function TransferModal({
   tokenSymbol,
   tokenAddress,
   tokenBalance,
+  tokenDecimals,
   activeChain,
   vaultTokens = [],
   rateLimitStatus
@@ -195,7 +198,7 @@ export function TransferModal({
             </div>
             <p className="text-xs text-muted-foreground">
               Available in vault: {isTokenTransfer 
-                ? `${tokenBalance} ${tokenSymbol}` 
+                ? `${formatTokenBalance(tokenBalance, tokenDecimals)} ${tokenSymbol}` 
                 : `${vaultBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
               }
             </p>
