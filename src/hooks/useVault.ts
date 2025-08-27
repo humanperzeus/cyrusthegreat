@@ -9,7 +9,7 @@ import { config } from '@/lib/wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
-import { debugLog, debugWarn, debugError, weiToEtherFullPrecision, fetchTokenDecimals, fetchTokenSymbol } from '@/lib/utils';
+import { debugLog, debugWarn, debugError, weiToEtherFullPrecision, fetchTokenDecimals, fetchTokenSymbol, formatTokenBalance } from '@/lib/utils';
 
 // Add window.ethereum type
 declare global {
