@@ -9,7 +9,7 @@ import { config } from '@/lib/wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
-import { debugLog, debugWarn, debugError, weiToEtherFullPrecision } from '@/lib/utils';
+import { debugLog, debugWarn, debugError, weiToEtherFullPrecision, fetchTokenDecimals, fetchTokenSymbol } from '@/lib/utils';
 
 // Add window.ethereum type
 declare global {
@@ -1156,27 +1156,22 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                 rawBalanceBigInt: tokenBalance ? (tokenBalance as bigint).toString() : 'undefined'
               });
               
-              // Fetch token metadata (symbol, decimals) from the token contract
-              const metadataResponse = await fetch(getAlchemyUrl(), {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: 1,
-                  method: 'alchemy_getTokenMetadata',
-                  params: [tokenAddr]
-                })
+              // CRITICAL FIX: Use our fetchTokenDecimals function instead of Alchemy metadata
+              // This ensures we get the correct decimals directly from the token contract
+              const tokenDecimals = await fetchTokenDecimals(tokenAddr, publicClient);
+              const tokenSymbol = await fetchTokenSymbol(tokenAddr, publicClient);
+              
+              debugLog(`🔍 Fetched token info for ${tokenAddr}:`, {
+                symbol: tokenSymbol,
+                decimals: tokenDecimals
               });
 
               if (metadataResponse.ok) {
                 const metadata = await metadataResponse.json();
 
                 
-                if (metadata.result) {
-                  const tokenDecimals = metadata.result.decimals || 18;
-                  
+                // CRITICAL FIX: Use fetched decimals and symbol instead of metadata
+                if (tokenDecimals && tokenSymbol) {
                   // CRITICAL FIX: Use token-specific decimals instead of always using formatEther (18 decimals)
                   let humanBalance: string;
                   if (tokenBalance) {
@@ -1191,7 +1186,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                       const remainder = balanceBigInt % divisor;
                       
                       // DEBUG: Log the raw values to understand the calculation
-                      debugLog(`🔍 Balance calculation for ${metadata.result.symbol}:`, {
+                      debugLog(`🔍 Balance calculation for ${tokenSymbol}:`, {
                         rawBalance: balanceBigInt.toString(),
                         tokenDecimals,
                         divisor: divisor.toString(),
@@ -1214,7 +1209,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                   
                   const processedToken = {
                     address: tokenAddr,
-                    symbol: metadata.result.symbol || 'UNKNOWN',
+                    symbol: tokenSymbol,
                     balance: humanBalance,
                     decimals: tokenDecimals
                   };

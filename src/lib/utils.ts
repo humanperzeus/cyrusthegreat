@@ -121,6 +121,49 @@ export const fetchTokenDecimals = async (
   }
 };
 
+export const fetchTokenSymbol = async (
+  tokenAddress: string, 
+  publicClient: any
+): Promise<string> => {
+  try {
+    // Standard ERC20 symbol() function
+    const symbol = await publicClient.readContract({
+      address: tokenAddress as `0x${string}`,
+      abi: [{
+        constant: true,
+        inputs: [],
+        name: "symbol",
+        outputs: [{ name: "", type: "string" }],
+        type: "function"
+      }],
+      functionName: "symbol"
+    });
+    
+    console.log(`✅ Fetched symbol for ${tokenAddress}: ${symbol}`);
+    return symbol as string;
+  } catch (error) {
+    console.error(`❌ Failed to fetch symbol for ${tokenAddress}:`, error);
+    
+    // Fallback: try to get from Alchemy if available
+    try {
+      const response = await fetch(`/api/alchemy/getTokenMetadata?address=${tokenAddress}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.symbol) {
+          console.log(`✅ Got symbol from Alchemy for ${tokenAddress}: ${data.symbol}`);
+          return data.symbol;
+        }
+      }
+    } catch (alchemyError) {
+      console.error(`❌ Alchemy fallback failed for ${tokenAddress}:`, alchemyError);
+    }
+    
+    // Last resort: return address prefix
+    console.warn(`⚠️ Using fallback symbol for ${tokenAddress}`);
+    return tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4);
+  }
+};
+
 /**
  * Get default precision for a token type (DEPRECATED - use fetchTokenDecimals instead)
  * @param symbol - Token symbol
