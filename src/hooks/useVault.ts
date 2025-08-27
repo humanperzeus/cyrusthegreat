@@ -1149,6 +1149,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             }
             
             try {
+              // DEBUG: Log the raw balance from contract
+              debugLog(`🔍 Raw balance from contract for ${tokenAddr}:`, {
+                rawBalance: tokenBalance?.toString(),
+                rawBalanceType: typeof tokenBalance,
+                rawBalanceBigInt: tokenBalance ? (tokenBalance as bigint).toString() : 'undefined'
+              });
+              
               // Fetch token metadata (symbol, decimals) from the token contract
               const metadataResponse = await fetch(getAlchemyUrl(), {
                 method: 'POST',
@@ -1182,6 +1189,16 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                       const divisor = BigInt(10 ** tokenDecimals);
                       const quotient = balanceBigInt / divisor;
                       const remainder = balanceBigInt % divisor;
+                      
+                      // DEBUG: Log the raw values to understand the calculation
+                      debugLog(`🔍 Balance calculation for ${metadata.result.symbol}:`, {
+                        rawBalance: balanceBigInt.toString(),
+                        tokenDecimals,
+                        divisor: divisor.toString(),
+                        quotient: quotient.toString(),
+                        remainder: remainder.toString(),
+                        expectedFormat: `${quotient}.${remainder.toString().padStart(tokenDecimals, '0')}`
+                      });
                       
                       if (remainder === 0n) {
                         humanBalance = quotient.toString();
