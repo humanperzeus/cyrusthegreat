@@ -174,10 +174,9 @@ export function MultiTokenDepositModal({
     }
   };
 
-  // Filter out ETH/native tokens and already selected tokens
+  // CRITICAL FIX: Include ETH/native tokens but handle them separately
   const availableTokensForSelection = availableTokens.filter(token =>
-    // Exclude ETH/native token (0x0 address)
-    token.address !== '0x0000000000000000000000000000000000000000' &&
+    // Include ETH/native token (0x0 address) - will be handled separately
     // Exclude already selected tokens
     !deposits.some(d => d.token.address === token.address)
   );
@@ -208,6 +207,15 @@ export function MultiTokenDepositModal({
             </Alert>
           )}
 
+          {/* ETH Information Alert */}
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertTriangle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
+              <strong>ETH Support:</strong> ETH deposits are now supported in multi-token operations. 
+              ETH will be handled separately from ERC20 tokens for optimal compatibility.
+            </AlertDescription>
+          </Alert>
+
           {/* Selected Tokens */}
           {deposits.length > 0 && (
             <div className="space-y-3">
@@ -217,7 +225,14 @@ export function MultiTokenDepositModal({
                   <Card key={index} className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3 flex-1">
-                        <div className="font-medium">{deposit.token.symbol}</div>
+                        <div className="flex items-center space-x-2">
+                          <div className="font-medium">{deposit.token.symbol}</div>
+                          {deposit.token.address === '0x0000000000000000000000000000000000000000' && (
+                            <Badge variant="outline" className="text-xs bg-blue-100 text-blue-800 border-blue-300">
+                              ETH
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex gap-1">
                           <Input
                             type="number"
@@ -250,47 +265,55 @@ export function MultiTokenDepositModal({
                       </Button>
                     </div>
 
-                    {/* Approval Type Selection */}
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="text-sm font-medium text-gray-700 mb-2">Approval Type:</div>
-                      <div className="flex gap-4">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`approval-${index}`}
-                            value="exact"
-                            checked={deposit.approvalType === 'exact'}
-                            onChange={(e) => {
-                              setDeposits(prev => prev.map((d, i) =>
-                                i === index ? { ...d, approvalType: e.target.value as 'exact' | 'unlimited' } : d
-                              ));
-                            }}
-                            className="text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm">Exact amount only</span>
-                        </label>
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`approval-${index}`}
-                            value="unlimited"
-                            checked={deposit.approvalType === 'unlimited'}
-                            onChange={(e) => {
-                              setDeposits(prev => prev.map((d, i) =>
-                                i === index ? { ...d, approvalType: e.target.value as 'exact' | 'unlimited' } : d
-                              ));
-                            }}
-                            className="text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm">Unlimited approval</span>
-                        </label>
+                    {/* Approval Type Selection - Skip for ETH */}
+                    {deposit.token.address !== '0x0000000000000000000000000000000000000000' ? (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-sm font-medium text-gray-700 mb-2">Approval Type:</div>
+                        <div className="flex gap-4">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`approval-${index}`}
+                              value="exact"
+                              checked={deposit.approvalType === 'exact'}
+                              onChange={(e) => {
+                                setDeposits(prev => prev.map((d, i) =>
+                                  i === index ? { ...d, approvalType: e.target.value as 'exact' | 'unlimited' } : d
+                                ));
+                              }}
+                              className="text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm">Exact amount only</span>
+                          </label>
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`approval-${index}`}
+                              value="unlimited"
+                              checked={deposit.approvalType === 'unlimited'}
+                              onChange={(e) => {
+                                setDeposits(prev => prev.map((d, i) =>
+                                  i === index ? { ...d, approvalType: e.target.value as 'exact' | 'unlimited' } : d
+                                ));
+                              }}
+                              className="text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm">Unlimited approval</span>
+                          </label>
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {deposit.approvalType === 'exact'
+                            ? `Will approve exactly ${deposit.amount} ${deposit.token.symbol}`
+                            : `Will approve unlimited ${deposit.token.symbol} (recommended for frequent use)`}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {deposit.approvalType === 'exact'
-                          ? `Will approve exactly ${deposit.amount} ${deposit.token.symbol}`
-                          : `Will approve unlimited ${deposit.token.symbol} (recommended for frequent use)`}
+                    ) : (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-xs text-blue-600 font-medium">
+                          💡 ETH deposits don't require approval - they're sent directly
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {deposit.error && (
                       <div className="text-red-600 text-sm mt-2 flex items-center space-x-1">
                         <AlertTriangle className="h-3 w-3" />
