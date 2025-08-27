@@ -95,9 +95,13 @@ export function MultiTokenDepositModal({
       return { isValid: false, error: `Minimum deposit is ${minDeposit} ${token.symbol}` };
     }
 
-    const balance = parseFloat(token.balance);
-    if (parseFloat(amount) > balance) {
-      return { isValid: false, error: `Insufficient balance. Max: ${formatBalance(balance, token.decimals)}` };
+    // CRITICAL FIX: Compare amounts as BigInt to avoid precision loss
+    // Convert both amounts to the smallest unit (wei) for exact comparison
+    const amountInSmallestUnit = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, token.decimals)));
+    const balanceInSmallestUnit = BigInt(Math.floor(parseFloat(token.balance) * Math.pow(10, token.decimals)));
+    
+    if (amountInSmallestUnit > balanceInSmallestUnit) {
+      return { isValid: false, error: `Insufficient balance. Max: ${formatBalance(parseFloat(token.balance), token.decimals)}` };
     }
 
     return { isValid: true };
