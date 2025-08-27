@@ -318,15 +318,27 @@ export function DepositModal({
                     const tokenData = availableTokens.find(t => t.address === tokenAddress);
                     if (!tokenData) return false;
                     
+                    // ✅ DEBUG: Log all validation inputs
+                    console.log('🔍 DepositModal VALIDATION INPUTS:', {
+                      tokenBalance,
+                      tokenBalanceType: typeof tokenBalance,
+                      amount,
+                      amountType: typeof amount,
+                      tokenAddress,
+                      availableTokensCount: availableTokens.length,
+                      tokenData
+                    });
+                    
                     const userBalance = parseFloat(tokenBalance);
                     const requestedAmount = parseFloat(amount);
                     
-                    // ✅ DEBUG: Log validation logic
-                    console.log('🔍 DepositModal VALIDATION:', {
+                    // ✅ DEBUG: Log parsed values
+                    console.log('🔍 DepositModal VALIDATION PARSED:', {
                       userBalance,
                       requestedAmount,
                       isInsufficient: requestedAmount > userBalance,
-                      willDisable: requestedAmount > userBalance
+                      willDisable: requestedAmount > userBalance,
+                      comparison: `${requestedAmount} > ${userBalance} = ${requestedAmount > userBalance}`
                     });
                     
                     // If requested amount exceeds user balance, disable button
