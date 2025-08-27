@@ -56,7 +56,19 @@ export function MultiTokenTransferModal({
   const [isValidating, setIsValidating] = useState(false);
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
-  const MIN_TRANSFER = "0.0001";
+  
+  // CRITICAL FIX: Dynamic minimum transfer based on token decimals
+  const getMinTransfer = (decimals: number): string => {
+    // For tokens with 6 decimals (like PYUSD), use 0.000001
+    // For tokens with 18 decimals (like ETH), use 0.000000000000000001
+    if (decimals <= 6) {
+      return '0.000001'; // 6 decimal precision
+    } else if (decimals <= 12) {
+      return '0.000000001'; // 9 decimal precision
+    } else {
+      return '0.000000000000000001'; // 18 decimal precision
+    }
+  };
 
   // Use utility function for token-specific precision
   const formatBalance = (balance: number, decimals: number = 18): string => {
@@ -77,8 +89,10 @@ export function MultiTokenTransferModal({
       return { isValid: false, error: "Amount must be greater than 0" };
     }
 
-    if (parseFloat(amount) < parseFloat(MIN_TRANSFER)) {
-      return { isValid: false, error: `Minimum transfer is ${MIN_TRANSFER}` };
+    // CRITICAL FIX: Use dynamic minimum based on token decimals
+    const minTransfer = getMinTransfer(token.decimals);
+    if (parseFloat(amount) < parseFloat(minTransfer)) {
+      return { isValid: false, error: `Minimum transfer is ${minTransfer} ${token.symbol}` };
     }
 
     const balance = parseFloat(token.balance);

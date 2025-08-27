@@ -1168,18 +1168,45 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
                 
                 if (metadata.result) {
+                  const tokenDecimals = metadata.result.decimals || 18;
+                  
+                  // CRITICAL FIX: Use token-specific decimals instead of always using formatEther (18 decimals)
+                  let humanBalance: string;
+                  if (tokenBalance) {
+                    if (tokenDecimals === 18) {
+                      // For 18-decimal tokens (like ETH), use formatEther
+                      humanBalance = formatEther(tokenBalance as bigint);
+                    } else {
+                      // For other decimal tokens (like PYUSD with 6 decimals), use parseUnits
+                      const balanceBigInt = tokenBalance as bigint;
+                      const divisor = BigInt(10 ** tokenDecimals);
+                      const quotient = balanceBigInt / divisor;
+                      const remainder = balanceBigInt % divisor;
+                      
+                      if (remainder === 0n) {
+                        humanBalance = quotient.toString();
+                      } else {
+                        // Format with proper decimal places
+                        const remainderStr = remainder.toString().padStart(tokenDecimals, '0');
+                        humanBalance = quotient.toString() + '.' + remainderStr;
+                      }
+                    }
+                  } else {
+                    humanBalance = '0';
+                  }
+                  
                   const processedToken = {
                     address: tokenAddr,
                     symbol: metadata.result.symbol || 'UNKNOWN',
-                    balance: tokenBalance ? formatEther(tokenBalance as bigint) : '0',
-                    decimals: metadata.result.decimals || 18
+                    balance: humanBalance,
+                    decimals: tokenDecimals
                   };
                   
                   processedTokens.push(processedToken);
-                  debugLog(`✅ Token processed:`, processedToken);
+                  debugLog(`✅ Token processed with ${tokenDecimals} decimals:`, processedToken);
                 }
               } else {
-                // Fallback if metadata fetch fails
+                // Fallback if metadata fetch fails - assume 18 decimals for safety
                 const fallbackToken = {
                   address: tokenAddr,
                   symbol: 'UNKNOWN',
@@ -1187,11 +1214,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                   decimals: 18
                 };
                 processedTokens.push(fallbackToken);
-                debugLog(`⚠️ Token fallback:`, fallbackToken);
+                debugLog(`⚠️ Token fallback (18 decimals):`, fallbackToken);
               }
             } catch (error) {
               debugError(`❌ Error fetching metadata for token ${tokenAddr}:`, error);
-              // Fallback on error
+              // Fallback on error - assume 18 decimals for safety
               const errorToken = {
                 address: tokenAddr,
                 symbol: 'UNKNOWN',
@@ -1199,7 +1226,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
                 decimals: 18
               };
               processedTokens.push(errorToken);
-              debugLog(`❌ Token error fallback:`, errorToken);
+              debugLog(`❌ Token error fallback (18 decimals):`, errorToken);
             }
           }
           
@@ -1883,58 +1910,122 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
 
     try {
-            // CRITICAL FIX: Use contract's built-in multi-token support (ETH + ERC20 in single call)
-      console.log('🔄 Processing all deposits (ETH + ERC20) in single contract call...');
-      
-      // Prepare contract call data for ALL tokens (ETH + ERC20)
-      const tokens = deposits.map(d => typeof d.token === 'string' ? d.token : d.token.address);
-      const amounts = deposits.map(d => {
+      // CRITICAL FIX: Separate ETH and ERC20 deposits for proper handling
+      const ethDeposits = deposits.filter(d => {
         const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
-        if (tokenAddress === '0x0000000000000000000000000000000000000000') {
-          // ETH amount - use parseEther for 18 decimals
-          return parseEther(d.amount).toString();
-        } else {
-          // ERC20 token amount - use token-specific decimals
-          const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
-          const decimals = tokenInfo?.decimals || 18;
-          return parseUnits(d.amount, decimals).toString();
-        }
+        return tokenAddress === '0x0000000000000000000000000000000000000000';
       });
       
-      console.log('🔍 Tokens to deposit:', tokens);
-      console.log('🔍 Amounts to deposit:', amounts);
+      const tokenDeposits = deposits.filter(d => {
+        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
+        return tokenAddress !== '0x0000000000000000000000000000000000000000';
+      });
       
-      // Calculate total ETH value needed (ETH deposits + fee)
-      let totalEthValue = 0n;
-      for (let i = 0; i < tokens.length; i++) {
-        if (tokens[i] === '0x0000000000000000000000000000000000000000') {
-          // This is an ETH deposit, add to total ETH value
-          totalEthValue += BigInt(amounts[i]);
+      console.log('🔍 ETH deposits found:', ethDeposits.length);
+      console.log('🔍 Token deposits count:', tokenDeposits.length);
+      
+      // CRITICAL FIX: Handle ETH deposits separately from token deposits
+      if (ethDeposits.length > 0) {
+        console.log('💰 Processing ETH deposits separately...');
+        for (const ethDeposit of ethDeposits) {
+          try {
+            const ethAmount = parseEther(ethDeposit.amount);
+            console.log(`💰 Depositing ${formatEther(ethAmount)} ETH...`);
+            
+            // Get fresh fee for ETH deposit
+            const freshFee = await getCurrentFee();
+            if (!freshFee) {
+              throw new Error('Failed to get fresh fee for ETH deposit');
+            }
+            
+            // Calculate total ETH value (deposit amount + fee)
+            const totalEthValue = ethAmount + freshFee;
+            console.log(`💰 Total ETH value: ${formatEther(totalEthValue)} (deposit: ${formatEther(ethAmount)} + fee: ${formatEther(freshFee)})`);
+            
+            // Check wallet balance
+            if (walletBalance && walletBalance.value < totalEthValue) {
+              const required = formatEther(totalEthValue);
+              const available = formatEther(walletBalance.value);
+              toast({
+                title: "Insufficient Balance for ETH Deposit",
+                description: `You need ${required} ETH (${formatEther(ethAmount)} + ${formatEther(freshFee)} fee). You have ${available} ETH.`,
+                variant: "destructive",
+              });
+              return;
+            }
+            
+            // Execute ETH deposit
+            const ethDepositHash = await writeContract(config, {
+              address: getActiveContractAddress() as `0x${string}`,
+              abi: VAULT_ABI,
+              functionName: 'depositETH',
+              args: [],
+              value: totalEthValue, // Send deposit amount + fee
+            });
+            
+            console.log('✅ ETH deposit transaction submitted:', ethDepositHash);
+            toast({
+              title: "ETH Deposit Initiated",
+              description: `Depositing ${formatEther(ethAmount)} ETH to vault...`,
+            });
+            
+          } catch (error) {
+            console.error('❌ ETH deposit failed:', error);
+            toast({
+              title: "ETH Deposit Failed",
+              description: error instanceof Error ? error.message : "Unknown error occurred",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+      }
+
+      // CRITICAL FIX: Only handle ERC20 tokens in multi-token contract call (ETH handled separately above)
+      if (tokenDeposits.length === 0) {
+        console.log('✅ Only ETH deposits - no ERC20 tokens to process');
+        return; // All deposits were ETH, already processed above
+      }
+      
+      console.log('🔄 Processing ERC20 token deposits...');
+      
+      // Prepare contract call data for ERC20 tokens only
+      const tokens = tokenDeposits.map(d => typeof d.token === 'string' ? d.token : d.token.address);
+      const amounts = tokenDeposits.map(d => {
+        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
+        const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
+        const decimals = tokenInfo?.decimals || 18;
+        return parseUnits(d.amount, decimals).toString();
+      });
+
+      // Calculate ETH value to send (ETH deposit amount only)
+      let ethValueToSend = parseEther('0');
+      if (ethDeposit) {
+        ethValueToSend = parseEther(ethDeposit.amount);
+        console.log('💰 ETH deposit amount:', formatEther(ethValueToSend));
+      }
+
+      // CRITICAL FIX: Robust fee management for multi-token deposits
+      let feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      
+      // If no fee available, get fresh fee
+      if (feeInWei === 0n) {
+        console.log('🔄 No cached fee, getting fresh fee...');
+        const freshFee = await getCurrentFee();
+        if (freshFee) {
+          feeInWei = freshFee;
+          console.log(`✅ Fresh fee obtained: ${formatEther(feeInWei)} ETH`);
+        } else {
+          console.log('⚠️ Still no fee available, using fallback');
+          feeInWei = parseEther('0.001'); // Fallback fee
         }
       }
       
-      // Add fee to total ETH value
-      const freshFee = await getCurrentFee();
-      if (!freshFee) {
-        throw new Error('Failed to get fresh fee for deposit');
-      }
-      totalEthValue += freshFee;
+      console.log('💸 Final fee value:', formatEther(feeInWei));
       
-      console.log('💰 Total ETH value needed:', formatEther(totalEthValue));
-      
-      // Check wallet balance for ETH deposits + fee
-      if (walletBalance && walletBalance.value < totalEthValue) {
-        const required = formatEther(totalEthValue);
-        const available = formatEther(walletBalance.value);
-        toast({
-          title: "Insufficient Balance for Deposit",
-          description: `You need ${required} ETH (deposits + fee). You have ${available} ETH.`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Fee and ETH value are already calculated above in the new approach
+      // Calculate total ETH value (ETH deposit + fee)
+      const totalEthValue = ethValueToSend + feeInWei;
+      console.log('💵 Total ETH value (ETH deposit + fee):', formatEther(totalEthValue));
 
       // Check and handle approvals for all token deposits
       console.log('🔐 Checking approvals for token deposits...');
@@ -2036,7 +2127,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       console.log('Tokens:', tokens);
       console.log('Amounts:', amounts);
       console.log('Total ETH value to send:', formatEther(totalEthValue));
-      console.log('ETH deposits included:', tokens.filter(t => t === '0x0000000000000000000000000000000000000000').length);
+      console.log('ETH deposit included:', !!ethDeposit);
       console.log('Token deposits count:', approvalTokenDeposits.length);
 
       const depositHash = await writeContract(config, {

@@ -100,20 +100,6 @@ const Index = () => {
     }
   }, [isConfirmed]);
 
-  // CRITICAL FIX: Create combined available tokens list that includes ETH for multi-token operations
-  const availableTokensForMultiToken = [
-    // Add ETH as the first token if wallet has ETH balance
-    ...(walletBalance && parseFloat(walletBalance) > 0 ? [{
-      address: '0x0000000000000000000000000000000000000000',
-      symbol: activeChain === 'ETH' ? 'ETH' : activeChain === 'BSC' ? 'BNB' : 'ETH',
-      balance: walletBalance,
-      decimals: 18,
-      isNative: true
-    }] : []),
-    // Add all ERC20 tokens
-    ...walletTokens
-  ];
-
   // DISABLED: Rate limit status fetching to prevent RPC spam
   // useEffect(() => {
   //   const timeoutId = setTimeout(() => {
@@ -270,7 +256,7 @@ const Index = () => {
         // Chain-aware props
         activeChain={activeChain}
         // Multi-token functionality
-        availableTokens={availableTokensForMultiToken}
+        availableTokens={walletTokens}
         rateLimitStatus={rateLimitStatus}
       />
 

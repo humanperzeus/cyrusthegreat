@@ -77,20 +77,6 @@ export function DepositModalMigrated({
     refetchWalletTokens
   } = tokenManager;
 
-  // CRITICAL FIX: Create combined available tokens list that includes ETH for multi-token operations
-  const availableTokensForMultiToken = [
-    // Add ETH as the first token if wallet has ETH balance
-    ...(walletBalance && parseFloat(walletBalance) > 0 ? [{
-      address: '0x0000000000000000000000000000000000000000',
-      symbol: chain === 'ETH' ? 'ETH' : chain === 'BSC' ? 'BNB' : 'ETH',
-      balance: walletBalance,
-      decimals: 18,
-      isNative: true
-    }] : []),
-    // Add all ERC20 tokens
-    ...walletTokens
-  ];
-
   // Get specific token balance if token deposit
   const tokenBalance = isTokenDeposit && tokenAddress
     ? walletTokens.find(t => t.address === tokenAddress)?.balance || "0"
@@ -381,7 +367,7 @@ export function DepositModalMigrated({
         <MultiTokenDepositModal
           isOpen={showMultiTokenModal}
           onClose={() => setShowMultiTokenModal(false)}
-          availableTokens={availableTokensForMultiToken}
+          availableTokens={walletTokens}
           onDeposit={handleMultiTokenDeposit}
           isLoading={isLoading}
           rateLimitStatus={rateLimitStatus}
