@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
 import { readContract, waitForTransactionReceipt, writeContract } from '@wagmi/core';
 import { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia } from 'wagmi/chains';
-import { formatEther, parseEther, parseUnits } from 'viem';
+import { formatEther, parseEther, parseUnits, formatUnits } from 'viem';
 import { getContract } from 'viem';
 import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl, getChainNetworkInfo } from '@/config/web3';
 import { config } from '@/lib/wagmi';
@@ -1641,6 +1641,50 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       // Step 2: Convert amount using proper decimals
       const amountWei = parseUnits(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
+
+      // ✅ NEW: WALLET BALANCE VALIDATION - Check if user has enough tokens BEFORE approval
+      debugLog(`🔍 Checking wallet balance for ${tokenSymbol}...`);
+      try {
+        const walletTokenBalance = await publicClient.readContract({
+          address: tokenAddress as `0x${string}`,
+          abi: [
+            {
+              "constant": true,
+              "inputs": [{"name": "_owner", "type": "address"}],
+              "name": "balanceOf",
+              "outputs": [{"name": "", "type": "uint256"}],
+              "type": "function"
+            }
+          ],
+          functionName: 'balanceOf',
+          args: [address],
+        }) as bigint;
+
+        debugLog(`🔍 Wallet ${tokenSymbol} balance:`, walletTokenBalance.toString());
+        debugLog(`🔍 Amount to deposit:`, amountWei.toString());
+
+        if (walletTokenBalance < amountWei) {
+          const available = formatUnits(walletTokenBalance, decimals);
+          toast({
+            title: "Insufficient Token Balance",
+            description: `You only have ${available} ${tokenSymbol}. Cannot deposit ${amount} ${tokenSymbol}.`,
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return; // ❌ Block transaction - user saves gas
+        }
+
+        debugLog(`✅ Sufficient ${tokenSymbol} balance confirmed`);
+      } catch (balanceError) {
+        debugError('❌ Failed to check wallet balance:', balanceError);
+        toast({
+          title: "Balance Check Failed",
+          description: `Could not verify your ${tokenSymbol} balance. Please try again.`,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return; // ❌ Block transaction - user saves gas
+      }
 
       // ✅ NEW: PRE-SIMULATION - Check if transaction will succeed
       debugLog(`🔍 Pre-simulating token deposit transaction...`);
