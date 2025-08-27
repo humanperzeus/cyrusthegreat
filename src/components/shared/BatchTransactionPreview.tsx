@@ -166,7 +166,7 @@ export function BatchTransactionPreview({
                     {formatTokenBalance(amount, token.token.decimals)} {token.token.symbol}
                   </div>
                   <div className="text-xs text-gray-600">
-                    Balance: {formatTokenBalance(balance, token.token.decimals)} ({percentageOfBalance.toFixed(1)}%)
+                                                Balance: {formatTokenBalance(token.balance, token.token.decimals)} ({percentageOfBalance.toFixed(1)}%)
                   </div>
                     {token.valueUSD && (
                       <div className="text-xs text-green-600">

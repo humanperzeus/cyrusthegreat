@@ -87,7 +87,7 @@ export function TokenList({
               )}
             </div>
             <div className="text-xs text-gray-600 truncate">
-              {formatBalance(parseFloat(token.balance), token.decimals)} {token.symbol}
+                                          {formatTokenBalance(token.balance, token.decimals)} {token.symbol}
             </div>
             {onRemoveToken && !token.isNative && (
               <Button
