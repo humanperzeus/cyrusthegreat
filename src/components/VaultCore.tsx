@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 import { Shield, Lock, Coins, ArrowUpDown, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WalletConnector } from "./WalletConnector";
 import { useAccount } from "wagmi";
 import { switchToChain, getActiveChainInfo, getChainConfig } from "@/config/web3";
-import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { debugLog } from "@/lib/utils";
 
@@ -91,7 +91,7 @@ export const VaultCore = ({
 }: VaultCoreProps) => {
   
   // DEBUG: Log what VaultCore receives
-  React.useEffect(() => {
+  useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
       debugLog('🔍 VaultCore received vaultTokens:', {
         count: vaultTokens.length,
