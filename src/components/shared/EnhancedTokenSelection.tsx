@@ -22,6 +22,7 @@ import {
   Plus,
   CheckCircle
 } from "lucide-react";
+import { formatTokenBalance } from "@/lib/utils";
 
 interface Token {
   address: string;
@@ -298,7 +299,7 @@ export function EnhancedTokenSelection({
                         <div className="text-right space-y-1">
                           {showBalances && (
                             <div className="text-sm font-mono">
-                              {parseFloat(token.balance).toFixed(4)} {token.symbol}
+                              {formatTokenBalance(token.balance, token.decimals)} {token.symbol}
                             </div>
                           )}
                           {showPrices && token.priceUSD && (

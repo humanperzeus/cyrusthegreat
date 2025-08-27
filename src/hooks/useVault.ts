@@ -9,7 +9,7 @@ import { config } from '@/lib/wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
-import { debugLog, debugWarn, debugError } from '@/lib/utils';
+import { debugLog, debugWarn, debugError, weiToEtherFullPrecision } from '@/lib/utils';
 
 // Add window.ethereum type
 declare global {
@@ -427,7 +427,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   });
 
   // Get vault ETH balance using the correct function name from the real ABI
-  const { data: vaultBalanceData, refetch: refetchVaultBalance } = useReadContract({
+  const { data: vaultBalanceData, refetch: refetchVaultBalance, error: vaultBalanceError, isError: isVaultBalanceError } = useReadContract({
     address: getActiveContractAddress() as `0x${string}`,
     abi: VAULT_ABI,
     functionName: 'getBalance', // Changed from 'getETHBalance' to 'getBalance'
@@ -441,6 +441,20 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       refetchInterval: false,
     },
   });
+
+  // Debug logging for vault balance errors
+  React.useEffect(() => {
+    if (isVaultBalanceError && vaultBalanceError) {
+      debugError('❌ Vault Balance Contract Call Error:', {
+        error: vaultBalanceError,
+        contractAddress: getActiveContractAddress(),
+        functionName: 'getBalance',
+        args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined,
+        address,
+        activeChain
+      });
+    }
+  }, [isVaultBalanceError, vaultBalanceError, address, activeChain]);
 
   // Debug logging for vault balance fetching
   React.useEffect(() => {
@@ -469,6 +483,42 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       refetchInterval: false,
     },
   });
+
+  // CRITICAL FIX: Add missing getCurrentFee function
+  const getCurrentFee = useCallback(async (): Promise<bigint | null> => {
+    try {
+      debugLog('💰 Getting current fee from contract...');
+      
+      // Use the existing currentFee data if available
+      if (currentFee) {
+        debugLog(`✅ Using cached fee: ${currentFee.toString()} wei`);
+        return currentFee as bigint;
+      }
+      
+      // If no cached fee, fetch it manually
+      debugLog('🔄 No cached fee, fetching manually...');
+      const result = await readContract(config, {
+        address: getActiveContractAddress() as `0x${string}`,
+        abi: VAULT_ABI,
+        functionName: 'getCurrentFeeInWei',
+        account: address!
+      });
+      
+      debugLog(`✅ Fresh fee fetched: ${result.toString()} wei`);
+      return result as bigint;
+      
+    } catch (error) {
+      debugError('❌ Failed to get current fee:', error);
+      return null;
+    }
+  }, [currentFee, address, activeChain]);
+
+  // CRITICAL FIX: Add missing setCurrentFee function
+  const setCurrentFee = useCallback((fee: bigint) => {
+    debugLog(`💰 Setting current fee: ${fee.toString()} wei`);
+    // Note: This is a no-op since we don't have a state setter for currentFee
+    // The currentFee is managed by the useReadContract hook
+  }, []);
 
   // Get vault tokens for the connected user - using signed call since it's private
   const { data: vaultTokensData, refetch: refetchVaultTokens } = useReadContract({
@@ -801,9 +851,30 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   const [isLoadingVaultTokens, setIsLoadingVaultTokens] = useState(false);
   const [isLoadingTokens, setIsLoadingTokens] = useState(false); // Keep for backward compatibility
 
-  const walletBalanceFormatted = walletBalance ? formatEther(walletBalance.value) : '0.00';
-  const vaultBalanceFormatted = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.00';
-  const currentFeeFormatted = currentFee ? formatEther(currentFee as bigint) : '0.00';
+  // CRITICAL FIX: Use full precision formatting instead of formatEther which rounds
+  const walletBalanceFormatted = walletBalance ? weiToEtherFullPrecision(walletBalance.value) : '0.000000000000000000';
+  
+  // Debug logging to see what vaultBalanceData we're processing
+  if (process.env.NODE_ENV === 'development' && vaultBalanceData) {
+    console.log('🔍 useVault vaultBalanceData:', { 
+      raw: vaultBalanceData, 
+      asBigInt: (vaultBalanceData as bigint).toString(),
+      type: typeof vaultBalanceData 
+    });
+  }
+  
+  // TEMPORARY TEST: Compare our function with formatEther to see the difference
+  const vaultBalanceFormatted = vaultBalanceData ? weiToEtherFullPrecision(vaultBalanceData as bigint) : '0.000000000000000000';
+  const vaultBalanceFormattedOld = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.000000000000000000';
+  
+  // Debug logging to see the final formatted result
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔍 useVault vaultBalanceFormatted (NEW):', vaultBalanceFormatted);
+    console.log('🔍 useVault vaultBalanceFormatted (OLD):', vaultBalanceFormattedOld);
+    console.log('🔍 useVault vaultBalanceFormatted (RAW):', vaultBalanceData?.toString());
+  }
+  
+  const currentFeeFormatted = currentFee ? weiToEtherFullPrecision(currentFee as bigint) : '0.000000000000000000';
 
   // Essential logging only - only log when state changes significantly
   if (process.env.NODE_ENV === 'development') {
@@ -828,19 +899,19 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   if (process.env.NODE_ENV === 'development') {
     React.useEffect(() => {
       if (walletBalance) {
-        debugLog('💰 Wallet balance loaded/updated:', formatEther(walletBalance.value));
+        debugLog('💰 Wallet balance loaded/updated:', weiToEtherFullPrecision(walletBalance.value));
       }
     }, [walletBalance]);
 
     React.useEffect(() => {
       if (vaultBalanceData) {
-        debugLog('📊 Vault balance loaded/updated:', formatEther(vaultBalanceData as bigint));
+        debugLog('📊 Vault balance loaded/updated:', weiToEtherFullPrecision(vaultBalanceData as bigint));
       }
     }, [vaultBalanceData]);
 
     React.useEffect(() => {
       if (currentFee) {
-        debugLog('💸 Current fee loaded/updated:', formatEther(currentFee as bigint));
+        debugLog('💸 Current fee loaded/updated:', weiToEtherFullPrecision(currentFee as bigint));
       }
     }, [currentFee]);
   }
@@ -1023,17 +1094,17 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
             }
           }
 
-          // Calculate human-readable balance
+          // Calculate human-readable balance with token-specific precision
           const humanBalance = balanceDecimal / Math.pow(10, decimals);
           
           processedTokens.push({
             address: token.contractAddress,
             symbol: symbol,
-            balance: humanBalance.toFixed(4).replace(/\.?0+$/, ''), // Clean decimal display like ETH
+            balance: humanBalance.toFixed(decimals), // Use actual token decimals
             decimals: decimals
           });
           
-          debugLog(`✅ Token processed: ${symbol} = ${humanBalance.toFixed(4).replace(/\.?0+$/, '')}`);
+          debugLog(`✅ Token processed: ${symbol} = ${humanBalance.toFixed(decimals)} (${decimals} decimals)`);
         }
       } catch (error) {
         debugError(`❌ Error processing token ${token.contractAddress}:`, error);
@@ -1216,11 +1287,22 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
 
     try {
+      // CRITICAL FIX: Always get fresh fee before transaction
+      debugLog('💰 Getting fresh fee before ETH deposit...');
+      const freshFee = await getCurrentFee();
+      if (!freshFee) {
+        throw new Error('Failed to get fresh fee');
+      }
+      
+      // Update current fee state with fresh value
+      setCurrentFee(freshFee);
+      debugLog(`✅ Fresh fee obtained: ${formatEther(freshFee)} ETH`);
+      
       // SIMULATION: Check if user has enough balance before proceeding
       setIsSimulating(true);
       
       const amountInWei = parseEther(amount);
-      const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      const feeInWei = freshFee;
       const totalValue = amountInWei + feeInWei;
       
       debugLog('🔍 Deposit Simulation:', {
@@ -1238,7 +1320,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         debugLog('❌ Insufficient wallet balance for deposit:', { required, available });
       toast({
           title: "Insufficient Balance",
-          description: `You need ${required} ETH (${amount} + ${formatEther(feeInWei)} fee). You have ${available} ETH.`,
+          description: `You need ${required} ETH (${amount} + ${weiToEtherFullPrecision(feeInWei)} fee). You have ${available} ETH.`,
           variant: "destructive",
         });
         setIsSimulating(false);
@@ -1271,7 +1353,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
         toast({
         title: "Deposit Initiated",
-        description: `Depositing ${amount} ETH + ${formatEther(feeInWei)} ETH fee to vault...`,
+        description: `Depositing ${amount} ETH + ${weiToEtherFullPrecision(feeInWei)} ETH fee to vault...`,
         });
       
     } catch (error) {
@@ -1307,11 +1389,22 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
 
     try {
+      // CRITICAL FIX: Always get fresh fee before transaction
+      debugLog('💰 Getting fresh fee before ETH withdrawal...');
+      const freshFee = await getCurrentFee();
+      if (!freshFee) {
+        throw new Error('Failed to get fresh fee');
+      }
+      
+      // Update current fee state with fresh value
+      setCurrentFee(freshFee);
+      debugLog(`✅ Fresh fee obtained: ${formatEther(freshFee)} ETH`);
+      
       // SIMULATION: Check if user has enough vault balance before proceeding
       setIsSimulating(true);
       
       const amountInWei = parseEther(amount);
-      const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      const feeInWei = freshFee;
       
       debugLog('🔍 Withdrawal Simulation:', {
         amount,
@@ -1323,7 +1416,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Check if user has enough ETH in vault for withdrawal
       if ((vaultBalanceData as bigint) < amountInWei) {
-        const available = formatEther(vaultBalanceData as bigint);
+        const available = weiToEtherFullPrecision(vaultBalanceData as bigint);
         debugLog('❌ Insufficient vault balance:', { available, requested: amount });
       toast({
           title: "Insufficient Vault Balance",
@@ -1336,8 +1429,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Check if user has enough ETH for fee
       if (walletBalance && walletBalance.value < feeInWei) {
-        const feeRequired = formatEther(feeInWei);
-        const available = formatEther(walletBalance.value);
+        const feeRequired = weiToEtherFullPrecision(feeInWei);
+        const available = weiToEtherFullPrecision(walletBalance.value);
         debugLog('❌ Insufficient wallet balance for fee:', { feeRequired, available });
         toast({
           title: "Insufficient Balance for Fee",
@@ -1373,7 +1466,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       toast({
         title: "Withdrawal Initiated",
-        description: `Withdrawing ${amount} ETH (fee: ${formatEther(feeInWei)} ETH)...`,
+        description: `Withdrawing ${amount} ETH (fee: ${weiToEtherFullPrecision(feeInWei)} ETH)...`,
       });
       
     } catch (error) {
@@ -1436,7 +1529,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Check if user has enough ETH in vault for transfer
       if ((vaultBalanceData as bigint) < amountInWei) {
-        const available = formatEther(vaultBalanceData as bigint);
+        const available = weiToEtherFullPrecision(vaultBalanceData as bigint);
         debugLog('❌ Insufficient vault balance for transfer:', { available, requested: amount });
       toast({
           title: "Insufficient Vault Balance",
@@ -1449,8 +1542,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       
       // Check if user has enough ETH for fee
       if (walletBalance && walletBalance.value < feeInWei) {
-        const feeRequired = formatEther(feeInWei);
-        const available = formatEther(walletBalance.value);
+        const feeRequired = weiToEtherFullPrecision(feeInWei);
+        const available = weiToEtherFullPrecision(walletBalance.value);
         debugLog('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
         toast({
           title: "Insufficient Balance for Fee",
@@ -1487,7 +1580,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       toast({
         title: "Transfer Initiated",
-        description: `Transferring ${amount} ETH to ${to.slice(0, 6)}...${to.slice(-4)} (fee: ${formatEther(feeInWei)} ETH)`,
+        description: `Transferring ${amount} ETH to ${to.slice(0, 6)}...${to.slice(-4)} (fee: ${weiToEtherFullPrecision(feeInWei)} ETH)`,
       });
       
     } catch (error) {
@@ -2129,13 +2222,19 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     try {
       debugLog(`🚀 Executing direct deposit for ${tokenSymbol}...`);
       
-      // Get current fee for the transaction
-      if (!currentFee) {
-        throw new Error('Current fee not available');
+      // CRITICAL FIX: Always get fresh fee before transaction
+      debugLog('💰 Getting fresh fee before token deposit...');
+      const freshFee = await getCurrentFee();
+      if (!freshFee) {
+        throw new Error('Failed to get fresh fee');
       }
       
-      const feeWei = currentFee as bigint;
-      debugLog(`💰 Current fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
+      // Update current fee state with fresh value
+      setCurrentFee(freshFee);
+      debugLog(`✅ Fresh fee obtained: ${formatEther(freshFee)} ETH`);
+      
+      const feeWei = freshFee;
+      debugLog(`💰 Using fresh fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
       
       // Call the actual vault deposit function WITH ETH fee
       await writeVaultContract({

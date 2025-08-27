@@ -278,7 +278,7 @@ export function DepositModalMigrated({
               <div className="flex justify-between text-sm text-green-600 font-semibold">
                 <span>Total {getChainConfig(chain).nativeCurrency.symbol} to Send:</span>
                 <span className="font-mono">
-                  {(Number(amount) + Number(currentFee)).toFixed(6)} {getChainConfig(chain).nativeCurrency.symbol}
+                  {(Number(amount) + Number(currentFee)).toFixed(18)} {getChainConfig(chain).nativeCurrency.symbol}
                 </span>
               </div>
             )}

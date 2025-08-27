@@ -7,7 +7,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAccount, useBalance, useReadContract } from 'wagmi';
 import { formatEther } from 'viem';
 import { getActiveContractAddress, VAULT_ABI } from '@/config/web3';
-import { debugLog } from '@/lib/utils';
+import { debugLog, weiToEtherFullPrecision } from '@/lib/utils';
 
 export interface BalanceManagementHook {
   // Native token balances
@@ -40,30 +40,15 @@ export const useBalanceManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'
   const [isLoadingVaultBalance, setIsLoadingVaultBalance] = useState(false);
   const [isLoadingFee, setIsLoadingFee] = useState(false);
 
-  // Format balance with proper decimals
-  const formatBalance = useCallback((balance: string, decimals: number = 4): string => {
-    if (!balance || balance === '0') return '0.00';
+  // Format balance with token-specific precision for calculations
+  const formatBalance = useCallback((balance: string, decimals: number = 18): string => {
+    if (!balance || balance === '0') return '0'.padEnd(decimals + 1, '0');
 
     const numBalance = parseFloat(balance);
-    if (numBalance === 0) return '0.00';
+    if (numBalance === 0) return '0'.padEnd(decimals + 1, '0');
 
-    // For very small amounts
-    if (numBalance < 0.0001) {
-      return numBalance.toFixed(6);
-    }
-
-    // For small amounts
-    if (numBalance < 1) {
-      return numBalance.toFixed(4);
-    }
-
-    // For regular amounts
-    if (numBalance < 1000) {
-      return numBalance.toFixed(2);
-    }
-
-    // For large amounts
-    return numBalance.toFixed(0);
+    // Use token-specific precision for calculations
+    return numBalance.toFixed(decimals);
   }, []);
 
   // Check if user has sufficient balance
@@ -86,7 +71,8 @@ export const useBalanceManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'
     },
   });
 
-  const walletBalance = walletBalanceData ? formatEther(walletBalanceData.value) : '0.00';
+  // CRITICAL FIX: Use full precision formatting for native token balances
+  const walletBalance = walletBalanceData ? weiToEtherFullPrecision(walletBalanceData.value) : '0.000000000000000000';
 
   // Vault balance (user's native tokens in vault)
   const { data: vaultBalanceData, refetch: refetchVaultBalanceData } = useReadContract({
@@ -102,7 +88,7 @@ export const useBalanceManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'
     },
   });
 
-  const vaultBalance = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.00';
+  const vaultBalance = vaultBalanceData ? weiToEtherFullPrecision(vaultBalanceData as bigint) : '0.000000000000000000';
 
   // Current fee
   const { data: feeData, refetch: refetchFeeData } = useReadContract({
@@ -117,7 +103,7 @@ export const useBalanceManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'
     },
   });
 
-  const currentFee = feeData ? formatEther(feeData as bigint) : '0.00';
+  const currentFee = feeData ? weiToEtherFullPrecision(feeData as bigint) : '0.000000000000000000';
 
   // Update loading states
   useEffect(() => {

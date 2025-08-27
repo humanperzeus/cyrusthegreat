@@ -216,7 +216,7 @@ export function DepositModal({
               <div className="flex justify-between text-sm text-green-600 font-semibold">
                 <span>Total {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to Send:</span>
                 <span className="font-mono">
-                  {(Number(amount) + Number(currentFee)).toFixed(6)} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}
+                  {(Number(amount) + Number(currentFee)).toFixed(18)} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}
                 </span>
               </div>
             )}

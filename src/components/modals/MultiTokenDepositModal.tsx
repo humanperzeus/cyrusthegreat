@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 import { TokenList } from "../tokens/TokenList";
+import { formatTokenBalance } from "@/lib/utils";
 
 interface Token {
   address: string;
@@ -58,33 +59,9 @@ export function MultiTokenDepositModal({
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   const MIN_DEPOSIT = "0.0001";
 
-  // Simple balance formatting function - clean and minimal
+  // Use utility function for token-specific precision
   const formatBalance = (balance: number, decimals: number = 18): string => {
-    if (balance === 0) return "0";
-
-    // If it's a whole number, show no decimals
-    if (Number.isInteger(balance)) {
-      return balance.toString();
-    }
-
-    // For very small amounts, show significant decimals
-    if (balance < 0.0001) {
-      return balance.toFixed(6);
-    }
-
-    // For amounts less than 1, show up to 4 decimals
-    if (balance < 1) {
-      return balance.toFixed(4);
-    }
-
-    // For amounts less than 1000, show up to 2 decimals (but remove .00)
-    if (balance < 1000) {
-      const fixed = balance.toFixed(2);
-      return fixed.endsWith('.00') ? Math.floor(balance).toString() : fixed;
-    }
-
-    // For larger amounts, just show as plain number (no commas)
-    return Math.floor(balance).toString();
+    return formatTokenBalance(balance, decimals);
   };
 
   // Reset state when modal opens/closes
