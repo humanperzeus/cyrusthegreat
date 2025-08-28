@@ -39,7 +39,8 @@ const Index = () => {
     vaultBalance,
     currentFee,
     isLoading,
-    depositETH,
+    depositETH, // ORIGINAL: Custom transaction management
+    depositETHWagmi, // NEW: Wagmi-based implementation
     withdrawETH,
     transferETH,
     isConnected,
@@ -243,7 +244,7 @@ const Index = () => {
           // DISABLED: All refresh logic to prevent RPC spam
           // The useVault hook already handles smart refresh after transactions
         }}
-        onDeposit={depositETH}
+        onDeposit={depositETHWagmi} // NEW: Using Wagmi-based implementation
         onTokenDeposit={handleTokenDepositFromModal}
         onMultiTokenDeposit={handleMultiTokenDepositFromModal}
         isLoading={isLoading}

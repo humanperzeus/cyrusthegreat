@@ -3809,6 +3809,108 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     });
   }, [activeChain, currentNetwork.mode]);
 
+  // NEW: Wagmi-based ETH deposit for comparison with custom implementation
+  const depositETHWagmi = async (amount: string) => {
+    if (!amount || isNaN(Number(amount))) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // CRITICAL FIX: Always get fresh fee before transaction
+      debugLog('💰 Getting fresh fee before ETH deposit (Wagmi)...');
+      const freshFee = await getCurrentFee();
+      if (!freshFee) {
+        throw new Error('Failed to get fresh fee');
+      }
+      
+      // Update current fee state with fresh value
+      setCurrentFee(freshFee);
+      debugLog(`✅ Fresh fee obtained: ${formatEther(freshFee)} ETH`);
+      
+      // SIMULATION: Check if user has enough balance before proceeding
+      setIsSimulating(true);
+      
+      const amountInWei = parseEther(amount);
+      const feeInWei = freshFee;
+      const totalValue = amountInWei + feeInWei;
+      
+      debugLog('🔍 Deposit Simulation (Wagmi):', {
+        amount,
+        amountInWei: amountInWei.toString(),
+        feeInWei: feeInWei.toString(),
+        totalValue: totalValue.toString(),
+        walletBalance: walletBalance ? walletBalance.value.toString() : 'null'
+      });
+      
+      // Check if user has enough ETH for deposit + fee
+      if (walletBalance && walletBalance.value < totalValue) {
+        const required = formatEther(totalValue);
+        const available = formatEther(walletBalance.value);
+        debugLog('❌ Insufficient wallet balance for deposit:', { required, available });
+        toast({
+          title: "Insufficient Balance",
+          description: `You need ${required} ETH (${amount} + ${weiToEtherFullPrecision(feeInWei)} fee). You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      debugLog('✅ Deposit simulation successful, proceeding with transaction (Wagmi)');
+      
+      // Simulation successful - proceed with transaction
+      setIsSimulating(false);
+      setIsLoading(true);
+      
+      debugLog('Depositing ETH via Wagmi:', { 
+        amount, 
+        amountInWei: amountInWei.toString(),
+        feeInWei: feeInWei.toString(),
+        totalValue: totalValue.toString()
+      });
+      
+      // CRITICAL: Use writeVaultContract (Wagmi hook) for automatic transaction management
+      await writeVaultContract({
+        address: getActiveContractAddress() as `0x${string}`,
+        abi: VAULT_ABI as any,
+        functionName: 'depositETH',
+        args: [],
+        value: totalValue, // Send amount + fee together
+        chain: getTargetChain(),
+        account: address,
+      });
+
+      toast({
+        title: "Deposit Initiated (Wagmi)",
+        description: `Depositing ${amount} ETH + ${weiToEtherFullPrecision(feeInWei)} ETH fee to vault...`,
+      });
+      
+    } catch (error) {
+      debugError('Deposit error (Wagmi):', error);
+      toast({
+        title: "Deposit Failed (Wagmi)",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+      setIsSimulating(false);
+      setIsLoading(false);
+    }
+  };
+
   return {
     isConnected,
     walletBalance: walletBalanceFormatted,
@@ -3816,7 +3918,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     currentFee: currentFeeFormatted,
     isLoading: isTransactionLoading,
       isSimulating, // Add simulation state for UI
-    depositETH,
+    depositETH, // ORIGINAL: Custom transaction management
+    depositETHWagmi, // NEW: Wagmi-based implementation
     withdrawETH,
     transferETH,
       // Token functions
