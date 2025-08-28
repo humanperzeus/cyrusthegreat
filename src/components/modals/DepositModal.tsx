@@ -1,17 +1,23 @@
 import { useState, useEffect } from "react";
+import { formatTokenBalance } from "@/lib/utils";
+import { parseEther, formatEther } from "viem";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Info, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Info, Loader2, Coins, Zap } from "lucide-react";
 import { getChainConfig } from "@/config/web3";
+import { MultiTokenDepositModal } from "./MultiTokenDepositModal";
+import { RateLimitStatusDisplay } from "../shared/RateLimitStatusDisplay";
 
 interface DepositModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeposit: (amount: string) => void;
   onTokenDeposit?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
+  onMultiTokenDeposit?: (deposits: { token: string; amount: string }[]) => Promise<void>;
   isLoading: boolean;
   isSimulating?: boolean;
   walletBalance: string;
@@ -24,6 +30,19 @@ interface DepositModalProps {
   tokenBalance?: string;
   // Chain-aware props
   activeChain?: 'ETH' | 'BSC' | 'BASE';
+  // Multi-token functionality
+  availableTokens?: Array<{
+    address: string;
+    symbol: string;
+    balance: string;
+    decimals: number;
+    isNative?: boolean;
+  }>;
+  rateLimitStatus?: {
+    remaining: number;
+    total: number;
+    resetTime: number;
+  };
 }
 
 export function DepositModal({
@@ -31,6 +50,7 @@ export function DepositModal({
   onOpenChange,
   onDeposit,
   onTokenDeposit,
+  onMultiTokenDeposit,
   isLoading,
   isSimulating = false,
   walletBalance,
@@ -40,22 +60,39 @@ export function DepositModal({
   tokenSymbol,
   tokenAddress,
   tokenBalance,
-  activeChain
+  activeChain,
+  availableTokens = [],
+  rateLimitStatus
 }: DepositModalProps) {
+  
+  // ✅ DEBUG: Log when this modal is rendered
+  console.log('🔍 DepositModal RENDERED:', {
+    open,
+    isTokenDeposit,
+    tokenSymbol,
+    tokenBalance,
+    availableTokensCount: availableTokens.length
+  });
   const [amount, setAmount] = useState("");
+  const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
+  const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
-  // Auto-close modal after successful transaction
+  // Auto-close modal after successful transaction (now handled centrally in Index.tsx)
+  // Removed to prevent conflicts with centralized modal management
+
+  // Reset multi-token mode when modal opens/closes
   useEffect(() => {
-    if (isTransactionConfirmed && !isLoading) {
-      // Wait a moment for user to see success message, then close
-      const timer = setTimeout(() => {
-        onOpenChange(false);
-        setAmount(""); // Reset amount
-      }, 1500);
-      
-      return () => clearTimeout(timer);
+    if (!open) {
+      setIsMultiTokenMode(false);
+      setShowMultiTokenModal(false);
     }
-  }, [isTransactionConfirmed, isLoading, onOpenChange]);
+  }, [open]);
+
+  const handleMultiTokenDeposit = async (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => {
+    if (onMultiTokenDeposit) {
+      await onMultiTokenDeposit(deposits);
+    }
+  };
 
   const handleDeposit = () => {
     if (amount && !isNaN(Number(amount))) {
@@ -65,21 +102,71 @@ export function DepositModal({
   };
 
   const handleMaxDeposit = () => {
-    // For fees added on top, we need to leave room for the fee
-    const maxAmount = Math.max(0, Number(walletBalance) - Number(currentFee));
-    setAmount(maxAmount.toFixed(6));
+    if (isTokenDeposit && tokenBalance) {
+      // For tokens, use the formatted balance (fee is paid separately)
+      const tokenDecimals = availableTokens?.find(t => t.address === tokenAddress)?.decimals || 18;
+      const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
+      setAmount(formattedBalance);
+    } else {
+      // CRITICAL FIX: For ETH, preserve full precision when calculating max amount
+      // Convert to BigInt for precise arithmetic, then format for display
+      try {
+        const walletBalanceWei = parseEther(walletBalance);
+        const feeWei = parseEther(currentFee);
+        const maxAmountWei = walletBalanceWei - feeWei;
+        
+        if (maxAmountWei > 0n) {
+          // Format with full precision using formatEther
+          const maxAmountFormatted = formatEther(maxAmountWei);
+          setAmount(maxAmountFormatted);
+        } else {
+          setAmount("0");
+        }
+      } catch (error) {
+        console.error('❌ Error calculating max ETH amount:', error);
+        // Fallback to simple calculation
+        const maxAmount = Math.max(0, Number(walletBalance) - Number(currentFee));
+        setAmount(maxAmount.toString());
+      }
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>
-            {isTokenDeposit 
-              ? `Deposit ${tokenSymbol} to Vault` 
-              : `Deposit ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to Vault`
-            }
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>
+              {isTokenDeposit
+                ? `Deposit ${tokenSymbol} to Vault`
+                : `Deposit ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to Vault`
+              }
+            </DialogTitle>
+
+            {/* Multi-Token Toggle - Only for token deposits */}
+            {isTokenDeposit && onMultiTokenDeposit && availableTokens.length > 0 && (
+              <Button
+                variant={isMultiTokenMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsMultiTokenMode(!isMultiTokenMode)}
+                className="flex items-center space-x-1"
+              >
+                <Coins className="h-4 w-4" />
+                <span className="text-xs">{isMultiTokenMode ? 'Single' : 'Multi'}</span>
+              </Button>
+            )}
+          </div>
+
+          {/* Rate Limit Status - Compact */}
+          {rateLimitStatus && (
+            <div className="flex justify-center mt-2">
+              <RateLimitStatusDisplay
+                rateLimitStatus={rateLimitStatus}
+                compact={true}
+                showWarnings={false}
+              />
+            </div>
+          )}
         </DialogHeader>
         
         <div className="grid gap-4 py-4">
@@ -119,12 +206,12 @@ export function DepositModal({
                 onChange={(e) => setAmount(e.target.value)}
                 step="0.001"
                 min="0"
-                max={isTokenDeposit ? tokenBalance : walletBalance}
+                max={isTokenDeposit ? (tokenBalance || "0") : walletBalance}
                 disabled={isLoading}
               />
               <Button 
                 variant="outline" 
-                onClick={isTokenDeposit ? () => setAmount(tokenBalance || "0") : handleMaxDeposit}
+                onClick={handleMaxDeposit}
                 disabled={isLoading}
               >
                 Max
@@ -132,13 +219,15 @@ export function DepositModal({
             </div>
           </div>
 
+
+
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Wallet Balance:</span>
               <span className="font-mono">
                 {isTokenDeposit 
-                  ? `${tokenBalance} ${tokenSymbol}` 
-                  : `${walletBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                  ? `${formatTokenBalance(tokenBalance || "0", availableTokens?.find(t => t.address === tokenAddress)?.decimals || 18)} ${tokenSymbol}` 
+                  : `${formatTokenBalance(walletBalance, 18)} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
                 }
               </span>
             </div>
@@ -164,7 +253,7 @@ export function DepositModal({
               <div className="flex justify-between text-sm text-green-600 font-semibold">
                 <span>Total {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to Send:</span>
                 <span className="font-mono">
-                  {(Number(amount) + Number(currentFee)).toFixed(6)} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}
+                  {(Number(amount) + Number(currentFee)).toFixed(18)} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}
                 </span>
               </div>
             )}
@@ -188,35 +277,70 @@ export function DepositModal({
             </AlertDescription>
           </Alert>
 
-          <Button 
-            onClick={() => {
-              if (isTokenDeposit && tokenAddress && tokenSymbol && onTokenDeposit) {
-                onTokenDeposit(tokenAddress, amount, tokenSymbol);
-              } else {
-                onDeposit(amount);
-              }
-            }}
-            disabled={isLoading || !amount || Number(amount) <= 0}
-            className="w-full"
-          >
-            {isSimulating ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Checking...
-              </>
-            ) : isLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Depositing...
-              </>
-            ) : (
-              isTokenDeposit 
-                ? `Deposit ${tokenSymbol}` 
-                : `Deposit ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
-            )}
-          </Button>
+          {/* Single Token Deposit Button */}
+          {!isMultiTokenMode && (
+            <Button
+              onClick={() => {
+                if (isTokenDeposit && tokenAddress && tokenSymbol && onTokenDeposit) {
+                  onTokenDeposit(tokenAddress, amount, tokenSymbol);
+                } else {
+                  onDeposit(amount);
+                }
+              }}
+              disabled={isLoading || !amount || Number(amount) <= 0}
+              className="w-full"
+            >
+              {isSimulating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Checking...
+                </>
+              ) : isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Depositing...
+                </>
+              ) : (
+                isTokenDeposit
+                  ? `Deposit ${tokenSymbol}`
+                  : `Deposit ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+              )}
+            </Button>
+          )}
+
+          {/* Multi-Token Deposit Button */}
+          {isMultiTokenMode && isTokenDeposit && (
+            <Button
+              onClick={() => setShowMultiTokenModal(true)}
+              disabled={isLoading}
+              className="w-full"
+              variant="default"
+            >
+              <Coins className="h-4 w-4 mr-2" />
+              Open Multi-Token Deposit
+              <Badge variant="secondary" className="ml-2">
+                {availableTokens.length} tokens
+              </Badge>
+            </Button>
+          )}
         </div>
       </DialogContent>
+
+      {/* Multi-Token Deposit Modal */}
+      {showMultiTokenModal && onMultiTokenDeposit && isTokenDeposit && (
+        <MultiTokenDepositModal
+          isOpen={showMultiTokenModal}
+          onClose={() => {
+            setShowMultiTokenModal(false);
+            // Auto-refresh balances when multi-token modal closes
+            // Note: The parent modal will also refresh when it closes
+          }}
+          availableTokens={availableTokens}
+          onDeposit={handleMultiTokenDeposit}
+          isLoading={isLoading}
+          rateLimitStatus={rateLimitStatus}
+        />
+      )}
     </Dialog>
   );
 };

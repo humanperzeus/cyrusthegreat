@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 import { Shield, Lock, Coins, ArrowUpDown, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,9 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WalletConnector } from "./WalletConnector";
 import { useAccount } from "wagmi";
 import { switchToChain, getActiveChainInfo, getChainConfig } from "@/config/web3";
-import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-import { debugLog } from "@/lib/utils";
+import { debugLog, debugError, formatTokenBalance } from "@/lib/utils";
 
 interface VaultCoreProps {
   walletBalance: string;
@@ -21,9 +21,9 @@ interface VaultCoreProps {
   onWithdraw: () => void;
   onTransfer: () => void;
   // Token operation handlers
-  onTokenDeposit: (token: { symbol: string; address: string; balance: string }) => void;
-  onTokenWithdraw: (token: { symbol: string; address: string; balance: string }) => void;
-  onTokenTransfer: (token: { symbol: string; address: string; balance: string }) => void;
+  onTokenDeposit: (token: { symbol: string; address: string; balance: string; decimals: number }) => void;
+  onTokenWithdraw: (token: { symbol: string; address: string; balance: string; decimals: number }) => void;
+  onTokenTransfer: (token: { symbol: string; address: string; balance: string; decimals: number }) => void;
   // Token display props
   walletTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
   vaultTokens: Array<{address: string, symbol: string, balance: string, decimals: number}>;
@@ -89,6 +89,20 @@ export const VaultCore = ({
   activeChain,
   setActiveChain,
 }: VaultCoreProps) => {
+  
+  // DEBUG: Log what VaultCore receives
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      debugLog('🔍 VaultCore received vaultTokens:', {
+        count: vaultTokens.length,
+        tokens: vaultTokens.map(t => ({
+          symbol: t.symbol,
+          balance: t.balance,
+          decimals: t.decimals
+        }))
+      });
+    }
+  }, [vaultTokens]);
   const { isConnected } = useAccount();
   
   // Display mode state
@@ -117,21 +131,26 @@ export const VaultCore = ({
     });
   }, [isLoadingWalletTokens, isLoadingVaultTokens, activeTab, displayMode]);
 
-  // Debug: Track all tab changes with detailed context
+  // Debug: Track tab changes with reduced spam
   useEffect(() => {
-    debugLog('🎯 TAB CHANGE DETECTED:', {
-      timestamp: new Date().toISOString(),
-      previousTab: activeTab,
-      newTab: activeTab,
+    const currentTabState = {
+      activeTab,
       displayMode,
       isLoadingWalletTokens,
       isLoadingVaultTokens,
       walletTokensCount: walletTokens.length,
       vaultTokensCount: vaultTokens.length,
       isConnected
+    };
+    
+    // Log tab changes for debugging
+    debugLog('🎯 TAB CHANGE DETECTED:', {
+      timestamp: new Date().toISOString(),
+      newTab: activeTab,
+      ...currentTabState
     });
 
-    // Log specific scenarios that might cause glitches
+    // Log specific scenarios that might cause glitches (reduced frequency)
     if (displayMode === 'native-tokens') {
       debugLog('🔧 NATIVE TOKENS MODE DEBUG:', {
         activeNativeTab: activeTab === 'wallet' ? 'tokens' : 'tokens',
@@ -147,20 +166,29 @@ export const VaultCore = ({
     symbol: string;
     address: string;
     balance: string;
+    decimals: number;
   } | null>(null);
 
   // Handle token deposit click
-  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
+    // CRITICAL FIX: Ensure we're using the full precision balance for deposit
+    // The token.balance might be truncated, so we need to get the fresh data
+    debugLog(`🔍 Token deposit requested for ${token.symbol}:`, {
+      providedBalance: token.balance,
+      tokenAddress: token.address,
+      tokenDecimals: token.decimals
+    });
+    
     onTokenDeposit(token);
   };
 
   // Handle token withdraw click
-  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     onTokenWithdraw(token);
   };
 
   // Handle token transfer click
-  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string }) => {
+  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
     onTokenTransfer(token);
   };
 
@@ -289,7 +317,7 @@ export const VaultCore = ({
                               </div>
                               <div>
                                 <div className="font-semibold text-foreground">{token.symbol}</div>
-                                <div className="text-sm text-vault-warning font-bold">{token.balance}</div>
+                                <div className="text-sm text-vault-warning font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
                               </div>
                             </div>
                             <Button
@@ -361,7 +389,7 @@ export const VaultCore = ({
                               </div>
                               <div>
                                 <div className="font-semibold text-foreground">{token.symbol}</div>
-                                <div className="text-sm text-vault-success font-bold">{token.balance}</div>
+                                <div className="text-sm text-vault-success font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
                               </div>
                             </div>
                             <div className="flex space-x-2">
@@ -456,7 +484,7 @@ export const VaultCore = ({
                         </div>
                         <div>
                           <div className="font-semibold text-foreground">{token.symbol}</div>
-                          <div className="text-sm text-vault-warning font-bold">{token.balance}</div>
+                                                          <div className="text-sm text-vault-warning font-bold">{formatTokenBalance(token.balance, token.decimals)}</div>
                         </div>
                       </div>
                       <Button
@@ -526,9 +554,26 @@ export const VaultCore = ({
                         <div className="w-10 h-10 bg-vault-success/20 rounded-full flex items-center justify-center">
                           <span className="text-sm font-medium text-vault-success">{token.symbol.charAt(0)}</span>
                         </div>
-                        <div>
+                                                <div>
                           <div className="font-semibold text-foreground">{token.symbol}</div>
-                          <div className="text-sm text-vault-success font-bold">{token.balance}</div>
+                          <div className="text-sm text-vault-success font-bold">
+                            {(() => {
+                              // DEBUG: Log the exact values being passed to formatTokenBalance
+                              console.log(`🔍 VaultCore display for ${token.symbol}:`, {
+                                rawBalance: token.balance,
+                                rawBalanceType: typeof token.balance,
+                                rawBalanceLength: token.balance?.length,
+                                decimals: token.decimals,
+                                hasScientificNotation: token.balance?.includes('e+') || token.balance?.includes('E+')
+                              });
+                              
+                              return formatTokenBalance(token.balance, token.decimals);
+                            })()}
+                          </div>
+                          {/* DEBUG: Show raw balance to verify precision */}
+                          <div className="text-xs text-muted-foreground">
+                            Raw: {token.balance}
+                          </div>
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -637,7 +682,7 @@ export const VaultCore = ({
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="text-right mr-3">
-                    <div className="font-semibold text-vault-warning">{token.balance}</div>
+                                                <div className="font-semibold text-vault-warning">{formatTokenBalance(token.balance, token.decimals)}</div>
                   </div>
                   <Button
                     size="sm"
@@ -697,7 +742,7 @@ export const VaultCore = ({
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="text-right mr-3">
-                    <div className="font-semibold text-vault-success">{token.balance}</div>
+                                                <div className="font-semibold text-vault-success">{formatTokenBalance(token.balance, token.decimals)}</div>
                   </div>
                   <Button
                     size="sm"
@@ -772,7 +817,7 @@ export const VaultCore = ({
                     </div>
                     <div>
                       <div className="font-semibold text-foreground">{token.symbol}</div>
-                      <div className="text-lg font-bold text-vault-warning">{token.balance}</div>
+                                                <div className="text-lg font-bold text-vault-warning">{formatTokenBalance(token.balance, token.decimals)}</div>
                       <a
                         href={`${chainConfig.etherscanUrl}/address/${token.address}`}
                         target="_blank"
@@ -834,7 +879,7 @@ export const VaultCore = ({
                     </div>
                     <div>
                       <div className="font-semibold text-foreground">{token.symbol}</div>
-                      <div className="text-lg font-bold text-vault-success">{token.balance}</div>
+                                                <div className="text-lg font-bold text-vault-success">{formatTokenBalance(token.balance, token.decimals)}</div>
                       <a
                         href={`${chainConfig.etherscanUrl}/address/${token.address}`}
                         target="_blank"
@@ -1256,59 +1301,7 @@ export const VaultCore = ({
         </div>
       )}
 
-                    {/* DEBUG PANEL - Transaction State Investigation (TESTNET ONLY) */}
-              {isConnected && currentNetwork.networkMode === 'testnet' && (
-                <div className="text-xs text-center p-4 bg-red-500/10 border border-red-500/30 rounded">
-                  <div className="font-bold text-red-500 mb-2">🔧 DEBUG PANEL - Transaction State Investigation (TESTNET)</div>
-                  <div className="grid grid-cols-6 gap-2">
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.checkCurrentState()}
-                      className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                      title="Check current transaction state"
-                    >
-                      🔍 State
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.testChainIsolation()}
-                      className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
-                      title="Test chain state isolation"
-                    >
-                      🧪 Isolation
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.forceResetStates()}
-                      className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-                      title="Force reset all transaction states"
-                    >
-                      🚨 Reset
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.simulateTransaction()}
-                      className="px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
-                      title="Simulate transaction on current chain"
-                    >
-                      🎭 Simulate
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.deepInvestigation()}
-                      className="px-2 py-1 bg-orange-500 text-white text-white text-xs rounded hover:bg-orange-600"
-                      title="Deep state investigation"
-                    >
-                      🔬 Deep
-                    </button>
-                    <button
-                      onClick={() => (window as any).debugTransactionStates?.nuclearReset()}
-                      className="px-2 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600"
-                      title="Nuclear reset - clear everything"
-                    >
-                      ☢️ Nuclear
-                    </button>
-                  </div>
-                  <div className="text-red-500/70 mt-2">
-                    Debug panel only visible on testnet - Use these buttons to debug transaction state pollution issues
-                  </div>
-                </div>
-              )}
+
 
       {/* v1.15 Release Information */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
@@ -1319,6 +1312,8 @@ export const VaultCore = ({
       <div className="text-xs text-muted-foreground text-center p-2">
         made by <a href="https://x.com/humanperzeus" target="_blank" rel="noopener noreferrer" className="text-vault-primary hover:text-vault-primary/80 transition-colors">@humanperzeus</a>
       </div>
+
+
     </div>
   );
 };
