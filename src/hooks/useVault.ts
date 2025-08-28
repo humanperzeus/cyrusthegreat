@@ -3114,22 +3114,26 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         return;
       }
 
-      const transferHash = await writeContract(config, {
+      // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
+      await writeVaultContract({
         address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'transferMultipleTokensInternal',
         args: [tokens, to, amounts],
+        chain: getTargetChain(),
+        account: address,
         value: feeInWei,
       });
 
-      console.log('✅ Multi-token transfer transaction submitted:', transferHash);
+      console.log('✅ Multi-token transfer transaction submitted via Wagmi hook');
 
       toast({
         title: "Multi-token transfer initiated",
         description: `Transferring ${transfers.length} tokens to ${to.slice(0, 6)}...${to.slice(-4)}`,
       });
 
-      return { hash: transferHash };
+      // CRITICAL FIX: No need to return hash - Wagmi hook will handle transaction state automatically
+      // The transaction confirmation system will automatically refresh balances
 
     } catch (error: any) {
       // Handle specific errors
