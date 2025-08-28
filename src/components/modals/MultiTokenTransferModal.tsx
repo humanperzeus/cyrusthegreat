@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, ArrowRight, User } from "lucide-react";
-import { formatTokenBalance } from "@/lib/utils";
+import { formatTokenBalance, convertToWei } from "@/lib/utils";
 
 interface Token {
   address: string;
@@ -95,10 +95,10 @@ export function MultiTokenTransferModal({
       return { isValid: false, error: `Minimum transfer is ${minTransfer} ${token.symbol}` };
     }
 
-    // CRITICAL FIX: Compare amounts as BigInt to avoid precision loss
-    // Convert both amounts to the smallest unit (wei) for exact comparison
-    const amountInSmallestUnit = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, token.decimals)));
-    const balanceInSmallestUnit = BigInt(Math.floor(parseFloat(token.balance) * Math.pow(10, token.decimals)));
+    // CRITICAL FIX: Compare amounts as BigInt to avoid precision loss - PRECISION SAFE
+    // Convert both amounts to the smallest unit (wei) for exact comparison using decimal.js
+    const amountInSmallestUnit = convertToWei(amount, token.decimals);
+    const balanceInSmallestUnit = convertToWei(token.balance, token.decimals);
     
     if (amountInSmallestUnit > balanceInSmallestUnit) {
       return { isValid: false, error: `Insufficient vault balance. Max: ${formatTokenBalance(token.balance, token.decimals)}` };

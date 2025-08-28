@@ -9,7 +9,7 @@ import { config } from '@/lib/wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { decodeFunctionResult, encodeFunctionData } from 'viem';
 import { createPublicClient, http } from 'viem';
-import { debugLog, debugWarn, debugError, weiToEtherFullPrecision, fetchTokenDecimals, fetchTokenSymbol, formatTokenBalance, bigIntToFullPrecisionString } from '@/lib/utils';
+import { debugLog, debugWarn, debugError, weiToEtherFullPrecision, fetchTokenDecimals, fetchTokenSymbol, formatTokenBalance, bigIntToFullPrecisionString, convertToWei } from '@/lib/utils';
 
 // Add window.ethereum type
 declare global {
@@ -1638,8 +1638,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
-      // Step 2: Convert amount using proper decimals
-      const amountWei = parseUnits(amount, decimals);
+      // Step 2: Convert amount using proper decimals - PRECISION SAFE
+      const amountWei = convertToWei(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
 
       // ✅ NEW: WALLET BALANCE VALIDATION - Check if user has enough tokens BEFORE approval
@@ -1820,8 +1820,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
-      // Step 2: Convert amount using proper decimals
-      const amountWei = parseUnits(amount, decimals);
+      // Step 2: Convert amount using proper decimals - PRECISION SAFE
+      const amountWei = convertToWei(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
 
       // Step 3: Check current allowance
@@ -2039,7 +2039,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
         const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
         const decimals = tokenInfo?.decimals || 18;
-        return parseUnits(d.amount, decimals).toString();
+        return convertToWei(d.amount, decimals).toString();
       });
 
       // Calculate ETH value to send (ETH deposit amount only)
@@ -2104,7 +2104,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
           // Get token decimals for proper amount calculation
           const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
           const decimals = tokenInfo?.decimals || 18;
-          const requiredAmount = parseUnits(deposit.amount, decimals);
+          const requiredAmount = convertToWei(deposit.amount, decimals);
           console.log(`  ${tokenAddress}: Current allowance: ${currentAllowance}, Required: ${requiredAmount}`);
 
           if (BigInt(currentAllowance as string) < requiredAmount) {
@@ -2231,6 +2231,15 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
     try {
       setIsLoading(true);
+      
+      // CRITICAL DEBUG: Log the exact amount at each step to find where scientific notation conversion happens
+      console.log(`🔍 DEBUG - depositTokenWithDelay called with amount:`, {
+        originalAmount: amount,
+        amountType: typeof amount,
+        hasScientificNotation: amount.includes('e') || amount.includes('E'),
+        amountLength: amount.length
+      });
+      
       debugLog(`⏱️ Deposit with 3-second delay for ${amount} ${tokenSymbol}`);
 
       // Step 1: Get token decimals (like other functions)
@@ -2250,8 +2259,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
-      // Step 2: Convert amount using proper decimals
-      const amountWei = parseUnits(amount, decimals);
+      // Step 2: Convert amount using proper decimals - PRECISION SAFE
+      const amountWei = convertToWei(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
 
       // ✅ NEW: WALLET BALANCE VALIDATION - Check if user has enough tokens BEFORE approval
@@ -2593,8 +2602,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
-      // Step 2: Convert amount using proper decimals
-      const amountWei = parseUnits(amount, decimals);
+      // Step 2: Convert amount using proper decimals - PRECISION SAFE
+      const amountWei = convertToWei(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
       
       // Get current fee for the transaction
@@ -2828,7 +2837,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
         const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
         const decimals = tokenInfo?.decimals || 18;
-        return parseUnits(d.amount, decimals).toString();
+        return convertToWei(d.amount, decimals).toString();
       });
 
       // Get fee for the transaction
@@ -3064,7 +3073,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
         const tokenAddress = typeof t.token === 'string' ? t.token : t.token.address;
         const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
         const decimals = tokenInfo?.decimals || 18;
-        return parseUnits(t.amount, decimals).toString();
+        return convertToWei(t.amount, decimals).toString();
       });
 
       // Get fee for the transaction
@@ -3171,8 +3180,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       debugLog(`🔍 Token ${tokenSymbol} decimals:`, decimals);
 
-      // Step 2: Convert amount using proper decimals (like your working project)
-      const amountWei = parseUnits(amount, decimals);
+      // Step 2: Convert amount using proper decimals - PRECISION SAFE
+      const amountWei = convertToWei(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
       
       // Step 3: Get current fee
