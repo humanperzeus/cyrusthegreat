@@ -53,7 +53,7 @@ const Index = () => {
     refetchWalletTokens,
     refetchVaultTokens,
     depositToken,
-    depositTokenWithDelay,
+    depositTokenSmart,
     withdrawToken,
     withdrawMultipleTokens, // NEW: Multi-token withdrawal function
     transferInternalToken, // Add transferInternalToken to the hook
@@ -169,8 +169,8 @@ const Index = () => {
 
   // Handle token deposit from modal
   const handleTokenDepositFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
-    // Call the simple delay deposit function with string amount (function handles decimals internally)
-    depositTokenWithDelay(tokenAddress, amount, tokenSymbol);
+    // Call the smart deposit function with complete allowance flow
+    depositTokenSmart(tokenAddress, amount, tokenSymbol);
   };
 
   // Handle multi-token deposit from modal

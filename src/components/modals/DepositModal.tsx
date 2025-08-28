@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { formatTokenBalance } from "@/lib/utils";
+import { formatTokenBalance, preventScientificNotation } from "@/lib/utils";
 import { parseEther, formatEther } from "viem";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,17 @@ export function DepositModal({
     }
   }, [open]);
 
+  // CRITICAL FIX: Ensure amount is always clean and never in scientific notation
+  useEffect(() => {
+    if (amount) {
+      const cleanAmount = ensureCleanAmount(amount);
+      if (cleanAmount !== amount) {
+        console.log(`🔧 Amount cleaned from: ${amount} → ${cleanAmount}`);
+        setAmount(cleanAmount);
+      }
+    }
+  }, [amount]);
+
   const handleMultiTokenDeposit = async (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => {
     if (onMultiTokenDeposit) {
       await onMultiTokenDeposit(deposits);
@@ -95,18 +106,47 @@ export function DepositModal({
   };
 
   const handleDeposit = () => {
-    if (amount && !isNaN(Number(amount))) {
+    // CRITICAL FIX: Don't convert amount to Number - it causes scientific notation
+    if (amount && amount.trim() !== '') {
       onDeposit(amount);
       // Don't reset amount here - wait for transaction confirmation
     }
   };
 
+  // CRITICAL FIX: Ensure amount is always clean and never in scientific notation
+  const ensureCleanAmount = (amount: string): string => {
+    if (!amount) return amount;
+    
+    // Prevent scientific notation
+    const cleanAmount = preventScientificNotation(amount);
+    
+    // Additional validation: ensure it's a valid decimal number
+    if (cleanAmount.includes('e') || cleanAmount.includes('E')) {
+      console.error('🚨 Scientific notation still detected after cleaning:', cleanAmount);
+      return '0'; // Fallback to prevent errors
+    }
+    
+    return cleanAmount;
+  };
+
   const handleMaxDeposit = () => {
     if (isTokenDeposit && tokenBalance) {
+      // CRITICAL FIX: Prevent scientific notation conversion for token balances
       // For tokens, use the formatted balance (fee is paid separately)
       const tokenDecimals = availableTokens?.find(t => t.address === tokenAddress)?.decimals || 18;
-      const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
-      setAmount(formattedBalance);
+      
+      // Prevent scientific notation before formatting
+      const cleanBalance = preventScientificNotation(tokenBalance);
+      console.log(`🔧 MAX button - Original balance: ${tokenBalance}, Clean balance: ${cleanBalance}`);
+      
+      const formattedBalance = formatTokenBalance(cleanBalance, tokenDecimals);
+      console.log(`🔧 MAX button - Formatted balance: ${formattedBalance}`);
+      
+      // Ensure the final amount is clean
+      const finalCleanAmount = ensureCleanAmount(formattedBalance);
+      console.log(`🔧 MAX button - Final clean amount: ${finalCleanAmount}`);
+      
+      setAmount(finalCleanAmount);
     } else {
       // CRITICAL FIX: For ETH, preserve full precision when calculating max amount
       // Convert to BigInt for precise arithmetic, then format for display
@@ -200,13 +240,23 @@ export function DepositModal({
             <div className="flex gap-2">
               <Input
                 id="amount"
-                type="number"
+                type="text"
                 placeholder="0.0"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                step="0.001"
-                min="0"
-                max={isTokenDeposit ? (tokenBalance || "0") : walletBalance}
+                onChange={(e) => {
+                  // CRITICAL FIX: Prevent scientific notation in input
+                  const inputValue = e.target.value;
+                  if (inputValue.includes('e') || inputValue.includes('E')) {
+                    console.warn('⚠️ Scientific notation detected in input, preventing conversion');
+                    return; // Don't allow scientific notation
+                  }
+                  
+                  // Ensure the amount is always clean
+                  const cleanAmount = ensureCleanAmount(inputValue);
+                  setAmount(cleanAmount);
+                }}
+                pattern="[0-9]*\.?[0-9]*"
+                inputMode="decimal"
                 disabled={isLoading}
               />
               <Button 
@@ -249,11 +299,22 @@ export function DepositModal({
             </div>
             
             {/* Total calculation - Different for ETH vs Token deposits */}
-            {!isTokenDeposit && amount && !isNaN(Number(amount)) && (
+            {!isTokenDeposit && amount && amount.trim() !== '' && (
               <div className="flex justify-between text-sm text-green-600 font-semibold">
                 <span>Total {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to Send:</span>
                 <span className="font-mono">
-                  {(Number(amount) + Number(currentFee)).toFixed(18)} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}
+                  {/* CRITICAL FIX: Use BigInt arithmetic to prevent scientific notation */}
+                  {(() => {
+                    try {
+                      const amountWei = parseEther(amount);
+                      const feeWei = parseEther(currentFee);
+                      const totalWei = amountWei + feeWei;
+                      return formatEther(totalWei);
+                    } catch (error) {
+                      console.error('❌ Error calculating total:', error);
+                      return 'Error calculating total';
+                    }
+                  })()} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}
                 </span>
               </div>
             )}
@@ -287,7 +348,7 @@ export function DepositModal({
                   onDeposit(amount);
                 }
               }}
-              disabled={isLoading || !amount || Number(amount) <= 0}
+              disabled={isLoading || !amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
               className="w-full"
             >
               {isSimulating ? (
