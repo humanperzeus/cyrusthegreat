@@ -1998,16 +1998,18 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
               return; // ❌ Block transaction - user saves gas
             }
             
-            // Execute ETH deposit
-            const ethDepositHash = await writeContract(config, {
+            // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
+            await writeVaultContract({
               address: getActiveContractAddress() as `0x${string}`,
               abi: VAULT_ABI,
               functionName: 'depositETH',
               args: [],
+              chain: getTargetChain(),
+              account: address,
               value: totalEthValue, // Send deposit amount + fee
             });
             
-            console.log('✅ ETH deposit transaction submitted:', ethDepositHash);
+            console.log('✅ ETH deposit transaction submitted via Wagmi hook');
             toast({
               title: "ETH Deposit Initiated",
               description: `Depositing ${formatEther(ethAmount)} ETH to vault...`,
@@ -2044,9 +2046,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
 
       // Calculate ETH value to send (ETH deposit amount only)
       let ethValueToSend = parseEther('0');
-      if (ethDeposit) {
-        ethValueToSend = parseEther(ethDeposit.amount);
-        console.log('💰 ETH deposit amount:', formatEther(ethValueToSend));
+      if (ethDeposits.length > 0) {
+        // Sum up all ETH deposits
+        const totalEthDepositAmount = ethDeposits.reduce((sum, deposit) => {
+          return sum + parseEther(deposit.amount);
+        }, parseEther('0'));
+        ethValueToSend = totalEthDepositAmount;
+        console.log('💰 Total ETH deposit amount:', formatEther(ethValueToSend));
       }
 
       // CRITICAL FIX: Robust fee management for multi-token deposits
@@ -2172,25 +2178,29 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       console.log('Tokens:', tokens);
       console.log('Amounts:', amounts);
       console.log('Total ETH value to send:', formatEther(totalEthValue));
-      console.log('ETH deposit included:', !!ethDeposit);
+      console.log('ETH deposit included:', ethDeposits.length > 0);
       console.log('Token deposits count:', approvalTokenDeposits.length);
 
-      const depositHash = await writeContract(config, {
+      // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
+      await writeVaultContract({
         address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'depositMultipleTokens',
         args: [tokens, amounts],
+        chain: getTargetChain(),
+        account: address,
         value: totalEthValue,
       });
 
-      console.log('✅ Multi-token deposit transaction submitted:', depositHash);
+      console.log('✅ Multi-token deposit transaction submitted via Wagmi hook');
 
       toast({
         title: "Multi-token deposit initiated",
         description: `Depositing ${deposits.length} tokens to vault`,
       });
 
-      return { hash: depositHash };
+      // CRITICAL FIX: No need to return hash - Wagmi hook will handle transaction state automatically
+      // The transaction confirmation system will automatically refresh balances
 
     } catch (error: any) {
 
