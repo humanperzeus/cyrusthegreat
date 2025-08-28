@@ -2254,6 +2254,98 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       const amountWei = parseUnits(amount, decimals);
       debugLog(`💰 Amount in wei:`, amountWei.toString());
 
+      // ✅ NEW: WALLET BALANCE VALIDATION - Check if user has enough tokens BEFORE approval
+      debugLog(`🔍 Checking wallet balance for ${tokenSymbol}...`);
+      try {
+        const walletTokenBalance = await publicClient.readContract({
+          address: tokenAddress as `0x${string}`,
+          abi: [
+            {
+              "constant": true,
+              "inputs": [{"name": "_owner", "type": "address"}],
+              "name": "balanceOf",
+              "outputs": [{"name": "", "type": "uint256"}],
+              "type": "function"
+            }
+          ],
+          functionName: 'balanceOf',
+          args: [address],
+        }) as bigint;
+
+        debugLog(`🔍 Wallet ${tokenSymbol} balance:`, walletTokenBalance.toString());
+        debugLog(`🔍 Amount to deposit:`, amountWei.toString());
+
+        if (walletTokenBalance < amountWei) {
+          const available = formatTokenBalance(walletTokenBalance.toString(), decimals);
+          toast({
+            title: "Insufficient Token Balance",
+            description: `You only have ${available} ${tokenSymbol}. Cannot deposit ${amount} ${tokenSymbol}.`,
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return; // ❌ Block transaction - user saves gas
+        }
+
+        debugLog(`✅ Sufficient ${tokenSymbol} balance confirmed`);
+      } catch (balanceError) {
+        debugError('❌ Failed to check wallet balance:', balanceError);
+        toast({
+          title: "Balance Check Failed",
+          description: `Could not verify your ${tokenSymbol} balance. Please try again.`,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return; // ❌ Block transaction - user saves gas
+      }
+
+      // ✅ NEW: PRE-SIMULATION - Check if transaction will succeed
+      debugLog(`🔍 Pre-simulating token deposit transaction...`);
+      try {
+        const { request } = await publicClient.simulateContract({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'depositToken',
+          args: [tokenAddress, amountWei],
+          account: address,
+          value: currentFee as bigint,
+        });
+        debugLog(`✅ Pre-simulation successful - transaction will succeed`);
+      } catch (simulationError) {
+        debugError('❌ Pre-simulation failed:', simulationError);
+        
+        // Check if it's a balance/allowance issue
+        if (simulationError instanceof Error) {
+          if (simulationError.message.includes('insufficient') || simulationError.message.includes('balance')) {
+            toast({
+              title: "Insufficient Balance",
+              description: `You don't have enough ${tokenSymbol} to deposit this amount.`,
+              variant: "destructive",
+            });
+          } else if (simulationError.message.includes('allowance') || simulationError.message.includes('approve')) {
+            toast({
+              title: "Approval Required",
+              description: `Please approve ${tokenSymbol} spending first.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Transaction Will Fail",
+              description: `Pre-simulation failed: ${simulationError.message}`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Transaction Will Fail",
+            description: "Pre-simulation failed - transaction would not succeed",
+            variant: "destructive",
+          });
+        }
+        
+        setIsLoading(false);
+        return; // ❌ Block transaction - user saves gas
+      }
+
       // Step 3: Send approval transaction with precision buffer
       // CRITICAL FIX: Approve slightly more to account for precision differences
       // This prevents the "leftover dust" issue where small amounts can't be deposited
