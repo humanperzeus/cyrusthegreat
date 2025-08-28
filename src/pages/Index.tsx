@@ -41,8 +41,10 @@ const Index = () => {
     isLoading,
     depositETH, // ORIGINAL: Custom transaction management
     depositETHWagmi, // NEW: Wagmi-based implementation
-    withdrawETH,
-    transferETH,
+    withdrawETH, // ORIGINAL: Custom transaction management
+    withdrawETHWagmi, // NEW: Wagmi-based implementation
+    transferETH, // ORIGINAL: Custom transaction management
+    transferInternalETHWagmi, // NEW: Wagmi-based implementation
     isConnected,
     isSimulating, // Add simulation state
     isConfirmed, // Add transaction confirmation state
@@ -271,7 +273,7 @@ const Index = () => {
           // DISABLED: All refresh logic to prevent RPC spam
           // The useVault hook already handles smart refresh after transactions
         }}
-        onWithdraw={withdrawETH}
+        onWithdraw={withdrawETHWagmi} // NEW: Using Wagmi-based implementation
         onTokenWithdraw={handleTokenWithdrawFromModal}
         onMultiTokenWithdraw={withdrawMultipleTokens}
         isLoading={isLoading}
@@ -298,7 +300,7 @@ const Index = () => {
           // DISABLED: All refresh logic to prevent RPC spam
           // The useVault hook already handles smart refresh after transactions
         }}
-        onTransfer={transferETH}
+        onTransfer={transferInternalETHWagmi} // NEW: Using Wagmi-based implementation
         isLoading={isLoading}
         vaultBalance={vaultBalance}
         currentFee={currentFee}

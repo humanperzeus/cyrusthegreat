@@ -1438,6 +1438,119 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   };
 
+  // NEW: Wagmi-based ETH withdrawal for comparison with custom implementation
+  const withdrawETHWagmi = async (amount: string) => {
+    if (!amount || isNaN(Number(amount))) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // CRITICAL FIX: Always get fresh fee before transaction
+      debugLog('💰 Getting fresh fee before ETH withdrawal (Wagmi)...');
+      const freshFee = await getCurrentFee();
+      if (!freshFee) {
+        throw new Error('Failed to get fresh fee');
+      }
+      
+      // Update current fee state with fresh value
+      setCurrentFee(freshFee);
+      debugLog(`✅ Fresh fee obtained: ${formatEther(freshFee)} ETH`);
+      
+      // SIMULATION: Check if user has enough vault balance before proceeding
+      setIsSimulating(true);
+      
+      const amountInWei = parseEther(amount);
+      const feeInWei = freshFee;
+      
+      debugLog('🔍 Withdrawal Simulation (Wagmi):', {
+        amount,
+        amountInWei: amountInWei.toString(),
+        vaultBalanceData: vaultBalanceData ? (vaultBalanceData as bigint).toString() : 'null',
+        feeInWei: feeInWei.toString(),
+        walletBalance: walletBalance ? walletBalance.value.toString() : 'null'
+      });
+      
+      // Check if user has enough ETH in vault for withdrawal
+      if ((vaultBalanceData as bigint) < amountInWei) {
+        const available = weiToEtherFullPrecision(vaultBalanceData as bigint);
+        debugLog('❌ Insufficient vault balance:', { available, requested: amount });
+        toast({
+          title: "Insufficient Vault Balance",
+          description: `You only have ${available} ETH in vault. Cannot withdraw ${amount} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      // Check if user has enough ETH for fee
+      if (walletBalance && walletBalance.value < feeInWei) {
+        const feeRequired = weiToEtherFullPrecision(feeInWei);
+        const available = weiToEtherFullPrecision(walletBalance.value);
+        debugLog('❌ Insufficient wallet balance for fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the withdrawal fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      debugLog('✅ Withdrawal simulation successful, proceeding with transaction (Wagmi)');
+      
+      // Simulation successful - proceed with transaction
+      setIsSimulating(false);
+      setIsLoading(true);
+      
+      debugLog('Withdrawing ETH via Wagmi:', { 
+        amount, 
+        amountInWei: amountInWei.toString(),
+        feeInWei: feeInWei.toString()
+      });
+      
+      // CRITICAL: Use writeVaultContract (Wagmi hook) for automatic transaction management
+      await writeVaultContract({
+        address: getActiveContractAddress() as `0x${string}`,
+        abi: VAULT_ABI as any,
+        functionName: 'withdrawETH',
+        args: [amountInWei],
+        value: feeInWei, // Send fee with withdrawal transaction
+        chain: getTargetChain(),
+        account: address,
+      });
+
+      toast({
+        title: "Withdrawal Initiated (Wagmi)",
+        description: `Withdrawing ${amount} ETH from vault...`,
+      });
+      
+    } catch (error) {
+      debugError('Withdrawal error (Wagmi):', error);
+      toast({
+        title: "Withdrawal Failed (Wagmi)",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+      setIsSimulating(false);
+      setIsLoading(false);
+    }
+  };
+
   // Real anonymous ETH transfer function
   const transferETH = async (to: string, amount: string) => {
     if (!to || !amount || isNaN(Number(amount))) {
@@ -1545,6 +1658,120 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       toast({
         title: "Transfer Failed",
         description: "Transaction failed or was rejected",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      setIsSimulating(false);
+    }
+  };
+
+  // NEW: Wagmi-based ETH transfer for comparison with custom implementation
+  const transferInternalETHWagmi = async (to: string, amount: string) => {
+    if (!to || !amount || isNaN(Number(amount))) {
+      toast({
+        title: "Invalid Input",
+        description: "Please enter a valid address and amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate Ethereum address
+    if (!/^0x[a-fA-F0-9]{40}$/.test(to)) {
+      toast({
+        title: "Invalid Address",
+        description: "Please enter a valid Ethereum address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // SIMULATION: Check if user has enough vault balance before proceeding
+      setIsSimulating(true);
+      
+      const amountInWei = parseEther(amount);
+      const feeInWei = currentFee ? (currentFee as bigint) : 0n;
+      
+      debugLog('🔍 Transfer Simulation (Wagmi):', {
+        to,
+        amount,
+        amountInWei: amountInWei.toString(),
+        vaultBalanceData: vaultBalanceData ? (vaultBalanceData as bigint).toString() : 'null',
+        feeInWei: feeInWei.toString(),
+        walletBalance: walletBalance ? walletBalance.value.toString() : 'null'
+      });
+      
+      // Check if user has enough ETH in vault for transfer
+      if ((vaultBalanceData as bigint) < amountInWei) {
+        const available = weiToEtherFullPrecision(vaultBalanceData as bigint);
+        debugLog('❌ Insufficient vault balance for transfer:', { available, requested: amount });
+        toast({
+          title: "Insufficient Vault Balance",
+          description: `You only have ${available} ETH in vault. Cannot transfer ${amount} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      // Check if user has enough ETH for fee
+      if (walletBalance && walletBalance.value < feeInWei) {
+        const feeRequired = weiToEtherFullPrecision(feeInWei);
+        const available = weiToEtherFullPrecision(walletBalance.value);
+        debugLog('❌ Insufficient wallet balance for transfer fee:', { feeRequired, available });
+        toast({
+          title: "Insufficient Balance for Fee",
+          description: `You need ${feeRequired} ETH for the transfer fee. You have ${available} ETH.`,
+          variant: "destructive",
+        });
+        setIsSimulating(false);
+        return;
+      }
+      
+      debugLog('✅ Transfer simulation successful, proceeding with transaction (Wagmi)');
+      
+      // Simulation successful - proceed with transaction
+      setIsSimulating(false);
+      setIsLoading(true);
+      
+      debugLog('Transferring ETH via Wagmi:', { 
+        to, 
+        amount, 
+        amountInWei: amountInWei.toString(),
+        feeInWei: feeInWei.toString()
+      });
+      
+      // CRITICAL: Use writeVaultContract (Wagmi hook) for automatic transaction management
+      await writeVaultContract({
+        address: getActiveContractAddress() as `0x${string}`,
+        abi: VAULT_ABI as any,
+        functionName: 'transferInternalETH',
+        args: [to as `0x${string}`, amountInWei],
+        value: feeInWei, // Send fee with transfer transaction
+        chain: getTargetChain(),
+        account: address,
+      });
+
+      toast({
+        title: "Transfer Initiated (Wagmi)",
+        description: `Transferring ${amount} ETH to ${to.slice(0, 6)}...${to.slice(-4)} (fee: ${weiToEtherFullPrecision(feeInWei)} ETH)`,
+      });
+      
+    } catch (error) {
+      debugError('Transfer error (Wagmi):', error);
+      toast({
+        title: "Transfer Failed (Wagmi)",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
         variant: "destructive",
       });
       setIsLoading(false);
@@ -3920,8 +4147,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       isSimulating, // Add simulation state for UI
     depositETH, // ORIGINAL: Custom transaction management
     depositETHWagmi, // NEW: Wagmi-based implementation
-    withdrawETH,
-    transferETH,
+    withdrawETH, // ORIGINAL: Custom transaction management
+    withdrawETHWagmi, // NEW: Wagmi-based implementation
+    transferETH, // ORIGINAL: Custom transaction management
+    transferInternalETHWagmi, // NEW: Wagmi-based implementation
       // Token functions
     approveToken,
     depositToken,
