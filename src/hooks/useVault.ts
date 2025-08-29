@@ -1779,8 +1779,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   };
 
-  // Token approval hook
-  const approveToken = async (tokenAddress: string, amount: bigint) => {
+  // Token approval hook (Wagmi-based)
+  const approveTokenWagmi = async (tokenAddress: string, amount: bigint) => {
     if (!address) {
       toast({
         title: "Error",
@@ -1833,8 +1833,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   };
 
-  // Extended deposit function for tokens
-  const depositToken = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
+  // Extended deposit function for tokens (Wagmi-based)
+  const depositTokenWagmi = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
     if (!address) {
       toast({
         title: "Error",
@@ -1962,7 +1962,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
       }
 
       // Step 3: First approve the token
-      const approved = await approveToken(tokenAddress, amountWei);
+      const approved = await approveTokenWagmi(tokenAddress, amountWei);
       if (!approved) {
         setIsLoading(false);
         return;
@@ -2016,7 +2016,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   };
 
   // NEW: Smart token deposit with automatic allowance checking and auto-deposit
-  const depositTokenSmart = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
+  const depositTokenSmartWagmi = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
     if (!address) {
       toast({
         title: "Error",
@@ -2122,7 +2122,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   };
 
-  const depositMultipleTokens = async (deposits: { token: string; amount: string }[]) => {
+  const depositMultipleTokensWagmi = async (deposits: { token: string; amount: string }[]) => {
     console.log('depositMultipleTokens called with:', deposits);
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
@@ -2808,7 +2808,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   };
 
   // Token withdrawal function with approval
-  const withdrawToken = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
+  const withdrawTokenWagmi = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
     if (!address) {
       toast({
         title: "Error",
@@ -2939,7 +2939,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   };
 
-  const withdrawMultipleTokens = async (withdrawals: { token: string; amount: string }[]) => {
+  const withdrawMultipleTokensWagmi = async (withdrawals: { token: string; amount: string }[]) => {
     console.log('withdrawMultipleTokens called with:', withdrawals);
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
@@ -3160,7 +3160,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     }
   };
 
-  const transferMultipleTokens = async (transfers: { token: string; amount: string }[], to: string) => {
+  const transferMultipleTokensWagmi = async (transfers: { token: string; amount: string }[], to: string) => {
     console.log('transferMultipleTokens called with:', transfers, 'to:', to);
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
@@ -3389,7 +3389,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
   };
 
   // Token Transfer Function
-  const transferInternalToken = async (
+  const transferInternalTokenWagmi = async (
     tokenAddress: string,
     to: string,
     amount: string,
@@ -4151,16 +4151,16 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
     withdrawETHWagmi, // NEW: Wagmi-based implementation
     transferETH, // ORIGINAL: Custom transaction management
     transferInternalETHWagmi, // NEW: Wagmi-based implementation
-      // Token functions
-    approveToken,
-    depositToken,
-      depositTokenSmart, // NEW: Smart deposit with auto-allowance checking
-      depositTokenWithDelay, // SIMPLE: 3-second delay approach
-      withdrawToken, // NEW: Token withdrawal function with approval
-      withdrawMultipleTokens, // NEW: Multi-token withdrawal function
-      transferInternalToken, // NEW: Token transfer function
-      transferMultipleTokens, // NEW: Multi-token transfer function
-      depositMultipleTokens, // NEW: Multi-token deposit function
+      // Token functions (Wagmi-based)
+    approveTokenWagmi, // NEW: Wagmi-based token approval
+    depositTokenWagmi, // NEW: Wagmi-based token deposit
+      depositTokenSmartWagmi, // NEW: Smart deposit with auto-allowance checking (Wagmi)
+      depositTokenWithDelay, // SIMPLE: 3-second delay approach (legacy)
+      withdrawTokenWagmi, // NEW: Token withdrawal function with approval (Wagmi)
+      withdrawMultipleTokensWagmi, // NEW: Multi-token withdrawal function (Wagmi)
+      transferInternalTokenWagmi, // NEW: Token transfer function (Wagmi)
+      transferMultipleTokensWagmi, // NEW: Multi-token transfer function (Wagmi)
+      depositMultipleTokensWagmi, // NEW: Multi-token deposit function (Wagmi)
       getRateLimitStatus, // NEW: Rate limit status function
       // Transaction status for UI feedback (chain-specific)
     isPending: isWritePendingForCurrentChain,

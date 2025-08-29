@@ -55,13 +55,15 @@ const Index = () => {
     isLoadingTokens, // Keep for backward compatibility
     refetchWalletTokens,
     refetchVaultTokens,
-    depositToken,
-    depositTokenSmart,
-    withdrawToken,
-    withdrawMultipleTokens, // NEW: Multi-token withdrawal function
-    transferInternalToken, // Add transferInternalToken to the hook
-    transferMultipleTokens, // NEW: Multi-token transfer function
-    depositMultipleTokens, // NEW: Multi-token deposit function
+    // Token functions (Wagmi-based)
+    approveTokenWagmi,
+    depositTokenWagmi,
+    depositTokenSmartWagmi,
+    withdrawTokenWagmi,
+    withdrawMultipleTokensWagmi, // NEW: Multi-token withdrawal function (Wagmi)
+    transferInternalTokenWagmi, // Add transferInternalToken to the hook (Wagmi)
+    transferMultipleTokensWagmi, // NEW: Multi-token transfer function (Wagmi)
+    depositMultipleTokensWagmi, // NEW: Multi-token deposit function (Wagmi)
     getRateLimitStatus, // NEW: Rate limit status function
     // Network switching functions
     currentNetwork,
@@ -172,15 +174,15 @@ const Index = () => {
 
   // Handle token deposit from modal
   const handleTokenDepositFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
-    // Call the smart deposit function with complete allowance flow
-    depositTokenSmart(tokenAddress, amount, tokenSymbol);
+    // Call the smart deposit function with complete allowance flow (Wagmi-based)
+    depositTokenSmartWagmi(tokenAddress, amount, tokenSymbol);
   };
 
   // Handle multi-token deposit from modal
-  const handleMultiTokenDepositFromModal = (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => {
+  const handleMultiTokenDepositFromModal = async (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => {
     console.log('handleMultiTokenDepositFromModal called with:', deposits);
-    // Call the multi-token deposit function
-    depositMultipleTokens(deposits);
+    // Call the multi-token deposit function (Wagmi-based)
+    await depositMultipleTokensWagmi(deposits);
   };
 
   // Handle token withdraw click
@@ -191,8 +193,8 @@ const Index = () => {
 
   // Handle token withdraw from modal
   const handleTokenWithdrawFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
-    // Call the token withdraw function
-    withdrawToken(tokenAddress, amount, tokenSymbol);
+    // Call the token withdraw function (Wagmi-based)
+    withdrawTokenWagmi(tokenAddress, amount, tokenSymbol);
   };
 
   // Token transfer handler
@@ -209,7 +211,7 @@ const Index = () => {
   // Token transfer from modal (for ETH compatibility - keeps existing logic)
   const handleTokenTransferFromModal = (to: string, amount: string) => {
     if (tokenTransferInfo) {
-      transferInternalToken(tokenTransferInfo.address, to, amount, tokenTransferInfo.symbol);
+      transferInternalTokenWagmi(tokenTransferInfo.address, to, amount, tokenTransferInfo.symbol);
     }
   };
 
@@ -275,7 +277,7 @@ const Index = () => {
         }}
         onWithdraw={withdrawETHWagmi} // NEW: Using Wagmi-based implementation
         onTokenWithdraw={handleTokenWithdrawFromModal}
-        onMultiTokenWithdraw={withdrawMultipleTokens}
+        onMultiTokenWithdraw={withdrawMultipleTokensWagmi}
         isLoading={isLoading}
         vaultBalance={vaultBalance}
         currentFee={currentFee}
@@ -315,7 +317,7 @@ const Index = () => {
         // Chain-aware props
         activeChain={activeChain}
         // Multi-token functionality
-        onMultiTokenTransfer={transferMultipleTokens}
+        onMultiTokenTransfer={transferMultipleTokensWagmi}
         vaultTokens={vaultTokens}
         rateLimitStatus={rateLimitStatus}
       />
