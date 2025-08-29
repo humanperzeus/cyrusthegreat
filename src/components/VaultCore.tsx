@@ -114,6 +114,7 @@ export const VaultCore = ({
   
   // Chain switching state
   const [isSwitchingChain, setIsSwitchingChain] = useState(false);
+  const [targetChain, setTargetChain] = useState<'ETH' | 'BSC' | 'BASE' | null>(null);
   
   // Get current network info
   const currentNetwork = getActiveChainInfo();
@@ -193,37 +194,39 @@ export const VaultCore = ({
   };
 
   // Handle chain switching
-  const handleChainSwitch = async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
-    if (targetChain === activeChain || isSwitchingChain) return;
+  const handleChainSwitch = async (targetChainParam: 'ETH' | 'BSC' | 'BASE') => {
+    if (targetChainParam === activeChain || isSwitchingChain) return;
     
-    debugLog(`🔄 Chain switch initiated: ${activeChain} → ${targetChain}`);
+    debugLog(`🔄 Chain switch initiated: ${activeChain} → ${targetChainParam}`);
     debugLog(`🔧 Debug - isSwitchingChain:`, isSwitchingChain);
     debugLog(`🔧 Debug - setIsSwitchingChain:`, typeof setIsSwitchingChain);
     
     try {
+      setTargetChain(targetChainParam); // Set the target chain for display
       setIsSwitchingChain(true);
       debugLog(`✅ setIsSwitchingChain(true) called successfully`);
       
-      const success = await switchToChain(targetChain);
+      const success = await switchToChain(targetChainParam);
       debugLog(`🔄 switchToChain result:`, success);
       
       if (success) {
-        debugLog(`✅ MetaMask switched to ${targetChain} successfully`);
-        setActiveChain(targetChain);
-        debugLog(`✅ Frontend activeChain updated to ${targetChain}`);
+        debugLog(`✅ MetaMask switched to ${targetChainParam} successfully`);
+        setActiveChain(targetChainParam);
+        debugLog(`✅ Frontend activeChain updated to ${targetChainParam}`);
         
         // Trigger chain-specific data fetching
         // Note: This will be handled by the useVault hook when activeChain changes
-        debugLog(`🔄 Triggering data refresh for ${targetChain}...`);
+        debugLog(`🔄 Triggering data refresh for ${targetChainParam}...`);
       } else {
-        debugLog(`❌ MetaMask switch to ${targetChain} failed`);
+        debugLog(`❌ MetaMask switch to ${targetChainParam} failed`);
       }
     } catch (error) {
-      debugError(`❌ Failed to switch to ${targetChain}:`, error);
+      debugError(`❌ Failed to switch to ${targetChainParam}:`, error);
     } finally {
       debugLog(`🔄 Setting isSwitchingChain to false...`);
       setIsSwitchingChain(false);
-      debugLog(`🔄 Chain switching completed for ${targetChain}`);
+      setTargetChain(null); // Clear target chain
+      debugLog(`🔄 Chain switching completed for ${targetChainParam}`);
     }
   };
 
@@ -1026,10 +1029,10 @@ export const VaultCore = ({
             </div>
 
             {/* Chain Switching Status */}
-            {isSwitchingChain && (
+            {isSwitchingChain && targetChain && (
               <div className="flex items-center space-x-2 text-xs text-vault-warning">
                 <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>Switching to {activeChain === 'ETH' ? 'Binance Chain' : activeChain === 'BSC' ? 'Ethereum' : 'Base'}...</span>
+                <span>Switching to {targetChain === 'ETH' ? 'Ethereum' : targetChain === 'BSC' ? 'Binance Chain' : 'Base'}...</span>
               </div>
             )}
 
@@ -1303,9 +1306,9 @@ export const VaultCore = ({
 
 
 
-      {/* v1.17.62 Release Information */}
+      {/* v1.17.64 Release Information */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-        🚀 <strong>v1.17.62 Release</strong> - Provider Independence & Professional Architecture
+        🚀 <strong>v1.17.64 Release</strong> - Chain Switching Bug Fix & Provider Independence
         <br />
         <span className="text-xs">🌐 ETH/BSC/BASE & Solana soon</span>
       </div>
