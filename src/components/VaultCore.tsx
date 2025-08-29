@@ -1303,9 +1303,11 @@ export const VaultCore = ({
 
 
 
-      {/* v1.15 Release Information */}
+      {/* v1.17.62 Release Information */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-        🚀 <strong>v1.15 Release</strong> - Complete BASE Chain Integration & Multi-Chain Support
+        🚀 <strong>v1.17.62 Release</strong> - Provider Independence & Professional Architecture
+        <br />
+        <span className="text-xs">🌐 ETH/BSC/BASE & Solana soon</span>
       </div>
 
       {/* Made by humanperzeus */}
