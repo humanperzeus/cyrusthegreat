@@ -35,3 +35,19 @@ test-*.js
 # AI and development files (don't deploy to production)
 AI_PROJECT_GUIDE.md
 *.md
+
+# Project methodology — track these despite the broad *.md rule above.
+# (Vite already excludes .md from the production bundle, so the *.md gitignore
+# was over-broad. These files belong in version control so they survive a
+# fresh clone / laptop reset.)
+#
+# Specific paths only — adding `*.md` globs here would pull in pre-existing
+# documentation files (e.g. tests_evm/CONTRACT_ANALYSIS.md) that the dev had
+# kept local-only. Add new exemptions explicitly as new methodology files
+# are created.
+!BRAIN.md
+!TODO.md
+!workflow_rules.md
+!tech_learnings.md
+!memory/session_*.md
+!tests_evm/BANK8_VERIFICATION_*.md
