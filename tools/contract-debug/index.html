@@ -1,0 +1,1791 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cyrus Vault Debug</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+  :root { color-scheme: dark light; --ok:#1a8a4f; --warn:#c8551a; --err:#c33; --muted:#8888; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 0; }
+  header { padding: 12px 20px; background: #8881; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #8884; position: sticky; top: 0; z-index: 10; backdrop-filter: blur(6px); }
+  header h1 { margin: 0; font-size: 16px; font-weight: 700; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 80px; }
+  h2 { margin: 24px 0 8px; font-size: 17px; }
+  h3 { margin: 8px 0 4px; font-size: 14px; }
+  button { font: inherit; padding: 7px 14px; border: 1px solid #888; background: transparent; border-radius: 5px; cursor: pointer; color: inherit; transition: background 0.1s; }
+  button:hover:not([disabled]) { background: #8882; }
+  button[disabled] { opacity: 0.5; cursor: not-allowed; }
+  button.primary { background: #4af; color: white; border-color: #4af; }
+  button.primary:hover:not([disabled]) { background: #28d; }
+  button.danger { background: #c33; color: white; border-color: #c33; }
+  input, textarea, select { font: inherit; padding: 5px 9px; border: 1px solid #888; border-radius: 5px; background: transparent; color: inherit; box-sizing: border-box; }
+  textarea { font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; }
+  code, .mono { font-family: ui-monospace, "SF Mono", monospace; }
+
+  /* Pills */
+  .pill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
+  .pill.ok { background: #1a8a4f33; color: var(--ok); }
+  .pill.warn { background: #c8551a33; color: var(--warn); }
+  .pill.err { background: #c3333; color: var(--err); }
+  .pill.muted { background: #8883; color: var(--muted); }
+
+  /* Tabs */
+  nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid #8884; margin: 16px 0; }
+  nav.tabs button { border-radius: 5px 5px 0 0; border-bottom: none; padding: 8px 16px; }
+  nav.tabs button.active { background: #4af; color: white; border-color: #4af; }
+
+  /* Cards */
+  .card { border: 1px solid #8884; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+  .card.test { border-left: 3px solid #888; }
+  .card.test.done { border-left-color: var(--ok); }
+  .card.test.fail { border-left-color: var(--err); }
+  .card.test.running { border-left-color: var(--warn); }
+  .card.test header { background: none; padding: 0; border: none; backdrop-filter: none; position: static; display: flex; align-items: center; gap: 8px; }
+  .card.test .desc { color: #8888; font-size: 13px; margin: 4px 0 8px; }
+  .card.test .params { font-size: 12px; margin: 6px 0; padding: 6px 10px; background: #8881; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .card.test .controls { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .card.test .controls input { font-family: ui-monospace, monospace; font-size: 12px; }
+  .card.test .result { margin-top: 10px; padding: 8px 12px; background: #8881; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  .card.test .result.ok { background: #1a8a4f22; border-left: 3px solid var(--ok); }
+  .card.test .result.err { background: #c3322; border-left: 3px solid var(--err); }
+  .step-num { display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; background: #8884; border-radius: 50%; font-weight: 700; font-size: 12px; }
+  .card.test.done .step-num { background: var(--ok); color: white; }
+  .card.test.fail .step-num { background: var(--err); color: white; }
+
+  /* Address book */
+  .addrbook { background: #8881; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
+  .addrbook table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .addrbook td { padding: 4px 8px; }
+  .addrbook .lbl { color: #888; width: 130px; }
+  .addrbook .copy { cursor: pointer; padding: 2px 6px; font-size: 11px; }
+
+  /* Vault state */
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+  .state-grid .stat { padding: 8px 12px; background: #8881; border-radius: 6px; }
+  .state-grid .stat .lbl { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .state-grid .stat .val { font-family: ui-monospace, monospace; font-size: 13px; margin-top: 2px; }
+
+  details summary { cursor: pointer; user-select: none; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { color: #888; font-size: 12px; }
+  a { color: #4af; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cyrus Vault Debug</h1>
+  <div>Network: <span id="net" class="pill warn">disconnected</span></div>
+  <div><span id="rpcPill" class="hint">RPC: —</span></div>
+  <label><span class="hint">Switch:</span>
+    <select id="netSwitch">
+      <option value="">— pick —</option>
+      <option value="11155111">Sepolia (11155111)</option>
+      <option value="97">BSC Testnet (97)</option>
+      <option value="84532">Base Sepolia (84532)</option>
+      <option value="1">Ethereum Mainnet</option>
+      <option value="56">BNB Smart Chain</option>
+      <option value="8453">Base Mainnet</option>
+    </select>
+  </label>
+  <div>Account: <span id="acct" class="mono">—</span></div>
+  <button id="connect" class="primary">Connect Wallet</button>
+  <button id="disconnect" hidden>Disconnect</button>
+  <button id="diagWallet" title="Test each wallet RPC method individually to see which one 404s">🔧 Diagnose wallet</button>
+</header>
+
+<main>
+
+<div id="diagOut" hidden style="background: #8881; border: 1px solid #888; border-radius: 6px; padding: 12px; margin-bottom: 12px;"></div>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="bank5">CrossChainBank5 (LIVE prod)</button>
+  <button data-tab="bank8" class="active">CrossChainBank8 (target)</button>
+  <button data-tab="portal11">CyrusPortal11 (undeployed)</button>
+</nav>
+
+<!-- ================ BANK 5 ================ -->
+<section id="tab-bank5" hidden>
+  <p class="hint">CrossChainBank5 — the contract live at cyrusthegreat.dev. Sepolia: <code class="mono">0x3d6e43cbf157110015edF062173BbeBF78De61B4</code>. Use this tab to confirm KNOWN bugs (multi-token ETH batch fails).</p>
+
+  <h2>What to test on Bank5</h2>
+  <p class="hint">Sanity tests (work) + the broken one (multi-token deposit with ETH).</p>
+
+  <div id="bank5-flows"></div>
+</section>
+
+<!-- ================ BANK 8 ================ -->
+<section id="tab-bank8">
+  <p class="hint">CrossChainBank8 — the upgrade. Sepolia: <code class="mono">0xb83A814097C70DB79568b663662eA07e77D4D87a</code>. Goal: verify everything works, especially the multi-token ETH batch fix.</p>
+
+  <h2>Address book (known testnet contracts + your wallets)</h2>
+  <div class="addrbook" id="addrbook"></div>
+
+  <h2>Current vault state — Wallet 1 (you, connected)</h2>
+  <div class="state-grid" id="state"></div>
+  <div class="row" style="margin-top: 8px;">
+    <button id="refreshState">Refresh Wallet 1</button>
+    <span id="stateStatus" class="hint"></span>
+  </div>
+
+  <h2>Wallet 2 vault state (read-only — for transfer testing)</h2>
+  <p class="hint">No wallet switching needed. The contract's <code>getMyVaultedTokens</code> view function is called with <code>from: &lt;Wallet 2&gt;</code> via <code>staticCall</code> — works without Wallet 2 ever connecting. Refreshes automatically after every write tx so you can SEE transfers land here.</p>
+  <div class="row" style="margin-bottom: 8px;">
+    <label style="flex: 1; min-width: 280px;"><span class="hint">Wallet 2 address:</span>
+      <input id="wallet2Addr" type="text" class="mono" style="width: 100%;" placeholder="0x…" />
+    </label>
+    <button id="refreshWallet2">Refresh Wallet 2</button>
+    <span id="wallet2Status" class="hint"></span>
+  </div>
+  <div class="state-grid" id="state-w2"></div>
+
+  <h2>Test flows — run in order</h2>
+  <p class="hint">Each card = one step. Pre-filled with sane defaults. Click <b>Run</b>; result appears below; vault state auto-refreshes after every write call.</p>
+  <div id="bank8-flows"></div>
+</section>
+
+<!-- ================ PORTAL 11 ================ -->
+<section id="tab-portal11" hidden>
+  <p class="hint">CyrusPortal11 — privacy-extension contract. <b>Not deployed.</b> Once deployed, address goes here and tests below become runnable.</p>
+
+  <div class="row" style="margin: 12px 0;">
+    <label>Deployed at:
+      <input id="portal11Addr" type="text" class="mono" style="min-width: 380px;" placeholder="0x… (paste after deploy)" />
+    </label>
+    <button id="portal11SetAddr">Use this address</button>
+    <span id="portal11Status" class="hint">No address set yet</span>
+  </div>
+
+  <h2>Portal11 test flows (4 known bugs to confirm)</h2>
+  <div id="portal11-flows"></div>
+</section>
+
+<details style="margin-top: 32px;" open>
+  <summary><b>API health check</b> — verify Alchemy / Ankr / Etherscan / BSCScan keys are alive</summary>
+  <div style="padding: 10px;">
+    <p class="hint">Paste each key's URL or value, click <b>Test all</b>. Dead keys are typically auto-revoked by GitHub's secret-scanning partnership when committed to a public repo (Alchemy + Etherscan are partners; Ankr is not). Values stay in your browser session — never sent anywhere except the provider being tested.</p>
+    <div class="row" style="flex-wrap: wrap; gap: 14px;">
+      <label style="flex: 1; min-width: 380px;">
+        <span class="hint">Alchemy RPC URL (Sepolia recommended for fast test):</span>
+        <input id="apiAlchemy" type="text" class="mono" style="width: 100%;" placeholder="https://eth-sepolia.g.alchemy.com/v2/&lt;your-key&gt;" />
+      </label>
+      <label style="flex: 1; min-width: 380px;">
+        <span class="hint">Ankr RPC URL (Sepolia):</span>
+        <input id="apiAnkr" type="text" class="mono" style="width: 100%;" placeholder="https://rpc.ankr.com/eth_sepolia/&lt;your-key&gt;" />
+      </label>
+      <label style="flex: 1; min-width: 380px;">
+        <span class="hint">Etherscan API key:</span>
+        <input id="apiEtherscan" type="text" class="mono" style="width: 100%;" placeholder="your-etherscan-v2-key" />
+      </label>
+      <label style="flex: 1; min-width: 380px;">
+        <span class="hint">BSCScan API key (or same as Etherscan if using v2):</span>
+        <input id="apiBscscan" type="text" class="mono" style="width: 100%;" placeholder="your-bscscan-key" />
+      </label>
+    </div>
+    <div class="row" style="margin-top: 10px;">
+      <button id="apiTestAll" class="primary">Test all</button>
+      <button id="apiClear">Clear</button>
+    </div>
+    <div id="apiResults" style="margin-top: 12px; display: grid; gap: 6px;"></div>
+  </div>
+</details>
+
+<details style="margin-top: 16px;">
+  <summary><b>Advanced: raw ABI calls</b> (any function, any arg)</summary>
+  <div style="padding: 10px;">
+    <p class="hint">Power-user mode. Loads any ABI and gives auto-generated forms for every function. Use only if the guided flows above don't cover what you want.</p>
+    <div class="row">
+      <label>ABI source:
+        <select id="advAbi">
+          <option value="">— pick —</option>
+          <option value="bank5">CrossChainBank5 ABI</option>
+          <option value="bank8">CrossChainBank8 ABI</option>
+          <option value="portal11">CyrusPortal11 ABI</option>
+        </select>
+      </label>
+      <label>Address:
+        <input id="advAddr" type="text" class="mono" placeholder="0x…" style="min-width: 380px;" />
+      </label>
+      <button id="advLoad" class="primary">Load</button>
+    </div>
+    <div id="advFns" style="margin-top: 12px;"></div>
+  </div>
+</details>
+
+<h2 style="margin-top: 32px;">Activity log</h2>
+<ol id="log" style="font-family: ui-monospace, monospace; font-size: 12px; padding-left: 24px;"></ol>
+
+</main>
+
+<script>
+"use strict";
+
+// ============================================================
+//  Config — hardcoded contracts and known addresses
+// ============================================================
+// Each chain lists multiple public RPC URLs as fallbacks. probeReadRpc()
+// runs on connect/chainChanged to pick the first one that actually answers
+// from this browser (some hosts get blocked by Brave Shields, ad-blockers,
+// or CORS — that surfaces as "could not coalesce error" inside ethers v6).
+const NETWORKS = {
+  1: { name: "Ethereum Mainnet", currency: "ETH", explorer: "https://etherscan.io",
+       rpcUrls: ["https://eth.llamarpc.com", "https://ethereum-rpc.publicnode.com", "https://rpc.ankr.com/eth", "https://cloudflare-eth.com"] },
+  11155111: { name: "Sepolia Testnet", currency: "ETH", explorer: "https://sepolia.etherscan.io",
+       rpcUrls: ["https://rpc.sepolia.org", "https://ethereum-sepolia-rpc.publicnode.com", "https://ethereum-sepolia.publicnode.com", "https://eth-sepolia.public.blastapi.io", "https://1rpc.io/sepolia"] },
+  56: { name: "BNB Smart Chain", currency: "BNB", explorer: "https://bscscan.com",
+       rpcUrls: ["https://bsc-dataseed.binance.org", "https://bsc-rpc.publicnode.com", "https://rpc.ankr.com/bsc"] },
+  97: { name: "BSC Testnet", currency: "tBNB", explorer: "https://testnet.bscscan.com",
+       rpcUrls: ["https://bsc-testnet-rpc.publicnode.com", "https://data-seed-prebsc-1-s1.binance.org:8545", "https://endpoints.omniatech.io/v1/bsc/testnet/public"] },
+  8453: { name: "Base Mainnet", currency: "ETH", explorer: "https://basescan.org",
+       rpcUrls: ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://1rpc.io/base"] },
+  84532: { name: "Base Sepolia", currency: "ETH", explorer: "https://sepolia.basescan.org",
+       rpcUrls: ["https://sepolia.base.org", "https://base-sepolia-rpc.publicnode.com"] },
+};
+
+// All addresses pulled from cyrusthegreat/.env, normalized to EIP-55 checksum
+// at load time so casing in the .env can never break ethers.js validation.
+const ADDR = (() => {
+  const raw = {
+    // Vault contracts
+    bank5_sepolia:       "0x3d6e43cbf157110015edf062173bbebf78de61b4",
+    bank8_sepolia:       "0xb83a814097c70db79568b663662ea07e77d4d87a",
+    bank8_bsc_testnet:   "0xfb0eb1fe0b61d93c3b56a811702aae494a8f3582",
+    bank8_base_testnet:  "0x2f2963ff1f68e4bb283c34193396ef84eac2ca5b",
+    // Test wallets (Sepolia, dev only)
+    wallet1:             "0x84064947bcd9729872c5be91d2ae50380cbd691e",
+    wallet2:             "0xa5f83d48652b5c91b964edceddedaee417a2892e",
+    // Test ERC20s on Sepolia
+    usd1_sepolia:        "0xd649712915595bce7a4ba3a821c64850853fcd02",
+    wlfi_sepolia:        "0x4ed43ca34731696caa2b813070ab65f18510eaa1",
+    // Sentinel for native ETH/BNB inside vault contracts (must stay all-zeros, getAddress skipped)
+    ETH:                 "0x0000000000000000000000000000000000000000",
+  };
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    out[k] = (v === raw.ETH) ? v : ethers.getAddress(v);
+  }
+  return out;
+})();
+
+const ETH_DECIMALS = 18;
+const ERC20_ABI = [
+  { type: "function", stateMutability: "view", name: "decimals", inputs: [], outputs: [{ type: "uint8" }] },
+  { type: "function", stateMutability: "view", name: "symbol", inputs: [], outputs: [{ type: "string" }] },
+  { type: "function", stateMutability: "view", name: "balanceOf", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", stateMutability: "view", name: "allowance", inputs: [{ type: "address" }, { type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", stateMutability: "nonpayable", name: "approve", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "bool" }] },
+];
+
+// Known tokens per chain — used by the smart multi-token deposit picker.
+// Add more as needed; the picker auto-fetches symbol / decimals / balance.
+const KNOWN_TOKENS = {
+  11155111: [
+    { addr: () => ADDR.ETH,          label: "ETH",  isNative: true },
+    { addr: () => ADDR.usd1_sepolia, label: "USD1" },
+    { addr: () => ADDR.wlfi_sepolia, label: "WLFI" },
+  ],
+  97:    [{ addr: () => ADDR.ETH, label: "tBNB", isNative: true }],
+  84532: [{ addr: () => ADDR.ETH, label: "ETH",  isNative: true }],
+  1:     [{ addr: () => ADDR.ETH, label: "ETH",  isNative: true }],
+  56:    [{ addr: () => ADDR.ETH, label: "BNB",  isNative: true }],
+  8453:  [{ addr: () => ADDR.ETH, label: "ETH",  isNative: true }],
+};
+
+// ============================================================
+//  State
+// ============================================================
+let provider = null, signer = null, account = null, chainId = null;
+const ABIS = {}; // loaded from /abis/*.json
+
+// ============================================================
+//  Helpers
+// ============================================================
+const $ = (id) => document.getElementById(id);
+const log = (msg, type = "") => {
+  const li = document.createElement("li");
+  li.innerHTML = `<span class="hint">${new Date().toLocaleTimeString()}</span> ${msg}`;
+  if (type === "err") li.style.color = "var(--err)";
+  if (type === "ok")  li.style.color = "var(--ok)";
+  $("log").prepend(li);
+};
+const setNet = (label, ok) => { $("net").textContent = label; $("net").className = "pill " + (ok ? "ok" : "warn"); };
+const explorerTx = (h) => { const b = NETWORKS[chainId]?.explorer; return b ? `${b}/tx/${h}` : "#"; };
+const explorerAddr = (a) => { const b = NETWORKS[chainId]?.explorer; return b ? `${b}/address/${a}` : "#"; };
+const fmtAddr = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+
+// Pre-populate ALL transaction fields from the read provider, so the wallet
+// only has to do the final eth_sendTransaction call. Without this, ethers v6
+// queries the wallet's provider for nonce, fee data, chainId — any one of
+// which can 404 if the wallet's RPC is broken (Zerion, Trust, etc. on
+// testnets). Returns an overrides object suitable for contract.method(args, OV).
+async function prepareTx(extra = {}) {
+  if (!account) throw new Error("Not connected");
+  const rp = getReadProvider();
+  const [nonce, feeData, net] = await Promise.all([
+    rp.getTransactionCount(account, "pending"),
+    rp.getFeeData(),
+    rp.getNetwork(),
+  ]);
+  const ov = {
+    from: account,
+    nonce,
+    chainId: net.chainId,
+    type: 2,
+    maxFeePerGas: feeData.maxFeePerGas ?? feeData.gasPrice,
+    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? feeData.gasPrice,
+    ...extra,
+  };
+  // If the caller didn't supply gasLimit, fall back to a safe default (we
+  // can't estimate via the wallet's broken RPC, and estimating via the read
+  // RPC would need a from-address eth_call which can be flaky).
+  if (ov.gasLimit == null) ov.gasLimit = 300000n;
+  return ov;
+}
+
+// Fallback for wallets with broken broadcast RPCs. Asks the injected wallet
+// to SIGN ONLY (via eth_signTransaction), then broadcasts the raw signed
+// bytes through our working read provider. Most modern wallets removed
+// eth_signTransaction for security; if so this throws "Method not found"
+// or similar — caller should fall back to a different strategy.
+async function sendViaSignAndBroadcast(contract, methodName, args, overrides) {
+  if (!window.ethereum) throw new Error("No injected wallet");
+  const data = contract.interface.encodeFunctionData(methodName, args);
+  const toHex = (v) => (v == null ? undefined : "0x" + BigInt(v).toString(16));
+  const txReq = {
+    from: account,
+    to: await contract.getAddress(),
+    data,
+    value: toHex(overrides.value ?? 0n),
+    nonce: toHex(overrides.nonce),
+    chainId: toHex(overrides.chainId),
+    gas: toHex(overrides.gasLimit),
+    maxFeePerGas: toHex(overrides.maxFeePerGas),
+    maxPriorityFeePerGas: toHex(overrides.maxPriorityFeePerGas),
+  };
+  Object.keys(txReq).forEach((k) => txReq[k] === undefined && delete txReq[k]);
+  log(`Trying eth_signTransaction fallback…`);
+  const raw = await window.ethereum.request({ method: "eth_signTransaction", params: [txReq] });
+  if (!raw || typeof raw !== "string") throw new Error("eth_signTransaction returned non-string: " + JSON.stringify(raw));
+  log(`Got signed bytes (${raw.length} chars). Broadcasting via read RPC…`, "ok");
+  const rp = getReadProvider();
+  const tx = await rp.broadcastTransaction(raw);
+  return tx;
+}
+
+// Ethers v6 wraps errors in nested .cause / .error / .info chains. The
+// surface message is often opaque ("could not coalesce error") while the
+// real cause is buried 2-3 levels deep. This walks the whole chain so we
+// see WHICH JSON-RPC call failed and what the wallet/RPC actually replied.
+function formatErr(e) {
+  const lines = [];
+  const seen = new Set();
+  const visit = (err, depth = 0) => {
+    if (!err || seen.has(err) || depth > 5) return;
+    seen.add(err);
+    const indent = "  ".repeat(depth);
+    const msg = err.shortMessage || err.reason || err.message || String(err);
+    lines.push(`${indent}• ${msg}`);
+    if (err.code)   lines.push(`${indent}    code: ${err.code}`);
+    if (err.method) lines.push(`${indent}    method: ${err.method}`);
+    if (err.action) lines.push(`${indent}    action: ${err.action}`);
+    if (err.data)   lines.push(`${indent}    data: ${typeof err.data === 'string' ? err.data : JSON.stringify(err.data).slice(0, 200)}`);
+    if (err.info)   lines.push(`${indent}    info: ${JSON.stringify(err.info).slice(0, 400)}`);
+    if (Array.isArray(err.errors)) err.errors.forEach((sub) => visit(sub, depth + 1));
+    if (err.cause)  visit(err.cause, depth + 1);
+    if (err.error)  visit(err.error, depth + 1);
+  };
+  visit(e);
+  return lines.join("\n") || String(e);
+}
+const ensureSigner = () => {
+  if (!signer) throw new Error("Wallet not connected — click 'Connect Wallet' at the top");
+};
+async function ensureBalance(neededWei, label = "this test") {
+  if (!provider || !account) throw new Error("Not connected");
+  const have = await getReadProvider().getBalance(account);
+  if (have >= neededWei) return;
+  const needETH = ethers.formatEther(neededWei);
+  const haveETH = ethers.formatEther(have);
+  const cur = NETWORKS[chainId]?.currency || "native";
+  const faucetHint = chainId === 11155111
+    ? "\n\nGet Sepolia ETH: https://www.alchemy.com/faucets/ethereum-sepolia"
+    : chainId === 97
+      ? "\n\nGet BSC test BNB: https://testnet.bnbchain.org/faucet-smart"
+      : chainId === 84532
+        ? "\n\nGet Base Sepolia ETH: https://www.alchemy.com/faucets/base-sepolia"
+        : "";
+  throw new Error(`Insufficient ${cur} for ${label}.\nHave: ${haveETH}\nNeed: ${needETH}${faucetHint}`);
+}
+async function fetchAbi(name) {
+  if (ABIS[name]) return ABIS[name];
+  const res = await fetch(`abis/${name}.json`);
+  const j = await res.json();
+  ABIS[name] = j.abi || j;
+  return ABIS[name];
+}
+
+// Read-only provider — uses a known-good public RPC for the current chain.
+// Why: wallet-injected providers (especially multi-chain wallets like Zerion,
+// Rainbow, etc.) often have flaky or rate-limited testnet RPCs. Reads should
+// never depend on the wallet's RPC health. We still use the wallet's signer
+// for WRITES — only reads switch to the public RPC.
+//
+// Each chain has a list of fallback URLs. probeReadRpc(chainId) walks the
+// list at connect time and picks the first that this browser can actually
+// reach (CORS, Brave Shields, or DNS blocks can kill specific hosts).
+const _providerByUrl = new Map();      // url -> JsonRpcProvider
+const _chosenUrlByChain = new Map();   // chainId -> url (best probe result)
+const _fallbackByChain = new Map();    // chainId -> FallbackProvider
+function _makeProvider(url, cid) {
+  if (!_providerByUrl.has(url)) {
+    _providerByUrl.set(url, new ethers.JsonRpcProvider(url, cid, { staticNetwork: true }));
+  }
+  return _providerByUrl.get(url);
+}
+// Build a FallbackProvider so each read call auto-retries across all the
+// rpcUrls. quorum=1 means we only need ONE provider to answer; the others
+// are tried in priority order if the first fails (rate-limited, CORS, etc.).
+function _buildFallback(cid) {
+  if (_fallbackByChain.has(cid)) return _fallbackByChain.get(cid);
+  const net = NETWORKS[cid];
+  if (!net || !net.rpcUrls || !net.rpcUrls.length) return null;
+  const alchemyUrl = ($("apiAlchemy")?.value || localStorage.getItem("ctg.alchemyUrl") || "").trim();
+  const urls = alchemyUrl && /^https?:\/\//.test(alchemyUrl) ? [alchemyUrl, ...net.rpcUrls] : net.rpcUrls;
+  // Move the probe-chosen URL to the front if we have one
+  const chosen = _chosenUrlByChain.get(cid);
+  const ordered = chosen ? [chosen, ...urls.filter((u) => u !== chosen)] : urls;
+  const configs = ordered.map((url, i) => ({
+    provider: _makeProvider(url, cid),
+    priority: i + 1,
+    weight: 1,
+    stallTimeout: 2000,
+  }));
+  const fb = new ethers.FallbackProvider(configs, cid, { quorum: 1, eventQuorum: 1, eventWorkers: 1 });
+  _fallbackByChain.set(cid, fb);
+  return fb;
+}
+function getReadProvider() {
+  if (!chainId) return provider;
+  return _buildFallback(chainId) || provider;
+}
+async function probeReadRpc(cid) {
+  const net = NETWORKS[cid];
+  if (!net || !net.rpcUrls || !net.rpcUrls.length) return null;
+  if (_chosenUrlByChain.has(cid)) return _chosenUrlByChain.get(cid); // already chosen
+  const expectedHex = "0x" + Number(cid).toString(16);
+  // Prepend user-supplied Alchemy URL (from input or localStorage). This gives
+  // us a non-rate-limited RPC ahead of the public fallbacks.
+  const alchemyUrl = ($("apiAlchemy")?.value || localStorage.getItem("ctg.alchemyUrl") || "").trim();
+  const candidates = alchemyUrl && /^https?:\/\//.test(alchemyUrl) ? [alchemyUrl, ...net.rpcUrls] : net.rpcUrls;
+  for (const url of candidates) {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
+      });
+      if (!r.ok) { log(`RPC probe ${url} → HTTP ${r.status}`, "err"); continue; }
+      const j = await r.json();
+      if (j?.result && j.result.toLowerCase() === expectedHex) {
+        _chosenUrlByChain.set(cid, url);
+        _fallbackByChain.delete(cid); // force fallback rebuild w/ this URL first
+        log(`RPC probe ${url} → ok (chainId ${cid})`, "ok");
+        const pill = $("rpcPill"); if (pill) pill.textContent = `RPC: ${url} (+${candidates.length - 1} fallbacks)`;
+        return url;
+      }
+      log(`RPC probe ${url} → wrong chainId ${j?.result}`, "err");
+    } catch (e) {
+      log(`RPC probe ${url} → ${e.message || e}`, "err");
+    }
+  }
+  log(`No working RPC for chainId ${cid}. Reads will use wallet provider (may fail).`, "err");
+  return null;
+}
+
+// Reads wallet balances for every KNOWN_TOKEN on the current chain.
+// Returns: [{addr, symbol, decimals, balance(bigint), isNative, error?}]
+async function fetchWalletTokens() {
+  if (!provider || !account) return [];
+  const rp = getReadProvider();
+  const list = KNOWN_TOKENS[chainId] || [];
+  const out = [];
+  for (const t of list) {
+    const a = t.addr();
+    if (t.isNative) {
+      const bal = await rp.getBalance(account);
+      out.push({ addr: a, symbol: t.label, decimals: 18, balance: bal, isNative: true });
+    } else {
+      try {
+        const erc = new ethers.Contract(a, ERC20_ABI, rp);
+        const [bal, dec, sym] = await Promise.all([erc.balanceOf(account), erc.decimals(), erc.symbol()]);
+        out.push({ addr: a, symbol: sym, decimals: Number(dec), balance: bal, isNative: false });
+      } catch (e) {
+        out.push({ addr: a, symbol: t.label, decimals: 18, balance: 0n, isNative: false, error: e.shortMessage || e.message });
+      }
+    }
+  }
+  return out;
+}
+
+// Reads currently-vaulted tokens via getMyVaultedTokens() then resolves symbols+decimals.
+// Returns: [{addr, symbol, decimals, balance(bigint), isNative}]
+async function fetchVaultedTokens(vaultAddr) {
+  if (!provider || !account) return [];
+  const rp = getReadProvider();
+  const abi = await fetchAbi("CrossChainBank8");
+  const c = new ethers.Contract(vaultAddr, abi, rp);
+  const [tokens, balances] = await c.getMyVaultedTokens.staticCall({ from: account });
+  const out = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const a = tokens[i], bal = balances[i];
+    if (a.toLowerCase() === ADDR.ETH.toLowerCase()) {
+      const cur = NETWORKS[chainId]?.currency || "Native";
+      out.push({ addr: a, symbol: cur, decimals: 18, balance: bal, isNative: true });
+    } else {
+      try {
+        const erc = new ethers.Contract(a, ERC20_ABI, rp);
+        const [dec, sym] = await Promise.all([erc.decimals(), erc.symbol()]);
+        out.push({ addr: a, symbol: sym, decimals: Number(dec), balance: bal, isNative: false });
+      } catch {
+        out.push({ addr: a, symbol: fmtAddr(a), decimals: 18, balance: bal, isNative: false });
+      }
+    }
+  }
+  return out;
+}
+
+// Renders a checkbox+amount table for a list of tokens.
+// Returns { getSelected() → [{addr, decimals, amountWei}], refresh(newTokens) }.
+function renderTokenPicker(host, tokens, opts = {}) {
+  host.innerHTML = "";
+  const table = document.createElement("table");
+  table.style.cssText = "width: 100%; font-size: 13px; border-collapse: collapse;";
+  table.innerHTML = `<thead><tr>
+    <th style="text-align:left; padding: 4px 6px; width: 30px;"></th>
+    <th style="text-align:left; padding: 4px 6px;">Token</th>
+    <th style="text-align:right; padding: 4px 6px;">${opts.balanceLabel || "Wallet balance"}</th>
+    <th style="text-align:left; padding: 4px 6px; width: 200px;">Amount</th>
+  </tr></thead>`;
+  const tbody = document.createElement("tbody");
+  table.appendChild(tbody);
+
+  const rows = tokens.map((t) => {
+    const tr = document.createElement("tr");
+    tr.style.borderTop = "1px solid #8884";
+    const formatted = ethers.formatUnits(t.balance, t.decimals);
+    const hasBalance = t.balance > 0n;
+    const addrShort = t.isNative ? "(native)" : `<a target="_blank" href="${explorerAddr(t.addr)}">${fmtAddr(t.addr)}</a>`;
+    tr.innerHTML = `
+      <td style="padding: 6px;"><input type="checkbox" ${hasBalance ? "" : "disabled"} /></td>
+      <td style="padding: 6px;"><b>${t.symbol}</b> <span class="hint">${addrShort}</span>${t.error ? ` <span style="color: var(--err);">⚠ ${t.error}</span>` : ""}</td>
+      <td class="mono" style="padding: 6px; text-align: right;">${formatted}</td>
+      <td style="padding: 6px;">
+        <input type="text" class="amt mono" placeholder="0.0" style="width: 120px;" ${hasBalance ? "" : "disabled"} />
+        <button class="setMax" type="button" ${hasBalance ? "" : "disabled"} style="padding: 2px 8px; font-size: 11px;">max</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+    const cb = tr.querySelector('input[type="checkbox"]');
+    const amt = tr.querySelector(".amt");
+    const max = tr.querySelector(".setMax");
+    max.onclick = () => {
+      // For native ETH, hold back ~0.0005 for gas and fee
+      let usable = t.balance;
+      if (t.isNative) usable = t.balance > 500000000000000n ? t.balance - 500000000000000n : 0n;
+      amt.value = ethers.formatUnits(usable, t.decimals);
+      cb.checked = true;
+    };
+    amt.oninput = () => { if (amt.value.trim() && hasBalance) cb.checked = true; };
+    return { ...t, _cb: cb, _amt: amt, _formatted: formatted };
+  });
+  host.appendChild(table);
+
+  if (!rows.length) {
+    host.innerHTML = `<div class="hint" style="padding: 8px;">${opts.emptyMsg || "No tokens found."}</div>`;
+  }
+
+  return {
+    getSelected: () => {
+      const out = [];
+      for (const r of rows) {
+        if (!r._cb.checked) continue;
+        const v = r._amt.value.trim();
+        if (!v) continue;
+        let wei;
+        try { wei = ethers.parseUnits(v, r.decimals); }
+        catch (e) { throw new Error(`Bad amount for ${r.symbol}: ${v}`); }
+        if (wei <= 0n) throw new Error(`Amount for ${r.symbol} must be > 0`);
+        if (wei > r.balance) throw new Error(`${r.symbol} amount (${v}) exceeds balance (${r._formatted})`);
+        out.push({ addr: r.addr, decimals: r.decimals, symbol: r.symbol, amountWei: wei, isNative: r.isNative });
+      }
+      return out;
+    },
+  };
+}
+
+// ============================================================
+//  Wallet wiring
+// ============================================================
+async function connect() {
+  if (!window.ethereum) return alert("No wallet detected. Install MetaMask, Trust Wallet, or similar, and reload.");
+  try {
+    const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
+    account = accs[0];
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+    const net = await provider.getNetwork();
+    chainId = Number(net.chainId);
+    const known = NETWORKS[chainId];
+    setNet(known ? `${known.name} (${chainId})` : `chainId ${chainId}`, !!known);
+    $("acct").innerHTML = `<a target="_blank" href="${explorerAddr(account)}">${fmtAddr(account)}</a>`;
+    $("connect").hidden = true; $("disconnect").hidden = false;
+    log(`Connected ${fmtAddr(account)} on chainId ${chainId}`, "ok");
+    refreshAddrBook();
+    await probeReadRpc(chainId);
+    refreshState();
+  } catch (e) { log("Connect failed: " + (e.message || e), "err"); }
+}
+
+function disconnect() {
+  account = null; signer = null; provider = null; chainId = null;
+  setNet("disconnected"); $("acct").textContent = "—";
+  $("connect").hidden = false; $("disconnect").hidden = true;
+  log("Disconnected");
+  refreshAddrBook();
+}
+
+window.ethereum?.on?.("accountsChanged", (accs) => {
+  if (!accs?.length) return disconnect();
+  account = accs[0];
+  $("acct").innerHTML = `<a target="_blank" href="${explorerAddr(account)}">${fmtAddr(account)}</a>`;
+  log(`Account → ${fmtAddr(account)}`);
+  refreshState();
+});
+
+window.ethereum?.on?.("chainChanged", async (hex) => {
+  chainId = parseInt(hex, 16);
+  const known = NETWORKS[chainId];
+  setNet(known ? `${known.name} (${chainId})` : `chainId ${chainId}`, !!known);
+  log(`Chain → ${chainId}${known ? ` (${known.name})` : ""}`);
+  if (window.ethereum) {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    if (account) try { signer = await provider.getSigner(); } catch {}
+  }
+  refreshAddrBook();
+  await probeReadRpc(chainId);
+  refreshState();
+});
+
+async function switchNetwork(target) {
+  if (!window.ethereum) return alert("No wallet");
+  const n = NETWORKS[target];
+  const hex = "0x" + Number(target).toString(16);
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+    log(`Switching to ${n.name}…`);
+  } catch (e) {
+    if (e.code === 4902 || /unrecognized chain/i.test(e.message || "")) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{ chainId: hex, chainName: n.name, nativeCurrency: { name: n.currency, symbol: n.currency, decimals: 18 }, rpcUrls: n.rpcUrls, blockExplorerUrls: [n.explorer] }],
+        });
+        log(`Added ${n.name} to wallet`);
+      } catch (addErr) { log(`Add network failed: ${addErr.message || addErr}`, "err"); }
+    } else if (e.code === 4001) log(`User rejected switch to ${n.name}`);
+    else log(`Switch failed: ${e.message || e}`, "err");
+  }
+}
+
+// Auto-restore session passively (no permission re-request, avoids loops on Trust Wallet)
+(async () => {
+  if (!window.ethereum) return;
+  try {
+    const accs = await window.ethereum.request({ method: "eth_accounts" });
+    if (!accs?.length) return;
+    account = accs[0];
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+    const net = await provider.getNetwork();
+    chainId = Number(net.chainId);
+    const known = NETWORKS[chainId];
+    setNet(known ? `${known.name} (${chainId})` : `chainId ${chainId}`, !!known);
+    $("acct").innerHTML = `<a target="_blank" href="${explorerAddr(account)}">${fmtAddr(account)}</a>`;
+    $("connect").hidden = true; $("disconnect").hidden = false;
+    log(`Auto-restored ${fmtAddr(account)} on chainId ${chainId}`, "ok");
+    refreshAddrBook();
+    await probeReadRpc(chainId);
+    refreshState();
+  } catch {}
+})();
+
+// ============================================================
+//  Address book
+// ============================================================
+function refreshAddrBook() {
+  const cur = NETWORKS[chainId];
+  const vault = chainId === 11155111 ? ADDR.bank8_sepolia
+              : chainId === 97       ? ADDR.bank8_bsc_testnet
+              : chainId === 84532    ? ADDR.bank8_base_testnet
+              : null;
+  const rows = [
+    { lbl: "Active Bank8 vault", val: vault, link: !!vault },
+    { lbl: "Bank5 (live prod)",  val: ADDR.bank5_sepolia, link: chainId === 11155111 },
+    { lbl: "Wallet 1 (you)",     val: ADDR.wallet1, link: true },
+    { lbl: "Wallet 2 (test recv.)", val: ADDR.wallet2, link: true },
+    { lbl: "USD1 token (Sepolia)",  val: ADDR.usd1_sepolia, link: chainId === 11155111 },
+    { lbl: "WLFI token (Sepolia)",  val: ADDR.wlfi_sepolia, link: chainId === 11155111 },
+    { lbl: "ETH sentinel",       val: ADDR.ETH, link: false },
+  ];
+  $("addrbook").innerHTML = `
+    <table>${rows.map(r => `
+      <tr>
+        <td class="lbl">${r.lbl}</td>
+        <td class="mono">${r.val ? (r.link ? `<a target="_blank" href="${explorerAddr(r.val)}">${r.val}</a>` : r.val) : "<span class='hint'>none</span>"}</td>
+        <td>${r.val ? `<button class="copy" onclick="navigator.clipboard.writeText('${r.val}'); this.textContent='copied!'; setTimeout(() => this.textContent='copy', 1000)">copy</button>` : ""}</td>
+      </tr>
+    `).join("")}</table>
+  `;
+}
+
+// ============================================================
+//  Vault state widget (Bank8)
+// ============================================================
+// Generic state-fetcher: works for any address. Renders into the given panel.
+// Robustified 2026-05-11: each of the 3 underlying RPC calls (getBalance,
+// getMyVaultedTokens, getCurrentFeeInWei) is independent. If any fails, we
+// show partial state + a per-call error pill so the user can see WHICH call
+// is the problem (instead of an opaque "could not coalesce error").
+async function refreshStateFor(addr, panelEl, statusEl, walletLabel = "Wallet") {
+  if (!panelEl) return;
+  const cur = NETWORKS[chainId];
+  const vault = chainId === 11155111 ? ADDR.bank8_sepolia
+              : chainId === 97       ? ADDR.bank8_bsc_testnet
+              : chainId === 84532    ? ADDR.bank8_base_testnet
+              : null;
+  if (!provider || !vault || !addr) {
+    panelEl.innerHTML = `<div class="stat"><div class="lbl">State</div><div class="val hint">${
+      !addr ? "No address"
+      : !provider ? "Connect wallet first"
+      : !vault ? `Bank8 not deployed on chainId ${chainId}` + (chainId ? "" : " (no chain detected)")
+      : "?"
+    }</div></div>`;
+    if (statusEl) statusEl.textContent = "";
+    return;
+  }
+  if (statusEl) statusEl.textContent = "loading…";
+
+  // Run each call independently so one failure doesn't kill the whole panel.
+  // All reads go through the read-only provider (public RPC) — independent of
+  // the wallet's injected provider, which can be flaky on testnets.
+  const rp = getReadProvider();
+  const errors = [];
+  let walletEth = null, fee = null, tokens = [], balances = [];
+
+  try { walletEth = await rp.getBalance(addr); }
+  catch (e) { errors.push(`getBalance:\n${formatErr(e)}`); }
+
+  let contract;
+  try {
+    const abi = await fetchAbi("CrossChainBank8");
+    contract = new ethers.Contract(vault, abi, rp);
+  } catch (e) { errors.push(`ABI load:\n${formatErr(e)}`); }
+
+  if (contract) {
+    try {
+      const [t, b] = await contract.getMyVaultedTokens.staticCall({ from: addr });
+      tokens = t; balances = b;
+    } catch (e) {
+      errors.push(`getMyVaultedTokens:\n${formatErr(e)}`);
+    }
+    try { fee = await contract.getCurrentFeeInWei.staticCall(); }
+    catch (e) { errors.push(`getCurrentFeeInWei:\n${formatErr(e)}`); }
+  }
+
+  // Render whatever partial state we got
+  let html = "";
+  html += `<div class="stat"><div class="lbl">${walletLabel} ${cur?.currency || "Native"}</div><div class="val">${walletEth != null ? ethers.formatEther(walletEth) : "<span class='hint'>—</span>"}</div></div>`;
+  if (walletLabel === "Wallet 1") {
+    html += `<div class="stat"><div class="lbl">Current fee</div><div class="val">${fee != null ? ethers.formatEther(fee) + " " + (cur?.currency || "Native") : "<span class='hint'>—</span>"}</div></div>`;
+  }
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i], bal = balances[i];
+    let label, formatted;
+    if (tok.toLowerCase() === ADDR.ETH.toLowerCase()) {
+      label = `Vaulted ${cur?.currency || "ETH"}`;
+      formatted = ethers.formatEther(bal);
+    } else {
+      try {
+        const erc20 = new ethers.Contract(tok, ERC20_ABI, rp);
+        const [sym, dec] = await Promise.all([erc20.symbol(), erc20.decimals()]);
+        label = `Vaulted ${sym}`;
+        formatted = ethers.formatUnits(bal, dec);
+      } catch {
+        label = `Vaulted ${fmtAddr(tok)}`;
+        formatted = bal.toString();
+      }
+    }
+    html += `<div class="stat"><div class="lbl">${label}</div><div class="val">${formatted}</div></div>`;
+  }
+  if (tokens.length === 0 && errors.length === 0) {
+    html += `<div class="stat"><div class="lbl">Vaulted tokens</div><div class="val hint">none yet</div></div>`;
+  }
+  if (errors.length) {
+    html += `<div class="stat" style="grid-column: 1 / -1; border-left: 3px solid var(--err); background: #c3322;">
+      <div class="lbl">Per-call errors</div>
+      <div class="val" style="font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; white-space: pre-wrap;">${errors.join("\n")}</div>
+      <div class="val hint" style="margin-top: 4px;">Chain: ${chainId} (${cur?.name || "unknown"}). Contract address used: ${vault}.</div>
+    </div>`;
+  }
+  panelEl.innerHTML = html;
+  if (statusEl) statusEl.textContent = errors.length
+    ? `${errors.length} call(s) failed at ${new Date().toLocaleTimeString()}`
+    : `Updated at ${new Date().toLocaleTimeString()}`;
+}
+
+// Wallet 1 (connected wallet) — primary panel
+async function refreshState() {
+  return refreshStateFor(account, $("state"), $("stateStatus"), "Wallet 1");
+}
+
+// Wallet 2 (read-only, address from input)
+async function refreshWallet2State() {
+  const inp = $("wallet2Addr");
+  if (!inp) return;
+  const v = inp.value.trim();
+  if (!v) {
+    inp.value = ADDR.wallet2;
+  }
+  const addr = inp.value.trim();
+  if (!ethers.isAddress(addr)) {
+    $("wallet2Status").textContent = "Invalid address";
+    return;
+  }
+  return refreshStateFor(addr, $("state-w2"), $("wallet2Status"), "Wallet 2");
+}
+
+// ============================================================
+//  Test flow runner
+// ============================================================
+function makeTest(spec, idx) {
+  const id = `test-${spec.id}`;
+  const card = document.createElement("div");
+  card.className = "card test";
+  card.id = id;
+
+  // Standard tests use spec.inputs/spec.run.
+  // Setup-style tests (spec.setup) build their own body and return {run}.
+  const standardInputsHtml = !spec.setup ? (spec.inputs || []).map((inp, i) => `
+    <label class="row" style="margin: 4px 0;">
+      <span style="width: 130px;" class="hint">${inp.label}:</span>
+      <input data-input-idx="${i}" type="text" value="${inp.default || ""}" placeholder="${inp.placeholder || ""}" style="flex: 1; min-width: 200px;" />
+    </label>
+  `).join("") : "";
+
+  card.innerHTML = `
+    <header>
+      <span class="step-num">${idx + 1}</span>
+      <h3 style="margin: 0; flex: 1;">${spec.name}</h3>
+      <span class="pill ${spec.kind === "read" ? "muted" : "warn"}">${spec.kind === "read" ? "read" : spec.kind === "write" ? "write" : "approve+write"}</span>
+    </header>
+    <div class="desc">${spec.desc || ""}</div>
+    ${spec.expect ? `<div class="hint" style="margin: 6px 0;"><b>Expected:</b> ${spec.expect}</div>` : ""}
+    <div class="body">${standardInputsHtml}</div>
+    <div class="controls">
+      <button class="primary" data-action="run">Run</button>
+      ${spec.setup ? '<button data-action="refresh">↻ Refresh balances</button>' : ''}
+      <button data-action="reset">Reset</button>
+    </div>
+    <div class="result" style="display: none;"></div>
+  `;
+
+  const bodyEl = card.querySelector(".body");
+  let setupResult = null;
+
+  async function rebuildBody() {
+    if (!spec.setup) return;
+    bodyEl.innerHTML = `<div class="hint" style="padding: 8px;">Loading…</div>`;
+    try {
+      setupResult = await spec.setup(bodyEl);
+    } catch (e) {
+      bodyEl.innerHTML = `<div class="hint" style="color: var(--err); padding: 8px;">Setup failed: ${e.shortMessage || e.message || e}</div>`;
+      setupResult = null;
+    }
+  }
+  if (spec.setup) {
+    rebuildBody();
+    card.querySelector('[data-action="refresh"]').onclick = rebuildBody;
+  }
+
+  card.querySelector('[data-action="run"]').onclick = async () => {
+    const btn = card.querySelector('[data-action="run"]');
+    const res = card.querySelector(".result");
+    btn.disabled = true;
+    card.className = "card test running";
+    res.style.display = "block";
+    res.className = "result";
+    res.textContent = "Running…";
+    try {
+      let out;
+      if (spec.setup) {
+        if (!setupResult) await rebuildBody();
+        if (!setupResult) throw new Error("Setup not ready — try clicking ↻ Refresh balances");
+        out = await setupResult.run();
+      } else {
+        const args = (spec.inputs || []).map((inp, i) => {
+          const v = card.querySelector(`[data-input-idx="${i}"]`).value;
+          return inp.parse ? inp.parse(v) : v;
+        });
+        out = await spec.run(args);
+      }
+      res.className = "result ok";
+      res.innerHTML = out.html || ("OUTPUT:\n" + (out.text || JSON.stringify(out, null, 2)));
+      card.className = "card test done";
+      log(`✓ ${spec.name}`, "ok");
+      if (spec.kind !== "read") {
+        setTimeout(refreshState, 1500);
+        setTimeout(refreshWallet2State, 1700);
+      }
+      // After a successful write, rebuild setup-body so balances reflect new state
+      if (spec.setup && spec.kind !== "read") setTimeout(rebuildBody, 2000);
+    } catch (e) {
+      res.className = "result err";
+      res.textContent = "FAILED: " + formatErr(e);
+      card.className = "card test fail";
+      log(`✗ ${spec.name}: ${e.shortMessage || e.message}`, "err");
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  card.querySelector('[data-action="reset"]').onclick = () => {
+    card.className = "card test";
+    const r = card.querySelector(".result"); r.style.display = "none"; r.textContent = "";
+  };
+
+  return card;
+}
+
+// ============================================================
+//  Test definitions — Bank5 (the LIVE one)
+// ============================================================
+const BANK5_TESTS = [
+  {
+    id: "b5-1", name: "Sanity: read fee", kind: "read",
+    desc: "Confirm Bank5 responds to reads. No tx, no fee.",
+    expect: "A small wei value (~$0.10 worth of ETH).",
+    run: async () => {
+      const abi = await fetchAbi("CrossChainBank5");
+      const c = new ethers.Contract(ADDR.bank5_sepolia, abi, getReadProvider());
+      const fee = await c.getCurrentFeeInWei();
+      return { text: `${fee.toString()} wei (≈ ${ethers.formatEther(fee)} ETH)` };
+    },
+  },
+  {
+    id: "b5-2", name: "Single ETH deposit (works)", kind: "write",
+    desc: "Deposit 0.001 ETH + fee. Should succeed.",
+    expect: "Tx confirms with status 1.",
+    inputs: [{ label: "Amount (ETH)", default: "0.001", parse: (s) => s.trim() }],
+    run: async ([amt]) => {
+      ensureSigner();
+      const abi = await fetchAbi("CrossChainBank5");
+      const c = new ethers.Contract(ADDR.bank5_sepolia, abi, getReadProvider());
+      const fee = await c.getCurrentFeeInWei();
+      const total = ethers.parseEther(amt) + fee;
+      const tx = await c.connect(signer).depositETH({ value: total, gasLimit: 250000n });
+      const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+      const r = await tx.wait();
+      return { html: `Sent: ${link}\nConfirmed in block ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+    },
+  },
+  {
+    id: "b5-3", name: "⚠️ Multi-token batch with ETH (KNOWN BUG)", kind: "write",
+    desc: "Bank5's depositMultipleTokens rejects ETH in the array. Expected: revert.",
+    expect: "Reverts with empty data (0x). This is the bug Bank8 fixed.",
+    inputs: [
+      { label: "ETH amount", default: "0.001", parse: (s) => s },
+      { label: "USD1 amount", default: "1.0", parse: (s) => s },
+    ],
+    run: async ([ethAmt, usd1Amt]) => {
+      // Note: Bank5 ABI in this tool doesn't expose depositMultipleTokens (Bank5 doesn't have it).
+      // We try to call it anyway by using a manual ABI fragment to demonstrate the failure.
+      ensureSigner();
+      const fragment = ["function depositMultipleTokens(address[] tokens, uint256[] amounts) payable"];
+      const c = new ethers.Contract(ADDR.bank5_sepolia, fragment, getReadProvider());
+      const tx = await c.connect(signer).depositMultipleTokens(
+        [ADDR.ETH, ADDR.usd1_sepolia],
+        [ethers.parseEther(ethAmt), ethers.parseUnits(usd1Amt, 18)],
+        { value: ethers.parseEther(ethAmt), gasLimit: 800000n }
+      );
+      const r = await tx.wait();
+      return { html: `Unexpected success! Block ${r.blockNumber}` };
+    },
+  },
+];
+
+// ============================================================
+//  Test definitions — Bank8 (the upgrade)
+// ============================================================
+const BANK8_TESTS = [
+  {
+    id: "b8-1", name: "Sanity: read fee + max constants", kind: "read",
+    desc: "Confirm Bank8 responds. Reads getCurrentFeeInWei, MAX_BATCH_SIZE, MAX_TOKENS_PER_USER.",
+    expect: "Fee is small wei. MAX_BATCH_SIZE=25, MAX_TOKENS_PER_USER=200.",
+    run: async () => {
+      const abi = await fetchAbi("CrossChainBank8");
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) throw new Error("No Bank8 deployment on this chain. Switch to Sepolia/BSC Testnet/Base Sepolia.");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const [fee, maxBatch, maxPerUser, maxNew, rateLimit] = await Promise.all([
+        c.getCurrentFeeInWei(), c.MAX_BATCH_SIZE(), c.MAX_TOKENS_PER_USER(), c.MAX_NEW_TOKENS_PER_TX(), c.MAX_TRANSACTIONS_PER_MINUTE(),
+      ]);
+      return { text: `fee:                ${ethers.formatEther(fee)} (native)\nMAX_BATCH_SIZE:     ${maxBatch}\nMAX_TOKENS_PER_USER:${maxPerUser}\nMAX_NEW_TOKENS_PER_TX:${maxNew}\nMAX_TRANSACTIONS_PER_MINUTE:${rateLimit}` };
+    },
+  },
+  {
+    id: "b8-2", name: "Read: my vault balance", kind: "read",
+    desc: "Read your current vault contents. Empty if you've never deposited.",
+    run: async () => {
+      const abi = await fetchAbi("CrossChainBank8");
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) throw new Error("No Bank8 on this chain");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const [tokens, balances] = await c.getMyVaultedTokens.staticCall({ from: account });
+      if (!tokens.length) return { text: "(empty — no deposits yet)" };
+      return { text: tokens.map((t, i) => `${t}: ${balances[i].toString()}`).join("\n") };
+    },
+  },
+  {
+    id: "b8-3", name: "Single ETH deposit", kind: "write",
+    desc: "Deposit a tiny amount + the dynamic fee. Default is 0.0001 ETH so a low-balance wallet can still run it.",
+    expect: "Tx confirms; vault state below shows new vaulted ETH.",
+    inputs: [{ label: "Amount (ETH)", default: "0.0001", parse: (s) => s.trim() }],
+    run: async ([amt]) => {
+      ensureSigner();
+      const abi = await fetchAbi("CrossChainBank8");
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) throw new Error("No Bank8 on this chain");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const fee = await c.getCurrentFeeInWei();
+      const total = ethers.parseEther(amt) + fee;
+      // Pre-flight: need value + ~150k gas at 10 gwei = ~0.0000015 ETH gas headroom (rounded up to 0.00005)
+      await ensureBalance(total + ethers.parseEther("0.00005"), "depositETH");
+      const ov = await prepareTx({ value: total, gasLimit: 250000n });
+      const tx = await c.connect(signer).depositETH(ov);
+      const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+      const r = await tx.wait();
+      const cur = NETWORKS[chainId]?.currency || "ETH";
+      return { html: `<b>Deposited:</b> ${amt} ${cur}\n<b>+ Fee:</b> ${ethers.formatEther(fee)} ${cur}\n<b>= Total sent:</b> ${ethers.formatEther(total)} ${cur}\n\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok ✓" : "FAILED ✗"}` };
+    },
+  },
+  {
+    id: "b8-4", name: "⭐ Multi-token batch deposit (smart picker — THE BANK5 BUG-FIX TEST)", kind: "write",
+    desc: "Reads your wallet, lists every known token (ETH, USD1, WLFI on Sepolia), shows balances. Tick the ones you want, set amounts (or click 'max'). Auto-handles ERC20 approvals. The exact call that reverts on Bank5 — Bank8 fixes it via v1.17.17.",
+    expect: "Tx confirms with status 1. Every checked token's vaulted balance increases below.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const tokens = await fetchWalletTokens();
+      const picker = renderTokenPicker(body, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No known tokens for this chain. Add to KNOWN_TOKENS in source." });
+      return {
+        run: async () => {
+          ensureSigner();
+          const sel = picker.getSelected();
+          if (!sel.length) throw new Error("Tick at least one token and enter an amount.");
+          const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+          if (!v) throw new Error("No Bank8 deployment on this chain — switch network.");
+          const abi = await fetchAbi("CrossChainBank8");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          const fee = await c.getCurrentFeeInWei();
+          const tokenAddrs = sel.map(s => s.addr);
+          const amounts   = sel.map(s => s.amountWei);
+          const ethSel    = sel.find(s => s.isNative);
+          const ethValue  = (ethSel ? ethSel.amountWei : 0n) + fee;
+          await ensureBalance(ethValue + ethers.parseEther("0.0001"), "multi-token deposit");
+
+          // Approvals for each ERC20 below current allowance
+          let approveLog = "";
+          for (const s of sel) {
+            if (s.isNative) continue;
+            const erc = new ethers.Contract(s.addr, ERC20_ABI, getReadProvider());
+            const cur = await erc.allowance(account, v);
+            if (cur < s.amountWei) {
+              const a = await erc.connect(signer).approve(v, s.amountWei, { gasLimit: 100000n });
+              await a.wait();
+              approveLog += `Approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+            }
+          }
+
+          const tx = await c.connect(signer).depositMultipleTokens(tokenAddrs, amounts, { value: ethValue, gasLimit: 800000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+          const verdict = r.status === 1 ? "OK ✓ (Bank5 bug confirmed fixed!)" : "FAILED";
+          return { html: `${approveLog}Deposited: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ${verdict}` };
+        },
+      };
+    },
+  },
+  {
+    id: "b8-5", name: "Internal transfer ETH to Wallet 2", kind: "write",
+    desc: "Transfer some of your vaulted ETH to the test recipient (Wallet 2). Internal — never leaves the vault. The form below auto-fills with your CURRENT vault ETH balance.",
+    expect: "Wallet 2's vault balance increases. Yours decreases by amount + fee (fee paid from your wallet, not vault).",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
+        return { run: async () => { throw new Error("No Bank8"); } };
+      }
+      const abi = await fetchAbi("CrossChainBank8");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const vaultEth = await c.getBalance.staticCall(account, ADDR.ETH);
+      const cur = NETWORKS[chainId]?.currency || "Native";
+      const half = vaultEth / 2n;
+      body.innerHTML = `
+        <div class="hint" style="margin-bottom: 8px;">Your vaulted ${cur}: <b class="mono">${ethers.formatEther(vaultEth)}</b> — default below is half of that.</div>
+        <label class="row" style="margin: 4px 0;">
+          <span style="width: 130px;" class="hint">Recipient:</span>
+          <input data-k="to" type="text" class="mono" value="${ADDR.wallet2}" style="flex: 1; min-width: 200px;" />
+        </label>
+        <label class="row" style="margin: 4px 0;">
+          <span style="width: 130px;" class="hint">Amount (${cur}):</span>
+          <input data-k="amt" type="text" class="mono" value="${ethers.formatEther(half)}" style="flex: 1; min-width: 200px;" />
+          <button class="setMax" type="button" style="padding: 2px 8px; font-size: 11px;">max</button>
+        </label>
+      `;
+      body.querySelector(".setMax").onclick = () => { body.querySelector('[data-k="amt"]').value = ethers.formatEther(vaultEth); };
+      return {
+        run: async () => {
+          ensureSigner();
+          const to = body.querySelector('[data-k="to"]').value.trim();
+          const amtStr = body.querySelector('[data-k="amt"]').value.trim();
+          if (!ethers.isAddress(to)) throw new Error("Recipient is not a valid address");
+          const amt = ethers.parseEther(amtStr);
+          if (amt <= 0n) throw new Error("Amount must be > 0");
+          if (amt > vaultEth) throw new Error(`Amount ${amtStr} exceeds your vaulted ${cur} (${ethers.formatEther(vaultEth)})`);
+          const fee = await c.getCurrentFeeInWei();
+          const cw = c.connect(signer);
+          await ensureBalance(fee + ethers.parseEther("0.0001"), "internal-transfer fee");
+          const tx = await cw.transferInternalETH(to, amt, { value: fee, gasLimit: 250000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          return { html: `Transferred ${amtStr} ${cur} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+  {
+    id: "b8-6", name: "Withdraw single ETH back to your wallet", kind: "write",
+    desc: "Drain some vaulted ETH back to your external wallet. Auto-fills with your current vaulted balance.",
+    expect: "Wallet ETH increases by amount; vault ETH decreases by amount; you also pay the fee from your wallet.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
+        return { run: async () => { throw new Error("No Bank8"); } };
+      }
+      const abi = await fetchAbi("CrossChainBank8");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const vaultEth = await c.getBalance.staticCall(account, ADDR.ETH);
+      const cur = NETWORKS[chainId]?.currency || "Native";
+      body.innerHTML = `
+        <div class="hint" style="margin-bottom: 8px;">Your vaulted ${cur}: <b class="mono">${ethers.formatEther(vaultEth)}</b></div>
+        <label class="row" style="margin: 4px 0;">
+          <span style="width: 130px;" class="hint">Amount (${cur}):</span>
+          <input data-k="amt" type="text" class="mono" value="${ethers.formatEther(vaultEth)}" style="flex: 1; min-width: 200px;" />
+          <button class="setMax" type="button" style="padding: 2px 8px; font-size: 11px;">max</button>
+        </label>
+      `;
+      body.querySelector(".setMax").onclick = () => { body.querySelector('[data-k="amt"]').value = ethers.formatEther(vaultEth); };
+      return {
+        run: async () => {
+          ensureSigner();
+          const amtStr = body.querySelector('[data-k="amt"]').value.trim();
+          const amt = ethers.parseEther(amtStr);
+          if (amt <= 0n) throw new Error("Amount must be > 0");
+          if (amt > vaultEth) throw new Error(`Amount ${amtStr} exceeds your vaulted ${cur} (${ethers.formatEther(vaultEth)})`);
+          const fee = await c.getCurrentFeeInWei();
+          const cw = c.connect(signer);
+          await ensureBalance(fee + ethers.parseEther("0.0001"), "withdraw fee");
+          const tx = await cw.withdrawETH(amt, { value: fee, gasLimit: 250000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          return { html: `Withdrew ${amtStr} ${cur}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+  {
+    id: "b8-7", name: "⭐ Multi-token batch withdraw (smart picker)", kind: "write",
+    desc: "Reads your CURRENT VAULT contents (via getMyVaultedTokens). Tick what to pull out and how much. Same fix path as deposit, going the other direction.",
+    expect: "Tx confirms; checked balances drop in vault state above.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 deployment on this chain.</div>`;
+        return { run: async () => { throw new Error("No Bank8 on this chain"); } };
+      }
+      const tokens = await fetchVaultedTokens(v);
+      const picker = renderTokenPicker(body, tokens, { balanceLabel: "Vaulted balance", emptyMsg: "Vault is empty — run a deposit first." });
+      return {
+        run: async () => {
+          ensureSigner();
+          const sel = picker.getSelected();
+          if (!sel.length) throw new Error("Tick at least one token to withdraw.");
+          const abi = await fetchAbi("CrossChainBank8");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          const fee = await c.getCurrentFeeInWei();
+          await ensureBalance(fee + ethers.parseEther("0.0001"), "multi-token withdraw fee");
+          const tx = await c.connect(signer).withdrawMultipleTokens(sel.map(s => s.addr), sel.map(s => s.amountWei), { value: fee, gasLimit: 800000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+          return { html: `Withdrew: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+  // ---------------------------------------------------------------------------
+  // Single-token tests + collectFees — added 2026-05-09 to round out coverage.
+  // These exist in Bank8's ABI but weren't individually verified before.
+  // ---------------------------------------------------------------------------
+  {
+    id: "b8-8", name: "Single ERC20 deposit (depositToken)", kind: "write",
+    desc: "Pick ONE token from your wallet, set an amount. Auto-handles approval. Smaller scope than the multi-token batch — confirms the single-token path works on its own.",
+    expect: "Tx confirms; the picked token's vaulted balance increases by the chosen amount.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      // Filter out native ETH — depositToken is for ERC20s only
+      const allTokens = await fetchWalletTokens();
+      const tokens = allTokens.filter(t => !t.isNative);
+      if (!tokens.length) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No known ERC20 tokens for this chain. (depositToken does not accept native ETH — use Test 3 for ETH deposits.)</div>`;
+        return { run: async () => { throw new Error("No ERC20s available"); } };
+      }
+      const picker = renderTokenPicker(body, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No ERC20 tokens found." });
+      return {
+        run: async () => {
+          ensureSigner();
+          const sel = picker.getSelected();
+          if (sel.length !== 1) throw new Error("Pick exactly ONE token (this is the single-token test).");
+          const t = sel[0];
+          const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+          if (!v) throw new Error("No Bank8 deployment on this chain — switch network.");
+          const abi = await fetchAbi("CrossChainBank8");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          const fee = await c.getCurrentFeeInWei();
+          await ensureBalance(fee + ethers.parseEther("0.0001"), "depositToken fee");
+
+          // Approve if needed
+          let approveLog = "";
+          const erc = new ethers.Contract(t.addr, ERC20_ABI, getReadProvider());
+          const cur = await erc.allowance(account, v);
+          if (cur < t.amountWei) {
+            const a = await erc.connect(signer).approve(v, t.amountWei, { gasLimit: 100000n });
+            await a.wait();
+            approveLog = `Approved ${t.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+          }
+
+          const tx = await c.connect(signer).depositToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          return { html: `${approveLog}Deposited: ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+  {
+    id: "b8-9", name: "Single ERC20 withdraw (withdrawToken)", kind: "write",
+    desc: "Pick ONE token from your VAULT (not your wallet), set an amount, withdraw it back to your external wallet.",
+    expect: "Tx confirms; vaulted balance for that token decreases by amount; wallet balance for that token increases.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
+        return { run: async () => { throw new Error("No Bank8"); } };
+      }
+      const allVaulted = await fetchVaultedTokens(v);
+      const vaulted = allVaulted.filter(t => !t.isNative);
+      if (!vaulted.length) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No ERC20s in your vault. Run Test 8 (depositToken) first to populate.</div>`;
+        return { run: async () => { throw new Error("Vault has no ERC20s"); } };
+      }
+      const picker = renderTokenPicker(body, vaulted, { balanceLabel: "Vaulted balance", emptyMsg: "Vault has no ERC20s." });
+      return {
+        run: async () => {
+          ensureSigner();
+          const sel = picker.getSelected();
+          if (sel.length !== 1) throw new Error("Pick exactly ONE token.");
+          const t = sel[0];
+          const abi = await fetchAbi("CrossChainBank8");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          const fee = await c.getCurrentFeeInWei();
+          await ensureBalance(fee + ethers.parseEther("0.0001"), "withdrawToken fee");
+          const tx = await c.connect(signer).withdrawToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          return { html: `Withdrew: ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+  {
+    id: "b8-10", name: "Single ERC20 internal transfer to Wallet 2 (transferInternalToken)", kind: "write",
+    desc: "Pick ONE vaulted ERC20 token, set amount, transfer to Wallet 2 internally (stays in vault, just changes ownership).",
+    expect: "Tx confirms; your vaulted balance for that token decreases; Wallet 2's vaulted balance for that token increases (visible in the Wallet 2 panel above after auto-refresh).",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
+        return { run: async () => { throw new Error("No Bank8"); } };
+      }
+      const allVaulted = await fetchVaultedTokens(v);
+      const vaulted = allVaulted.filter(t => !t.isNative);
+      const recipientDefault = ADDR.wallet2;
+      body.innerHTML = `
+        <label class="row" style="margin: 4px 0;">
+          <span style="width: 130px;" class="hint">Recipient:</span>
+          <input data-k="to" type="text" class="mono" value="${recipientDefault}" style="flex: 1; min-width: 200px;" />
+        </label>
+        <div data-k="picker"></div>
+      `;
+      const pickerHost = body.querySelector('[data-k="picker"]');
+      if (!vaulted.length) {
+        pickerHost.innerHTML = `<div class="hint" style="padding: 8px;">No ERC20s in your vault. Run Test 8 first.</div>`;
+        return { run: async () => { throw new Error("Vault has no ERC20s"); } };
+      }
+      const picker = renderTokenPicker(pickerHost, vaulted, { balanceLabel: "Vaulted balance" });
+      return {
+        run: async () => {
+          ensureSigner();
+          const to = body.querySelector('[data-k="to"]').value.trim();
+          if (!ethers.isAddress(to)) throw new Error("Recipient is not a valid address");
+          if (to.toLowerCase() === account.toLowerCase()) throw new Error("Recipient must differ from sender (contract requires this)");
+          const sel = picker.getSelected();
+          if (sel.length !== 1) throw new Error("Pick exactly ONE token.");
+          const t = sel[0];
+          const abi = await fetchAbi("CrossChainBank8");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          const fee = await c.getCurrentFeeInWei();
+          await ensureBalance(fee + ethers.parseEther("0.0001"), "transferInternalToken fee");
+          const tx = await c.connect(signer).transferInternalToken(t.addr, to, t.amountWei, { value: fee, gasLimit: 300000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          return { html: `Transferred ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+  {
+    id: "b8-11", name: "⭐ Multi-token batch internal transfer to Wallet 2 (transferMultipleTokensInternal)", kind: "write",
+    desc: "The batch version of internal transfer. Pick multiple vaulted tokens (ETH + ERC20s OK), all transferred to Wallet 2 in one tx. Same code path as the multi-token deposit/withdraw — confirms the batch flow works for transfers too.",
+    expect: "Tx confirms; every checked token's vaulted balance decreases on YOUR side and increases on Wallet 2's side. Both panels above auto-refresh.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      if (!v) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
+        return { run: async () => { throw new Error("No Bank8"); } };
+      }
+      const vaulted = await fetchVaultedTokens(v);
+      body.innerHTML = `
+        <label class="row" style="margin: 4px 0;">
+          <span style="width: 130px;" class="hint">Recipient:</span>
+          <input data-k="to" type="text" class="mono" value="${ADDR.wallet2}" style="flex: 1; min-width: 200px;" />
+        </label>
+        <div data-k="picker"></div>
+      `;
+      const pickerHost = body.querySelector('[data-k="picker"]');
+      const picker = renderTokenPicker(pickerHost, vaulted, { balanceLabel: "Vaulted balance", emptyMsg: "Vault is empty — deposit first." });
+      return {
+        run: async () => {
+          ensureSigner();
+          const to = body.querySelector('[data-k="to"]').value.trim();
+          if (!ethers.isAddress(to)) throw new Error("Recipient is not a valid address");
+          if (to.toLowerCase() === account.toLowerCase()) throw new Error("Recipient must differ from sender");
+          const sel = picker.getSelected();
+          if (!sel.length) throw new Error("Tick at least one token to transfer.");
+          const abi = await fetchAbi("CrossChainBank8");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          const fee = await c.getCurrentFeeInWei();
+          await ensureBalance(fee + ethers.parseEther("0.0001"), "transferMultipleTokensInternal fee");
+          const tx = await c.connect(signer).transferMultipleTokensInternal(sel.map(s => s.addr), to, sel.map(s => s.amountWei), { value: fee, gasLimit: 800000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+          return { html: `Batch-transferred: ${summary} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+  {
+    id: "b8-12", name: "Collect fees (collectFees, owner-only)", kind: "write",
+    desc: "Drains accumulated fees from the contract's feeVault to the feeCollector address (= your dev wallet 0x84064...91E). Only the feeCollector can successfully call this; anyone else gets reverted. Note: there's no public reader for feeVault, so the amount drained is reported via the FeesCollected event in the tx receipt.",
+    expect: "If you're calling AS the feeCollector wallet: tx confirms, FeesCollected event in receipt logs the amount drained, your wallet ETH increases. If from any other wallet: revert.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const isFeeCollector = account.toLowerCase() === ADDR.wallet1.toLowerCase();
+      body.innerHTML = `
+        <div class="hint" style="margin-bottom: 8px;">
+          You are connected as <code class="mono">${fmtAddr(account)}</code>.
+          The feeCollector is <code class="mono">${fmtAddr(ADDR.wallet1)}</code> (your Wallet 1).
+          <b>${isFeeCollector ? "✓ You can call this." : "⚠️ You'll get a revert (only feeCollector can drain)."}</b>
+        </div>
+        <div class="hint">Bank8 contract has no public reader for the fee vault, so we don't know in advance how much will be drained. The amount is reported by the <code>FeesCollected(uint256 amount)</code> event in the tx receipt.</div>
+      `;
+      return {
+        run: async () => {
+          ensureSigner();
+          const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+          if (!v) throw new Error("No Bank8 on this chain");
+          const abi = await fetchAbi("CrossChainBank8");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          // No fee on collectFees itself (it's the fee-drain operation)
+          const tx = await c.connect(signer).collectFees({ gasLimit: 200000n });
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          // Decode FeesCollected event from logs
+          let amount = "(unknown — event not decoded)";
+          for (const lg of r.logs) {
+            try {
+              const parsed = c.interface.parseLog(lg);
+              if (parsed && parsed.name === "FeesCollected") {
+                amount = ethers.formatEther(parsed.args[0]) + " " + (NETWORKS[chainId]?.currency || "ETH");
+                break;
+              }
+            } catch {}
+          }
+          return { html: `Drained: ${amount}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+        },
+      };
+    },
+  },
+];
+
+// ============================================================
+//  Test definitions — Portal11 (placeholder until deployed)
+// ============================================================
+let PORTAL11_ADDR = null;
+const PORTAL11_TESTS = [
+  {
+    id: "p-1", name: "[BUG #3] Confirm _clearPrivacyStorage wipes all users' data", kind: "write",
+    desc: "After two users have committed deposits, one user calls teleportBack(). The bug: it wipes ALL users' commitment arrays. After this test, user 2's earlier commitment should be unreadable.",
+    expect: "Verify by reading user 2's commitments before and after. Bug confirmed if they differ.",
+    run: async () => { throw new Error("Need to deploy Portal11 first AND set PORTAL11_ADDR. See top of Portal11 tab."); },
+  },
+  {
+    id: "p-2", name: "[BUG #1] Confirm reveal path doesn't charge fees", kind: "write",
+    desc: "Commit + reveal a deposit. Track msg.sender's wallet ETH before and after the reveal — fee should be missing.",
+    run: async () => { throw new Error("Need to deploy Portal11 first."); },
+  },
+  {
+    id: "p-3", name: "[BUG #2] ETH amount slots never refresh", kind: "read",
+    desc: "Read AmountSlot[] entries. The ETH amounts are set once at construction. Force a price update by calling _updateETHAmountsToCurrentPrice (it's defined but never called) and verify it doesn't actually update because nothing invokes it.",
+    run: async () => { throw new Error("Need to deploy Portal11 first."); },
+  },
+];
+
+// ============================================================
+//  Render flows
+// ============================================================
+function renderFlows() {
+  const b5 = $("bank5-flows"); b5.innerHTML = "";
+  BANK5_TESTS.forEach((s, i) => b5.appendChild(makeTest(s, i)));
+
+  const b8 = $("bank8-flows"); b8.innerHTML = "";
+  BANK8_TESTS.forEach((s, i) => b8.appendChild(makeTest(s, i)));
+
+  const p = $("portal11-flows"); p.innerHTML = "";
+  PORTAL11_TESTS.forEach((s, i) => p.appendChild(makeTest(s, i)));
+}
+
+// ============================================================
+//  Tabs
+// ============================================================
+$("tabs").querySelectorAll("button").forEach(btn => {
+  btn.onclick = () => {
+    $("tabs").querySelectorAll("button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    ["bank5", "bank8", "portal11"].forEach(t => $("tab-" + t).hidden = (t !== btn.dataset.tab));
+  };
+});
+
+// ============================================================
+//  Advanced ABI loader (minimal — for power-user mode)
+// ============================================================
+$("advAbi").onchange = async (e) => {
+  const k = e.target.value;
+  if (!k) return;
+  if (k === "bank5")     $("advAddr").value = ADDR.bank5_sepolia;
+  if (k === "bank8")     $("advAddr").value = ADDR.bank8_sepolia;
+  if (k === "portal11")  $("advAddr").value = PORTAL11_ADDR || "";
+};
+
+$("advLoad").onclick = async () => {
+  const k = $("advAbi").value, a = $("advAddr").value.trim();
+  if (!k || !ethers.isAddress(a)) return alert("Pick ABI and enter a valid address.");
+  const abiName = { bank5: "CrossChainBank5", bank8: "CrossChainBank8", portal11: "CyrusPortal11" }[k];
+  const abi = await fetchAbi(abiName);
+  const root = $("advFns"); root.innerHTML = "";
+  const order = { view: 0, pure: 1, nonpayable: 2, payable: 3 };
+  const fns = abi.filter(x => x.type === "function").sort((x, y) => (order[x.stateMutability] ?? 9) - (order[y.stateMutability] ?? 9) || x.name.localeCompare(y.name));
+  for (const fn of fns) {
+    const m = fn.stateMutability || "nonpayable";
+    const det = document.createElement("details");
+    det.style.cssText = "border: 1px solid #8884; border-radius: 5px; margin-bottom: 6px; padding: 4px 8px;";
+    det.innerHTML = `<summary><span class="pill ${m === "view" || m === "pure" ? "muted" : "warn"}">${m}</span> <span class="mono">${fn.name}(${(fn.inputs || []).map(i => i.type).join(",")})</span></summary>`;
+    const body = document.createElement("div"); body.style.padding = "8px 0";
+    const inputEls = [];
+    for (const inp of fn.inputs || []) {
+      const lab = document.createElement("label");
+      lab.style.cssText = "display: block; margin: 4px 0;";
+      lab.innerHTML = `<span class="hint">${inp.name || "(unnamed)"} : ${inp.type}</span>`;
+      const i = document.createElement("input"); i.type = "text"; i.style.cssText = "display: block; width: 100%; margin-top: 2px;"; i.placeholder = inp.type;
+      lab.appendChild(i); body.appendChild(lab); inputEls.push({ inp, el: i });
+    }
+    let valEl = null;
+    if (m === "payable") { const lab = document.createElement("label"); lab.innerHTML = `<span class="hint">msg.value (ETH)</span>`; valEl = document.createElement("input"); valEl.type = "text"; valEl.style.cssText = "display: block; width: 100%; margin-top: 2px;"; lab.appendChild(valEl); body.appendChild(lab); }
+    const btn = document.createElement("button"); btn.textContent = (m === "view" || m === "pure") ? "Call" : "Send"; btn.className = "primary"; btn.style.marginTop = "6px";
+    body.appendChild(btn);
+    const res = document.createElement("div"); res.className = "result"; res.style.cssText = "display: none; margin-top: 8px; padding: 6px 10px; background: #8881; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;";
+    body.appendChild(res);
+    btn.onclick = async () => {
+      btn.disabled = true; res.style.display = "block"; res.textContent = "…";
+      try {
+        const args = inputEls.map(({ inp, el }) => parseInputValue(el.value, inp.type));
+        const opts = {}; if (m === "payable" && valEl?.value.trim()) opts.value = ethers.parseEther(valEl.value.trim());
+        const c = new ethers.Contract(a, abi, signer || provider);
+        if (m === "view" || m === "pure") {
+          const out = await c[fn.name].staticCall(...args);
+          res.textContent = "OUTPUT: " + fmtOutput(out);
+        } else {
+          if (!signer) throw new Error("Connect wallet first");
+          const tx = await c[fn.name](...args, opts);
+          res.innerHTML = `Sent: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>\nWaiting…`;
+          const r = await tx.wait();
+          res.innerHTML += `\nblock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}`;
+        }
+      } catch (e) { res.textContent = "ERROR: " + (e.shortMessage || e.message || e); }
+      finally { btn.disabled = false; }
+    };
+    det.appendChild(body); root.appendChild(det);
+  }
+};
+
+function parseInputValue(s, type) {
+  s = s.trim();
+  if (s === "" && type !== "string") throw new Error("Empty");
+  if (type.endsWith("[]")) { const inner = type.slice(0, -2); const arr = JSON.parse(s); return arr.map(x => parseInputValue(typeof x === "string" ? x : JSON.stringify(x), inner)); }
+  if (type === "bool") return s === "true" || s === "1";
+  if (/^u?int\d*$/.test(type)) return BigInt(s);
+  return s;
+}
+function fmtOutput(v) {
+  if (v == null) return "(no return)";
+  if (typeof v === "bigint") return v.toString();
+  if (Array.isArray(v)) return "[" + v.map(fmtOutput).join(", ") + "]";
+  if (typeof v === "object") { try { return JSON.stringify(v, (_, x) => typeof x === "bigint" ? x.toString() : x, 2); } catch { return String(v); } }
+  return String(v);
+}
+
+// ============================================================
+//  Wire it up
+// ============================================================
+$("connect").onclick = connect;
+$("disconnect").onclick = disconnect;
+$("diagWallet").onclick = async () => {
+  const panel = $("diagOut");
+  panel.hidden = false;
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!window.ethereum) { panel.innerHTML = `<b style="color:var(--err)">No window.ethereum — no injected wallet</b>`; return; }
+  panel.innerHTML = `<b>Wallet RPC diagnostic — running…</b>`;
+  const tests = [
+    { method: "eth_chainId", params: [] },
+    { method: "eth_accounts", params: [] },
+    { method: "eth_blockNumber", params: [] },
+    { method: "eth_gasPrice", params: [] },
+    { method: "net_version", params: [] },
+  ];
+  if (account) {
+    tests.push({ method: "eth_getBalance", params: [account, "latest"] });
+    tests.push({ method: "eth_getTransactionCount", params: [account, "pending"] });
+    tests.push({ method: "eth_feeHistory", params: ["0x4", "latest", [25, 50, 75]] });
+    tests.push({ method: "eth_maxPriorityFeePerGas", params: [] });
+  }
+  const rows = [];
+  for (const t of tests) {
+    try {
+      const r = await window.ethereum.request(t);
+      const s = typeof r === "object" ? JSON.stringify(r).slice(0, 120) : String(r);
+      rows.push(`<div style="color:var(--ok)">✓ ${t.method.padEnd(28)} → ${s}</div>`);
+    } catch (e) {
+      const detail = formatErr(e).replace(/\n/g, " | ").slice(0, 300);
+      rows.push(`<div style="color:var(--err)">✗ ${t.method.padEnd(28)} → ${detail}</div>`);
+    }
+  }
+  panel.innerHTML = `<b>Wallet RPC diagnostic — ${tests.length} methods tested</b>
+    <div style="font-family: ui-monospace, monospace; font-size: 12px; margin-top: 8px; white-space: pre-wrap;">${rows.join("")}</div>
+    <div class="hint" style="margin-top: 8px;">If any 404s here: that method is broken in your wallet's RPC. eth_sendTransaction broadcasts the tx; if reads work but sendTransaction 404s, the wallet's broadcast endpoint is dead. Fix: switch wallets, or in your wallet's network settings change the Sepolia RPC URL to https://rpc.sepolia.org</div>`;
+};
+$("netSwitch").onchange = (e) => { const id = parseInt(e.target.value, 10); if (id) switchNetwork(id); e.target.value = ""; };
+$("refreshState").onclick = refreshState;
+$("portal11SetAddr").onclick = () => {
+  const a = $("portal11Addr").value.trim();
+  if (!ethers.isAddress(a)) return alert("Need a valid 0x… address");
+  PORTAL11_ADDR = a;
+  $("portal11Status").textContent = "Address set: " + a;
+  log(`Portal11 address set to ${a}`);
+};
+
+// ============================================================
+//  API health check — tests Alchemy / Ankr / Etherscan / BSCScan
+// ============================================================
+function apiResultRow(label, statusClass, message, detail) {
+  return `<div class="card" style="padding: 8px 12px; margin: 0; border-left: 3px solid ${statusClass === 'ok' ? 'var(--ok)' : statusClass === 'err' ? 'var(--err)' : '#888'};">
+    <b>${label}</b> <span class="pill ${statusClass === 'ok' ? 'ok' : statusClass === 'err' ? 'err' : 'muted'}">${statusClass === 'ok' ? '✓ alive' : statusClass === 'err' ? '✗ DEAD' : '…'}</span>
+    <div class="hint" style="margin-top: 4px;">${message}</div>
+    ${detail ? `<div style="font-family: ui-monospace, monospace; font-size: 11px; color: #888; margin-top: 4px; word-break: break-all;">${detail}</div>` : ''}
+  </div>`;
+}
+
+async function testAlchemy(url) {
+  if (!url) return { status: 'skip', msg: '(empty)' };
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', id: 1 }),
+    });
+    if (r.status === 403) {
+      const txt = await r.text();
+      return { status: 'err', msg: 'HTTP 403 (deactivated)', detail: txt.slice(0, 200) };
+    }
+    if (!r.ok) return { status: 'err', msg: `HTTP ${r.status}`, detail: (await r.text()).slice(0, 200) };
+    const j = await r.json();
+    if (j.result) return { status: 'ok', msg: `latest block: ${parseInt(j.result, 16)}` };
+    return { status: 'err', msg: 'no result', detail: JSON.stringify(j).slice(0, 200) };
+  } catch (e) { return { status: 'err', msg: 'fetch failed', detail: e.message }; }
+}
+
+async function testAnkr(url) {
+  if (!url) return { status: 'skip', msg: '(empty)' };
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', id: 1 }),
+    });
+    if (!r.ok) return { status: 'err', msg: `HTTP ${r.status}`, detail: (await r.text()).slice(0, 200) };
+    const j = await r.json();
+    if (j.result) return { status: 'ok', msg: `latest block: ${parseInt(j.result, 16)}` };
+    return { status: 'err', msg: 'no result', detail: JSON.stringify(j).slice(0, 200) };
+  } catch (e) { return { status: 'err', msg: 'fetch failed', detail: e.message }; }
+}
+
+async function testEtherscan(key, label = 'Etherscan v2', chainId = 1) {
+  if (!key) return { status: 'skip', msg: '(empty)' };
+  try {
+    const r = await fetch(`https://api.etherscan.io/v2/api?chainid=${chainId}&module=stats&action=ethsupply&apikey=${encodeURIComponent(key)}`);
+    const j = await r.json();
+    if (j.status === '1') return { status: 'ok', msg: `chain ${chainId}: ok` };
+    return { status: 'err', msg: j.message || 'NOTOK', detail: typeof j.result === 'string' ? j.result : JSON.stringify(j.result) };
+  } catch (e) { return { status: 'err', msg: 'fetch failed', detail: e.message }; }
+}
+
+$("apiTestAll").onclick = async () => {
+  const alchemyUrl    = $("apiAlchemy").value.trim();
+  const ankrUrl       = $("apiAnkr").value.trim();
+  const etherscanKey  = $("apiEtherscan").value.trim();
+  const bscscanKey    = $("apiBscscan").value.trim();
+  const out = $("apiResults");
+  out.innerHTML = `<div class="hint">Testing…</div>`;
+
+  const results = await Promise.all([
+    testAlchemy(alchemyUrl),
+    testAnkr(ankrUrl),
+    testEtherscan(etherscanKey, 'Etherscan v2 (chain 1)', 1),
+    testEtherscan(bscscanKey, 'BSCScan via Etherscan v2 (chain 56)', 56),
+  ]);
+  const labels = ['Alchemy', 'Ankr', 'Etherscan', 'BSCScan'];
+  out.innerHTML = results.map((r, i) => apiResultRow(labels[i], r.status, r.msg, r.detail)).join("");
+  log(`API health check: ${results.map((r, i) => `${labels[i]}=${r.status}`).join(", ")}`,
+      results.every(r => r.status !== 'err') ? "ok" : "err");
+};
+
+$("apiClear").onclick = () => {
+  $("apiAlchemy").value = "";
+  $("apiAnkr").value = "";
+  $("apiEtherscan").value = "";
+  $("apiBscscan").value = "";
+  $("apiResults").innerHTML = "";
+  localStorage.removeItem("ctg.alchemyUrl");
+};
+
+// Auto-restore + persist the Alchemy URL across reloads (browser-session only).
+// On change, re-probe so reads switch over without a manual reconnect.
+(() => {
+  const cached = localStorage.getItem("ctg.alchemyUrl");
+  if (cached && $("apiAlchemy") && !$("apiAlchemy").value) $("apiAlchemy").value = cached;
+  $("apiAlchemy")?.addEventListener("change", async () => {
+    const v = $("apiAlchemy").value.trim();
+    if (v && /^https?:\/\//.test(v)) {
+      localStorage.setItem("ctg.alchemyUrl", v);
+      log("Alchemy URL saved. Re-probing read RPC…");
+    } else {
+      localStorage.removeItem("ctg.alchemyUrl");
+    }
+    // Force re-probe by clearing the cached chosen URL + fallback for current chain
+    if (chainId) {
+      _chosenUrlByChain.delete(chainId);
+      _fallbackByChain.delete(chainId);
+      await probeReadRpc(chainId);
+      refreshState();
+    }
+  });
+})();
+
+// Wallet 2 panel wiring
+$("wallet2Addr").value = ADDR.wallet2; // pre-fill with the test recipient
+$("refreshWallet2").onclick = refreshWallet2State;
+$("wallet2Addr").addEventListener("change", refreshWallet2State);
+
+renderFlows();
+refreshAddrBook();
+refreshState();
+refreshWallet2State();
+</script>
+
+</body>
+</html>
