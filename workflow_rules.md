@@ -56,12 +56,13 @@ This catches drift from prior sessions, environment changes, or your own stale m
 Source-of-truth files for THIS project, ranked by trustworthiness:
 
 1. The **deployed bundle** at cyrusthegreat.dev (highest — it's what users actually run)
-2. The `backup` branch at `cc2d992` (matches the deployed bundle)
-3. `git log` on `main` (what's been done, even if unpushed)
-4. `.env` on disk (what local code is configured to talk to)
-5. `BRAIN.md` (this file — your written summary of all of the above)
-6. `package.json`'s `version` field (currently `1.15.1` — out of sync with commit-message versioning `v.17.66`; **don't trust**)
-7. `CURRENT_STATUS.md` (dated December 2024 — **stale, don't trust without re-verifying**)
+2. `origin/main` HEAD (matches the deployed bundle to within one auto-deploy cycle; verify with the curl-the-bundle check from Rule 2)
+3. `git log` on local `main` (what's been done locally, even if unpushed; may diverge from `origin/main` after rebases or local-only experiments)
+4. The `backup` branch (HISTORICAL only — was live-matching pre-Portal, before the Bank8 promotion on 2026-05-08; do NOT use as live reference now)
+5. `.env` on disk (what local code is configured to talk to)
+6. `BRAIN.md` (your written summary of all of the above)
+7. `package.json`'s `version` field (currently `1.15.1` — out of sync with commit-message versioning; **don't trust** without verifying against git tags)
+8. `CURRENT_STATUS.md` and other top-level legacy `*.md` docs (dated December 2024 — **stale, don't trust without re-verifying**)
 
 If a downstream artifact disagrees with a higher-trust source, the downstream is wrong. Investigate.
 
