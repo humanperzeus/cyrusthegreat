@@ -4,31 +4,45 @@
 **Stack:** Vite + React 18 + TypeScript, Tailwind + shadcn/ui, Wagmi + Viem + Reown AppKit. Solidity ^0.8.20 + OpenZeppelin (EVM). Anchor (Solana, written, not integrated).
 **Repo:** `/Users/humank/Downloads/DEVELOPMENT/CYRUS/cyrusthegreat`
 **Live URL:** https://cyrusthegreat.dev (Cloudflare Pages)
-**Last updated:** 2026-05-08
+**Last updated:** 2026-05-13
 
-## Where we stand (as of 2026-05-08, verified — not from memory)
+## Where we stand (as of 2026-05-13, verified — not from memory)
 
-- **Live in production at cyrusthegreat.dev:**
-  - Frontend bundle: `/assets/index-wFiv6NE4.js` (verified by curl, contains contract address)
-  - Talks to **CrossChainBank5** at `0x3d6e43cbf157110015edF062173BbeBF78De61B4` on **Sepolia testnet only**
-  - Source matches the `backup` branch at `cc2d992 v1.17.55: Complete deposit modal validation and UX consistency`
-  - **No mainnet deployment on any chain.** All `_MAINNET_CONTRACT` slots in `.env` are `notdeployednow`.
+- **Live in production at cyrusthegreat.dev** (verified end-to-end 2026-05-09; unchanged 2026-05-13):
+  - Frontend bundle: `/assets/index-DG1Do22v.js` (latest), 958 KB
+  - **Talks to CrossChainBank8** at:
+    - Sepolia: `0xb83A814097C70dB79568b663662eA07e77D4D87a`  ← live deposit tx confirmed by user 2026-05-09
+    - BSC Testnet: `0xFb0EB1FE0b61D93C3b56a811702aAE494A8f3582`
+    - Base Sepolia: `0x2F2963FF1F68E4Bb283C34193396eF84eaC2ca5B`
+  - Bank5 (`0x3d6e43...B4`) no longer referenced in live bundle.
+  - Source on `origin/main` is `be8d247 chore(deps): refresh package-lock.json` (on top of `d131daf v.1.17.64`). History was rewritten on 2026-05-09 to remove a temporary security incident from public commit log.
+  - Deploy mechanism: Cloudflare Pages auto-deploy on push to main. Env vars in dashboard. `tools/cf-sync-env.sh` (alias `ctg-sync-env`) syncs `.env` → Cloudflare in one command.
+  - All Alchemy / Ankr / Etherscan API keys rotated 2026-05-09 after security incident; new keys verified working via debug-UI API health check.
+  - **Still no mainnet deployment on any chain.** All `_MAINNET_CONTRACT` slots are `notdeployednow`.
 - **Local `main` branch:**
-  - 16 commits ahead of `origin/main`. None are tagged with semver-style messages — all "pre v9/v10 - N" experimental labels
-  - 3 files uncommitted (Portal fee-model rewrite in progress): `contracts/evm/CyrusPortal11.sol`, `src/components/portal/PortalInterface.tsx`, `src/contracts/abis/CyrusPortal11.json` (+455/-40 lines)
-  - Targets newer **CrossChainBank8** at `0xb83A814097C70DB79568b663662eA07e77D4D87a` (Sepolia testnet) — deployed but **not promoted to production frontend**
-- **Other branches:** `backup` (= live snapshot, last pre-Portal release), `solana-reown-integration` (status unknown, not investigated this session)
+  - 80 commits ahead / 61 behind `origin/main` (last rebase reference: `5eb421d v1.17.4`). Heavy divergence from the rewritten origin/main; **do NOT push** until divergence is sorted. Today's 2 new commits (`d7f1f10`, `bc6fac1`) sit on top of the unpushed Portal-experimentation stack.
+  - Uncommitted in working tree (out-of-scope for current session): Portal fee-model edits (`contracts/evm/CyrusPortal11.sol`, `src/components/portal/PortalInterface.tsx`, `src/contracts/abis/CyrusPortal11.json`), plus minor edits to BRAIN.md / TODO.md / `.env.production` deletion.
+  - Already promoted: **CrossChainBank8** is what cyrusthegreat.dev serves (see "Live" section above). Local main does NOT need a separate "promote Bank8" step — that landed via the 2026-05-09 origin rewrite.
+- **Other branches:** `backup` is **HISTORICAL only** (was live-matching pre-Portal, before the Bank8 promotion). Do not use as live reference. `solana-reown-integration` (status unknown, not investigated).
 - **Active priorities:** see [TODO.md](TODO.md)
 
-## Recent context (this session, 2026-05-08)
+## Recent context (this session, 2026-05-13)
 
-- Disambiguated `CYRUS/ctg_1` and `CYRUS/ctg_2` (sister folders that confused the dev). Result:
-  - `ctg_2` was a v0.dev-generated debug UI hardcoded against Bank5 — **the same contract that's live at cyrusthegreat.dev right now.** Renamed to `CYRUS/tools/bank5-debug-ui/`. Useful for poking the production contract function-by-function.
-  - `ctg_1/hardhat` was the only compile/deploy pipeline. cyrusthegreat absorbed *runtime testing* into `tests_evm/` but **NOT** compile/deploy. Renamed to `CYRUS/tools/hardhat-deploy/`. Needs path-fixing in `deploy_contracts4.sh` before reuse.
-  - `ctg_1/{frontend,backend,supabase}` archived as confirmed dead-ends.
-  - `contracts_quantum/` archived (PQC + TEE + mix-net experiment, Aug 2025, abandoned).
-  - 3 zip backups archived (`vaultwhisper`-era snapshots, before project was renamed).
-- `CTGANDRAILGUN/` (35 GB, dated Sept 16 2025 — newer than this repo's last commit) flagged as a RailGun-fork study folder. **Not yet investigated.** Probably contains the most recent thinking.
+- **Bank8 fully verified 12/12 on Sepolia** via the debug UI (Tests b8-1 → b8-12). Closes the 2026-05-09 open thread "untested Bank8 functions" — `depositToken`, `withdrawToken`, `transferInternalToken`, `transferMultipleTokensInternal`, `collectFees` all confirmed working on real Sepolia transactions. Wallet 1 (`0x8406…691E`) and Wallet 2 (`0xa5f8…892E`) used as sender/recipient.
+- **Debug UI moved into the repo** at `cyrusthegreat/tools/contract-debug/` (was previously outside any git repo at `../tools/contract-debug/`). Now versioned alongside the contracts it tests.
+- **Debug UI capability additions** (committed today):
+  - **FallbackProvider read path** — `getReadProvider()` returns an `ethers.FallbackProvider` with quorum 1 across 3-5 public RPCs per chain. Auto-rotates when any single URL rate-limits (Brave Shields, public-RPC throttling).
+  - **Probe-on-connect** — `probeReadRpc()` pings each candidate RPC's `eth_chainId` and picks the first that works; logs each probe; shows the chosen URL in a header pill.
+  - **Wallet RPC diagnostic** — 🔧 button fires 9 JSON-RPC methods directly at `window.ethereum.request()` and renders pass/fail. Isolates wallet-backend failures from dapp code.
+  - **Nested error walker (`formatErr`)** — surfaces the real cause of ethers v6's opaque "could not coalesce error" by walking `.cause` / `.error` / `.info` chains.
+  - **Optional Alchemy URL** — paste into the existing API health-check input and it's prepended to the candidate RPC list + persisted to localStorage. Not required (public fallbacks work).
+- **L-010 added to `tech_learnings.md`**: wallet RPC health is a write-path-only failure mode — reads can be insulated with dapp-controlled providers, writes can't. Categorically important pattern; sidesteps weeks of future debugging when a user's wallet RPC goes down on testnet.
+
+## Prior context (still relevant from 2026-05-08 / 2026-05-09)
+
+- **Folder disambiguation**: `CYRUS/ctg_1` (hardhat-deploy pipeline) and `CYRUS/ctg_2` (Bank5 debug UI) renamed and archived into `CYRUS/tools/`. `ctg_1/{frontend,backend,supabase}` confirmed dead-ends. `contracts_quantum/` archived (PQC + TEE + mix-net experiment, Aug 2025). 3 zip backups archived (`vaultwhisper`-era snapshots).
+- **CTGANDRAILGUN/** (35 GB, Sept 16 2025 — newer than this repo's last commit at that time) flagged as a RailGun-fork study folder. **Not yet investigated.**
+- **Security incident handling (2026-05-09)**: `.env.production` and Sept 2025 `9674fa8` commit had leaked API keys + privkeys. `git filter-repo --replace-text` scrubbed all 8 secrets from all branches; force-pushed clean history. API keys rotated. Wallet privkeys treated as forever-Sepolia-only burner wallets (per L-008, never use on mainnet).
 
 ## Contract lineage status (verified by source-reading 2026-05-08)
 
@@ -37,7 +51,7 @@
 | **Bank4** | `tools/hardhat-deploy/contracts/CrossChainBank4.sol` (144 lines) | unknown | Baseline; works. |
 | **Bank5** | not in repo (live deployment is the only artifact) | `0x3d6e43cbf157110015edF062173BbeBF78De61B4` Sepolia — production at cyrusthegreat.dev | Live. |
 | **Bank6** (quantum) | `_archive/contracts_quantum-pqc-tee-experiment-aug14/CrossChainBank6.sol` (356 lines) | none | **Won't compile.** TEE validator interface undefined; vault key generation broken (`vault[_key(address(this), token)]` instead of `vault[_key(user, token)]`). Aug-14 abandonment was correct. |
-| **Bank8** | `contracts/evm/CrossChainBank8.sol` (611 lines) | `0xb83A814097C70DB79568b663662eA07e77D4D87a` Sepolia | **Deployed and VERIFIED on Sepolia 2026-05-08** via `tools/contract-debug/`. All 7 functions exercised live: single ETH deposit/withdraw/transfer, multi-token batch deposit (ETH+USD1+WLFI), multi-token batch withdraw, internal transfer. **Bank5's "missing revert data" multi-token bug confirmed FIXED.** Not yet promoted to cyrusthegreat.dev — see TODO.md. BSC Testnet + Base Sepolia deployments not yet smoke-tested (only Sepolia is verified). |
+| **Bank8** | `contracts/evm/CrossChainBank8.sol` (611 lines) | Sepolia `0xb83A814097C70dB79568b663662eA07e77D4D87a` · BSC Testnet `0xFb0EB1FE0b61D93C3b56a811702aAE494A8f3582` · Base Sepolia `0x2F2963FF1F68E4Bb283C34193396eF84eaC2ca5B` | **LIVE on cyrusthegreat.dev (since 2026-05-09).** **12/12 functions verified end-to-end on Sepolia 2026-05-13** via `tools/contract-debug/` (Tests b8-1 → b8-12, two-wallet flows including transfers). Covers: read-fee constants, single ETH deposit/withdraw/transfer, multi-token batch deposit (ETH+USD1+WLFI), multi-token batch withdraw, internal transfers (single + batch), `depositToken`/`withdrawToken`/`transferInternalToken`/`transferMultipleTokensInternal`/`collectFees`. **Bank5's "missing revert data" multi-token bug confirmed FIXED.** BSC Testnet + Base Sepolia deployments still not individually smoke-tested (only Sepolia is verified; share code paths with Sepolia, low risk). |
 | **Bank9** | **source missing from this repo** | unknown — referenced by `tests_evm/testing-contract/test-crosschainbank9.cjs` etc. | **MYSTERY.** Tests call `vault.registered()`, `vault.registerWithWLFI()`, `vault.mixUSD1()` — none of these exist in Bank8. So Bank9 is a real separate deployment with WLFI gating + USD1 mixing. Source either lives in another folder we haven't inspected or was deleted before commit. |
 | **Portal11** | `contracts/evm/CyrusPortal11.sol` (1042 lines) | none | **Half-baked.** Compiles. Privacy primitives sketched. **4 known bugs** (see TODO.md): fee not charged on reveal, ETH price updates never trigger, `_clearPrivacyStorage()` wipes all users' data, "MEV protection" is just 2-block delay. Uncommitted edits in working tree are fixing one (the fee path). Identical copy lives at `CTGANDRAILGUN/byteleport/contracts/CP11/` — older snapshot, not a fork. |
 
@@ -55,5 +69,6 @@
 1. This file is the source of truth for current state. Verify against `git log`, `.env`, and the deployed bundle if anything looks off.
 2. Never cite version numbers / contract addresses / URLs / file paths from training-data assumptions. Verify against `package.json`, `.env`, and live curl. The CURRENT_STATUS.md in this repo is dated December 2024 and is **stale** — do not trust its claims without re-verifying.
 3. "Working" requires evidence: a passing test, a transaction hash, a screenshot, a `curl` response. "Should work" / "I think it does" / "the docs say so" is **not** evidence.
-4. Production status diverges from local. Always cross-check: which contract does cyrusthegreat.dev's *deployed bundle* call? (Currently Bank5 `0x3d6e43...B4`.) Don't conflate with what the local `main` branch's `.env` says.
-5. The `backup` branch ≈ what's live. Use it for "what does the live site look like?" comparisons. Do not assume `main` matches live — it currently does not.
+4. Production status diverges from local. Always cross-check: which contract does cyrusthegreat.dev's *deployed bundle* call? (Currently **Bank8** `0xb83A814097C70dB79568b663662eA07e77D4D87a` on Sepolia, since 2026-05-09 promotion.) Don't conflate with what the local `main` branch's `.env` says. Re-verify with the curl-the-bundle check from `workflow_rules.md` Rule 2.
+5. The `backup` branch is **HISTORICAL only** — it was live-matching pre-Portal, *before* the Bank8 promotion on 2026-05-09. Do **not** use as a "what's live now?" reference. For that, curl the live bundle (see Rule 2 of workflow_rules.md).
+6. **Wallet RPC ≠ dapp RPC** (per L-010, 2026-05-13). When a wallet's RPC backend goes down, reads can be rescued via dapp-controlled providers, but writes are stuck. Diagnose with the debug UI's 🔧 Diagnose-wallet button before assuming dapp code is broken.
