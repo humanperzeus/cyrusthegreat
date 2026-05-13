@@ -52,3 +52,4 @@ AI_PROJECT_GUIDE.md
 !memory/session_*.md
 !tests_evm/BANK8_VERIFICATION_*.md
 !tools/contract-debug/README.md
+!docs/*.md
