@@ -1,0 +1,39 @@
+{
+  "network": "bscTestnet",
+  "chainId": 97,
+  "contract": "CyrusTresor1",
+  "address": "0xa2D2A04d6eE5887f20bF736E1d9014727d599F39",
+  "deployTx": "0xc5ad26378d89e990310683589fc7414f92a410ffebd4a18e6382e382cd652e59",
+  "deployer": "0x84064947bcD9729872c5Be91D2aE50380Cbd691E",
+  "blockNumber": 107422610,
+  "timestamp": "2026-05-14T18:26:51.024Z",
+  "constructorArgs": {
+    "feeCollector": "0x84064947bcD9729872c5Be91D2aE50380Cbd691E",
+    "salt": "0xf442c036af428245ca79cc858c169cefcc39def6054d7eb6a869c4374dfdae70",
+    "priceFeed": "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526",
+    "poolTokens": [
+      "0x0000000000000000000000000000000000000000"
+    ],
+    "bucketSchedules": [
+      [
+        "5000000000000000",
+        "50000000000000000",
+        "500000000000000000",
+        "5000000000000000000"
+      ]
+    ],
+    "zkVerifier": "0x0000000000000000000000000000000000000000"
+  },
+  "poolBucketsHuman": [
+    {
+      "symbol": "tBNB",
+      "addr": "0x0000000000000000000000000000000000000000",
+      "sizes": [
+        "0.005",
+        "0.05",
+        "0.5",
+        "5"
+      ]
+    }
+  ]
+}
