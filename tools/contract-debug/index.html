@@ -103,6 +103,7 @@
 <nav class="tabs" id="tabs">
   <button data-tab="bank5">CrossChainBank5 (LIVE prod)</button>
   <button data-tab="bank8" class="active">CrossChainBank8 (target)</button>
+  <button data-tab="tresor1">CyrusTresor1 (testnet only)</button>
   <button data-tab="portal11">CyrusPortal11 (undeployed)</button>
 </nav>
 
@@ -144,6 +145,25 @@
   <h2>Test flows — run in order</h2>
   <p class="hint">Each card = one step. Pre-filled with sane defaults. Click <b>Run</b>; result appears below; vault state auto-refreshes after every write call.</p>
   <div id="bank8-flows"></div>
+</section>
+
+<!-- ================ CYRUS TRESOR 1 ================ -->
+<section id="tab-tresor1" hidden>
+  <p class="hint">CyrusTresor1 — Bank8 regular vault + anonymity pool layer. Deployed on all 3 testnets 2026-05-14; <b>NOT yet live on cyrusthegreat.dev</b> (frontend integration pending). Addresses: Sepolia <code class="mono">0x223E25F961E29AaCc3dB49e5b00B30452D42c65e</code> · BSC Testnet <code class="mono">0xa2D2A04d6eE5887f20bF736E1d9014727d599F39</code> · Base Sepolia <code class="mono">0xc90610ce4DE152349932Af102650b6c9f8C6AD68</code>. Spec: <code>docs/cyrustresor1_spec.md</code>.</p>
+
+  <p class="hint">The pool tests use a small client-side <b>commit notebook</b> below — it stores <code>(secret, userSalt, withdrawTo, token, bucketIdx)</code> tuples in localStorage so you can commit now and reveal later (after the 1-hour epoch boundary). Never sent anywhere; copy them out of localStorage if you want a backup.</p>
+
+  <h2>Pool commit notebook (this browser only)</h2>
+  <div id="tresor1Notebook" style="font-family: ui-monospace, monospace; font-size: 12px; background: #8881; padding: 8px; border-radius: 6px; white-space: pre-wrap; min-height: 40px;">No commits recorded yet.</div>
+  <div class="row" style="margin-top: 6px;">
+    <button id="tresor1NotebookRefresh">↻ Refresh notebook</button>
+    <button id="tresor1NotebookClear">Clear notebook</button>
+    <span class="hint">localStorage key: <code>ctg.tresor1.commits</code></span>
+  </div>
+
+  <h2>Test flows</h2>
+  <p class="hint">Run in order. Pool tests <b>ct-3 → ct-7</b> form a chain: ct-3 commits, ct-4/5/6 are expected reverts, ct-7 is the eventual happy-path reveal (eligible after the epoch boundary).</p>
+  <div id="tresor1-flows"></div>
 </section>
 
 <!-- ================ PORTAL 11 ================ -->
@@ -253,6 +273,10 @@ const ADDR = (() => {
     bank8_sepolia:       "0xb83a814097c70db79568b663662ea07e77d4d87a",
     bank8_bsc_testnet:   "0xfb0eb1fe0b61d93c3b56a811702aae494a8f3582",
     bank8_base_testnet:  "0x2f2963ff1f68e4bb283c34193396ef84eac2ca5b",
+    // CyrusTresor1 — deployed 2026-05-14, NOT live on cyrusthegreat.dev yet
+    tresor1_sepolia:      "0x223e25f961e29aacc3db49e5b00b30452d42c65e",
+    tresor1_bsc_testnet:  "0xa2d2a04d6ee5887f20bf736e1d9014727d599f39",
+    tresor1_base_testnet: "0xc90610ce4de152349932af102650b6c9f8c6ad68",
     // Test wallets (Sepolia, dev only)
     wallet1:             "0x84064947bcd9729872c5be91d2ae50380cbd691e",
     wallet2:             "0xa5f83d48652b5c91b964edceddedaee417a2892e",
@@ -1518,6 +1542,310 @@ const PORTAL11_TESTS = [
 ];
 
 // ============================================================
+//  CyrusTresor1 — helpers + tests
+// ============================================================
+// Resolve the deployed CyrusTresor1 address for the current chain.
+function tresor1AddressForChain() {
+  return chainId === 11155111 ? ADDR.tresor1_sepolia
+       : chainId === 97        ? ADDR.tresor1_bsc_testnet
+       : chainId === 84532     ? ADDR.tresor1_base_testnet
+       : null;
+}
+
+// Commit notebook — tiny localStorage layer so a commit's secret/salt/etc. can
+// be looked up at reveal time without the user having to copy-paste long hex.
+// SECURITY: lives in browser localStorage; anyone with the secret can claim
+// the funds. Safe for testnet, NOT a pattern for real money.
+const TRESOR1_NOTEBOOK_KEY = "ctg.tresor1.commits";
+function tresor1LoadNotebook() {
+  try { return JSON.parse(localStorage.getItem(TRESOR1_NOTEBOOK_KEY) || "[]"); }
+  catch { return []; }
+}
+function tresor1SaveNotebook(arr) {
+  localStorage.setItem(TRESOR1_NOTEBOOK_KEY, JSON.stringify(arr));
+  tresor1RenderNotebook();
+}
+function tresor1RenderNotebook() {
+  const el = $("tresor1Notebook");
+  if (!el) return;
+  const items = tresor1LoadNotebook();
+  if (!items.length) { el.textContent = "No commits recorded yet."; return; }
+  el.innerHTML = items.map((c, i) => {
+    const eligible = c.depositEpoch + 1; // earliest reveal epoch
+    const eligibleAt = new Date(eligible * 3600 * 1000).toLocaleString();
+    return `<div style="border-left: 3px solid ${c.spent ? 'var(--ok)' : '#888'}; padding: 4px 8px; margin: 4px 0;">` +
+      `<b>#${i}</b> ${c.symbol} bucket ${c.bucketIdx} on chain ${c.chainId}` +
+      (c.spent ? ` <span style="color:var(--ok)">✓ revealed</span>` : ` (pending)`) + "\n" +
+      `  commitment: ${c.commitment}\n` +
+      `  withdrawTo: ${c.withdrawTo}\n` +
+      `  depositEpoch: ${c.depositEpoch} → eligible at epoch ${eligible} (${eligibleAt})\n` +
+      `  secret: ${c.secret}\n` +
+      `  userSalt: ${c.userSalt}` +
+      `</div>`;
+  }).join("");
+}
+
+// keccak256(abi.encode(...)) of the commitment preimage — must match the
+// contract's computation EXACTLY. Uses ethers.AbiCoder.
+function tresor1ComputeCommitment(secret, userSalt, withdrawTo, token, bucketIdx, contractAddr, chainIdNum) {
+  const enc = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["bytes32", "bytes32", "address", "address", "uint8", "address", "uint256"],
+    [secret, userSalt, withdrawTo, token, bucketIdx, contractAddr, chainIdNum],
+  );
+  return ethers.keccak256(enc);
+}
+
+const TRESOR1_TESTS = [
+  // ---------- ct-1: sanity reads ----------
+  {
+    id: "ct-1", name: "Sanity: read pool config + epoch state", kind: "read",
+    desc: "Confirms the deployed contract responds. Reads currentEpoch(), EPOCH_LENGTH, the ETH bucket-0 size, and MAX_BATCH_SIZE.",
+    expect: "currentEpoch is a positive number; EPOCH_LENGTH = 3600; ETH bucket 0 = 0.001 ETH equivalent.",
+    run: async () => {
+      const v = tresor1AddressForChain();
+      if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+      const abi = await fetchAbi("CyrusTresor1");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const [epoch, len, bucket0, batch] = await Promise.all([
+        c.currentEpoch(),
+        c.EPOCH_LENGTH(),
+        c.getPoolBucketSize(ADDR.ETH, 0),
+        c.MAX_BATCH_SIZE(),
+      ]);
+      const eligibleAt = new Date((Number(epoch) + 1) * 3600 * 1000).toLocaleString();
+      return { text:
+        `currentEpoch:       ${epoch}\n` +
+        `EPOCH_LENGTH:       ${len} seconds (= ${Number(len)/3600} hour)\n` +
+        `ETH bucket 0 size:  ${ethers.formatEther(bucket0)} (native)\n` +
+        `MAX_BATCH_SIZE:     ${batch}\n` +
+        `Next epoch starts:  epoch ${Number(epoch) + 1} at ${eligibleAt}`,
+      };
+    },
+  },
+  // ---------- ct-2: regular vault depositETH (Bank8-identical surface) ----------
+  {
+    id: "ct-2", name: "Sanity: Bank8 surface still works (regular depositETH)", kind: "write",
+    desc: "Deposits a tiny amount into the regular (non-pool) vault. Same code path as Bank8 — confirms the rename + pool additions didn't break the base contract.",
+    expect: "Tx confirms with status 1. Same dynamic fee as Bank8 (~$0.10).",
+    inputs: [{ label: "Amount (ETH)", default: "0.0001", parse: (s) => s.trim() }],
+    run: async ([amt]) => {
+      ensureSigner();
+      const v = tresor1AddressForChain();
+      if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+      const abi = await fetchAbi("CyrusTresor1");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const fee = await c.getCurrentFeeInWei();
+      const total = ethers.parseEther(amt) + fee;
+      await ensureBalance(total + ethers.parseEther("0.00005"), "tresor1.depositETH");
+      const ov = await prepareTx({ value: total, gasLimit: 250000n });
+      const tx = await c.connect(signer).depositETH(ov);
+      const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+      const r = await tx.wait();
+      const cur = NETWORKS[chainId]?.currency || "ETH";
+      return { html: `<b>Deposited:</b> ${amt} ${cur}\n<b>+ Fee:</b> ${ethers.formatEther(fee)} ${cur}\n\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok ✓" : "FAILED ✗"}` };
+    },
+  },
+  // ---------- ct-3: commitToPool happy path ----------
+  {
+    id: "ct-3", name: "Pool: commit ETH to anonymity pool (bucket 0 = 0.001 ETH)", kind: "write",
+    desc: "Generates a random (secret, userSalt), computes the commitment hash with withdrawTo = your wallet, calls commitToPool(). Saves the secret/salt to the notebook above so you can reveal later.",
+    expect: "Tx confirms. New PoolDeposit event. Notebook shows a new pending commit.",
+    inputs: [
+      { label: "withdrawTo (recipient on reveal — can be your wallet for self-pay, or Wallet 2 for teleport demo)", default: "self", parse: (s) => s.trim() },
+    ],
+    run: async ([wt]) => {
+      ensureSigner();
+      const v = tresor1AddressForChain();
+      if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+      const abi = await fetchAbi("CyrusTresor1");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const fee = await c.getCurrentFeeInWei();
+      const bucketSize = await c.getPoolBucketSize(ADDR.ETH, 0);
+      const total = bucketSize + fee;
+
+      // Resolve withdrawTo
+      let withdrawTo = wt;
+      if (!withdrawTo || withdrawTo === "self") withdrawTo = account;
+      withdrawTo = ethers.getAddress(withdrawTo);
+
+      // Generate 256-bit random secret + salt via Web Crypto
+      const randBytes32 = () => "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+      const secret = randBytes32();
+      const userSalt = randBytes32();
+      const commitment = tresor1ComputeCommitment(secret, userSalt, withdrawTo, ADDR.ETH, 0, v, BigInt(chainId));
+
+      await ensureBalance(total + ethers.parseEther("0.0001"), "tresor1.commitToPool");
+      const ov = await prepareTx({ value: total, gasLimit: 300000n });
+      const tx = await c.connect(signer).commitToPool(commitment, ADDR.ETH, 0, ov);
+      const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+      const r = await tx.wait();
+
+      // Save to notebook
+      const epoch = Number(await c.currentEpoch());
+      const cur = NETWORKS[chainId]?.currency || "ETH";
+      const nb = tresor1LoadNotebook();
+      nb.push({
+        chainId, contractAddr: v, secret, userSalt, withdrawTo,
+        token: ADDR.ETH, symbol: cur, bucketIdx: 0,
+        commitment, depositEpoch: epoch, spent: false,
+        txHash: tx.hash, savedAt: new Date().toISOString(),
+      });
+      tresor1SaveNotebook(nb);
+
+      const eligibleAt = new Date((epoch + 1) * 3600 * 1000).toLocaleString();
+      return { html:
+        `<b>Bucket size:</b> ${ethers.formatEther(bucketSize)} ${cur}\n<b>+ Fee:</b> ${ethers.formatEther(fee)} ${cur}\n<b>= Total sent:</b> ${ethers.formatEther(total)} ${cur}\n\n` +
+        `<b>Commitment:</b> ${commitment}\n<b>withdrawTo:</b> ${withdrawTo}\n<b>depositEpoch:</b> ${epoch}\n<b>Eligible to reveal at epoch ${epoch + 1}:</b> ${eligibleAt}\n\n` +
+        `Tx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok ✓" : "FAILED ✗"}\n\n` +
+        `Secret + userSalt saved to notebook above. Run ct-4 / ct-5 / ct-7 against the latest commit.`,
+      };
+    },
+  },
+  // ---------- ct-4: same-epoch reveal REVERT ----------
+  {
+    id: "ct-4", name: "Pool: reveal immediately (expect REVERT — must wait 1 epoch)", kind: "write",
+    desc: "Tries to reveal the LATEST pending commit RIGHT NOW. Per spec § 4 the contract requires currentEpoch > depositEpoch. Will revert if you haven't crossed an hour boundary since ct-3.",
+    expect: "Revert with 'pool: must wait at least 1 epoch after commit'. If you've waited >1h since ct-3, this WILL succeed — that's fine, run ct-7 instead.",
+    run: async () => {
+      ensureSigner();
+      const v = tresor1AddressForChain();
+      if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+      const nb = tresor1LoadNotebook();
+      const last = nb.filter(c => !c.spent && c.contractAddr.toLowerCase() === v.toLowerCase()).pop();
+      if (!last) throw new Error("No pending commits in notebook. Run ct-3 first.");
+      const abi = await fetchAbi("CyrusTresor1");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const ov = await prepareTx({ gasLimit: 200000n });
+      // Use staticCall first so we see the precise revert reason without burning gas.
+      try {
+        await c.connect(signer).revealFromPool.staticCall(
+          last.secret, last.userSalt, last.withdrawTo, last.token, last.bucketIdx, "0x", ov,
+        );
+      } catch (e) {
+        const msg = e.shortMessage || e.reason || e.message || String(e);
+        if (/wait at least 1 epoch/i.test(msg)) {
+          return { html: `✓ Expected revert: <code>${msg}</code>\n\nDeposit epoch: ${last.depositEpoch}\nThis attempt would have been at the same epoch.` };
+        }
+        // Some other revert — surface it as a real failure
+        throw new Error(`Unexpected revert: ${msg}`);
+      }
+      throw new Error("staticCall did NOT revert. Either >1 epoch has elapsed (then run ct-7 instead), or the contract is wrong.");
+    },
+  },
+  // ---------- ct-5: MEV-redirect REVERT ----------
+  {
+    id: "ct-5", name: "Pool: tampered withdrawTo (expect REVERT — MEV-safe binding)", kind: "write",
+    desc: "Tries to claim the latest pending commit but sends funds to a DIFFERENT address than the one baked into the commitment hash. Per spec § 9 this MUST fail because withdrawTo is in the keccak preimage — changing it changes the commitment, lookup misses.",
+    expect: "Revert with 'pool: unknown commitment'.",
+    run: async () => {
+      ensureSigner();
+      const v = tresor1AddressForChain();
+      if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+      const nb = tresor1LoadNotebook();
+      const last = nb.filter(c => !c.spent && c.contractAddr.toLowerCase() === v.toLowerCase()).pop();
+      if (!last) throw new Error("No pending commits in notebook. Run ct-3 first.");
+      const abi = await fetchAbi("CyrusTresor1");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+
+      // Tamper: route to Wallet 2 instead of the address that was baked into the commitment.
+      const tamperedTo = last.withdrawTo.toLowerCase() === ADDR.wallet1.toLowerCase()
+        ? ADDR.wallet2 : ADDR.wallet1;
+      const ov = await prepareTx({ gasLimit: 200000n });
+      try {
+        await c.connect(signer).revealFromPool.staticCall(
+          last.secret, last.userSalt, tamperedTo, last.token, last.bucketIdx, "0x", ov,
+        );
+      } catch (e) {
+        const msg = e.shortMessage || e.reason || e.message || String(e);
+        if (/unknown commitment/i.test(msg)) {
+          return { html: `✓ Expected revert: <code>${msg}</code>\n\nOriginal withdrawTo: ${last.withdrawTo}\nTampered withdrawTo: ${tamperedTo}\nThe keccak preimage differs → contract sees no matching commitment.` };
+        }
+        throw new Error(`Unexpected revert: ${msg}`);
+      }
+      throw new Error("staticCall did NOT revert. MEV protection is broken — investigate.");
+    },
+  },
+  // ---------- ct-6: double-spend REVERT (only valid after a successful ct-7) ----------
+  {
+    id: "ct-6", name: "Pool: replay an already-spent commit (expect REVERT — double-spend)", kind: "write",
+    desc: "Tries to re-reveal a commit that has ALREADY been revealed (marked spent in the notebook). Only useful after a successful ct-7 — otherwise it'll just hit the same-epoch revert from ct-4.",
+    expect: "Revert with 'pool: commitment already spent'.",
+    run: async () => {
+      ensureSigner();
+      const v = tresor1AddressForChain();
+      if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+      const nb = tresor1LoadNotebook();
+      const spent = nb.filter(c => c.spent && c.contractAddr.toLowerCase() === v.toLowerCase()).pop();
+      if (!spent) throw new Error("No SPENT commits in notebook. Run ct-3 then ct-7 first to produce one.");
+      const abi = await fetchAbi("CyrusTresor1");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const ov = await prepareTx({ gasLimit: 200000n });
+      try {
+        await c.connect(signer).revealFromPool.staticCall(
+          spent.secret, spent.userSalt, spent.withdrawTo, spent.token, spent.bucketIdx, "0x", ov,
+        );
+      } catch (e) {
+        const msg = e.shortMessage || e.reason || e.message || String(e);
+        if (/already spent/i.test(msg)) {
+          return { html: `✓ Expected revert: <code>${msg}</code>\n\nCommitment: ${spent.commitment}\nWas spent in tx prior; replay correctly blocked.` };
+        }
+        throw new Error(`Unexpected revert: ${msg}`);
+      }
+      throw new Error("staticCall did NOT revert. Double-spend protection is broken.");
+    },
+  },
+  // ---------- ct-7: reveal happy path ----------
+  {
+    id: "ct-7", name: "Pool: reveal LATEST pending commit (happy path)", kind: "write",
+    desc: "Submits revealFromPool for the most-recent pending commit. Requires >= 1 epoch elapsed since the commit (= you're past the next hour boundary). Funds land in withdrawTo. Notebook marks the entry as spent.",
+    expect: "Tx confirms with status 1. withdrawTo balance increases by bucketSize. Notebook shows ✓ revealed.",
+    run: async () => {
+      ensureSigner();
+      const v = tresor1AddressForChain();
+      if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+      const nb = tresor1LoadNotebook();
+      const lastIdx = (() => {
+        for (let i = nb.length - 1; i >= 0; i--) {
+          if (!nb[i].spent && nb[i].contractAddr.toLowerCase() === v.toLowerCase()) return i;
+        }
+        return -1;
+      })();
+      if (lastIdx === -1) throw new Error("No pending commits in notebook. Run ct-3 first.");
+      const last = nb[lastIdx];
+
+      const abi = await fetchAbi("CyrusTresor1");
+      const c = new ethers.Contract(v, abi, getReadProvider());
+      const curEpoch = Number(await c.currentEpoch());
+      if (curEpoch <= last.depositEpoch) {
+        throw new Error(`Not eligible yet. depositEpoch=${last.depositEpoch}, currentEpoch=${curEpoch}. Need currentEpoch > depositEpoch (wait for the next hour boundary).`);
+      }
+
+      const ov = await prepareTx({ gasLimit: 200000n });
+      const tx = await c.connect(signer).revealFromPool(
+        last.secret, last.userSalt, last.withdrawTo, last.token, last.bucketIdx, "0x", ov,
+      );
+      const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+      const r = await tx.wait();
+
+      // Mark spent in the notebook
+      nb[lastIdx].spent = true;
+      nb[lastIdx].revealTxHash = tx.hash;
+      nb[lastIdx].revealedAt = new Date().toISOString();
+      tresor1SaveNotebook(nb);
+
+      const cur = NETWORKS[chainId]?.currency || "ETH";
+      return { html:
+        `<b>Revealed:</b> bucket ${last.bucketIdx} (${cur})\n` +
+        `<b>Paid to:</b> ${last.withdrawTo}\n` +
+        `<b>Commitment:</b> ${last.commitment}\n\n` +
+        `Tx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok ✓" : "FAILED ✗"}\n\n` +
+        `Notebook updated — entry marked spent. Run ct-6 next to confirm double-spend protection.`,
+      };
+    },
+  },
+];
+
+// ============================================================
 //  Render flows
 // ============================================================
 function renderFlows() {
@@ -1526,6 +1854,9 @@ function renderFlows() {
 
   const b8 = $("bank8-flows"); b8.innerHTML = "";
   BANK8_TESTS.forEach((s, i) => b8.appendChild(makeTest(s, i)));
+
+  const t1 = $("tresor1-flows"); t1.innerHTML = "";
+  TRESOR1_TESTS.forEach((s, i) => t1.appendChild(makeTest(s, i)));
 
   const p = $("portal11-flows"); p.innerHTML = "";
   PORTAL11_TESTS.forEach((s, i) => p.appendChild(makeTest(s, i)));
@@ -1538,9 +1869,21 @@ $("tabs").querySelectorAll("button").forEach(btn => {
   btn.onclick = () => {
     $("tabs").querySelectorAll("button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    ["bank5", "bank8", "portal11"].forEach(t => $("tab-" + t).hidden = (t !== btn.dataset.tab));
+    ["bank5", "bank8", "tresor1", "portal11"].forEach(t => $("tab-" + t).hidden = (t !== btn.dataset.tab));
+    if (btn.dataset.tab === "tresor1") tresor1RenderNotebook();
   };
 });
+
+// CyrusTresor1 notebook wiring
+$("tresor1NotebookRefresh")?.addEventListener("click", tresor1RenderNotebook);
+$("tresor1NotebookClear")?.addEventListener("click", () => {
+  if (confirm("Clear all pool commitments from this browser's notebook? This does NOT cancel on-chain commitments — it just forgets the secrets locally, making them unrevealable. Only safe if you've already revealed everything.")) {
+    localStorage.removeItem(TRESOR1_NOTEBOOK_KEY);
+    tresor1RenderNotebook();
+  }
+});
+// Render once on load so the panel isn't empty if the user has a prior session.
+tresor1RenderNotebook();
 
 // ============================================================
 //  Advanced ABI loader (minimal — for power-user mode)
