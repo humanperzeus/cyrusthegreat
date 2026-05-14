@@ -78,6 +78,33 @@ contract CyrusTresor1 is ReentrancyGuard {
     uint256 public constant MAX_BATCH_SIZE = 25; // Maximum tokens per batch
 
     // --------------------------------------------------------------------
+    //  POOL LAYER — anonymity pool (per docs/cyrustresor1_spec.md)
+    // --------------------------------------------------------------------
+    // Epoch length: 1 hour per spec § 4. A commitment made in epoch E can
+    // be revealed starting from epoch E+1 (enforced in revealFromPool,
+    // Session C). block.timestamp granularity is fine for hour-scale windows.
+    uint256 public constant EPOCH_LENGTH = 3600;
+
+    // Reserved for v2 ZK proof verifier per spec § 10. Constructor-immutable.
+    // v1 deployments pass address(0); v2 deployments will pass a real verifier
+    // and revealFromPool() will switch enforcement paths.
+    address public immutable zkVerifier;
+
+    // Per-commitment metadata. The commitment hash itself binds (secret, salt,
+    // withdrawTo, token, bucketIdx, address(this), block.chainid) — so we only
+    // need to track depositEpoch + spent here. token/bucketIdx are recomputed
+    // from the user-supplied params at reveal time via the keccak preimage.
+    struct Commitment {
+        uint64 depositEpoch;  // 0 = never used (fresh sentinel — block.timestamp/3600 is never 0 in practice)
+        bool spent;
+    }
+    mapping(bytes32 => Commitment) public commitments;
+
+    // Bucket sizes per pool-supported token. Configured at deploy time.
+    // address(0) = native ETH/BNB. Tokens not in this map cannot be pooled.
+    mapping(address => uint256[]) public poolBucketSizes;
+
+    // --------------------------------------------------------------------
     //  EVENTS
     // --------------------------------------------------------------------
     event Deposit(address indexed token, address indexed user, uint256 amount);
@@ -95,19 +122,39 @@ contract CyrusTresor1 is ReentrancyGuard {
     event RateLimitExceeded(address indexed user, uint256 count);
     event BatchOperation(address indexed user, uint256 tokenCount);
 
+    // Pool-layer events. Intentionally NO depositor address — anonymity depends
+    // on the commit event being un-linkable to a specific msg.sender. Off-chain
+    // observers can correlate by block timestamp only.
+    event PoolDeposit(bytes32 indexed commitment, address indexed token, uint8 bucketIdx, uint256 depositEpoch);
+
     // --------------------------------------------------------------------
     //  CONSTRUCTOR
     // --------------------------------------------------------------------
     constructor(
         address _feeCollector,
         bytes32 _salt,
-        address _priceFeed // Chainlink native/USD feed
+        address _priceFeed,                       // Chainlink native/USD feed
+        address[] memory _poolTokens,             // pool-supported tokens; address(0) = native
+        uint256[][] memory _bucketSchedules,      // _bucketSchedules[i] = sizes for _poolTokens[i]
+        address _zkVerifier                       // v1 = address(0); v2 = real verifier per spec § 10
     ) {
         require(_feeCollector != address(0), "Invalid fee collector");
         require(_priceFeed != address(0), "Invalid price feed");
+        require(_poolTokens.length == _bucketSchedules.length, "pool: tokens/buckets length mismatch");
         feeCollector = _feeCollector;
         salt = _salt;
         priceFeed = AggregatorV3Interface(_priceFeed);
+        zkVerifier = _zkVerifier;
+
+        // Configure pool bucket schedules per token.
+        for (uint256 i = 0; i < _poolTokens.length; i++) {
+            require(_bucketSchedules[i].length > 0, "pool: empty bucket schedule");
+            // Sanity: all bucket sizes must be > 0 (zero-amount commits would be free privacy).
+            for (uint256 j = 0; j < _bucketSchedules[i].length; j++) {
+                require(_bucketSchedules[i][j] > 0, "pool: zero bucket size");
+            }
+            poolBucketSizes[_poolTokens[i]] = _bucketSchedules[i];
+        }
     }
 
     // --------------------------------------------------------------------
@@ -589,6 +636,74 @@ contract CyrusTresor1 is ReentrancyGuard {
 
             emit InternalTransfer(token, msg.sender, to, amount);
         }
+    }
+
+    // --------------------------------------------------------------------
+    //  POOL LAYER — commit (deposit into anonymity pool)
+    // --------------------------------------------------------------------
+    /// @dev Returns the current epoch index. Anyone can call.
+    function currentEpoch() public view returns (uint256) {
+        return block.timestamp / EPOCH_LENGTH;
+    }
+
+    /// @dev Returns the bucket size for (token, bucketIdx). Reverts if not configured.
+    function getPoolBucketSize(address token, uint8 bucketIdx) public view returns (uint256) {
+        uint256[] storage sizes = poolBucketSizes[token];
+        require(bucketIdx < sizes.length, "pool: bucket index out of range");
+        return sizes[bucketIdx];
+    }
+
+    /// @notice Commit a deposit into the anonymity pool. Fee is paid in full
+    ///         at commit time (spec § 7 "pay forward"); revealFromPool is
+    ///         contract-fee-free (gas only, paid by whoever broadcasts the
+    ///         reveal tx — typically the recipient or a relayer).
+    /// @dev    The `commitment` arg MUST be precomputed off-chain (by the dapp) as
+    ///         keccak256(abi.encode(secret, salt, withdrawTo, token, bucketIdx, address(this), block.chainid))
+    ///         where (secret, salt) are 256-bit random user-side entropy. The
+    ///         withdrawTo is baked in to prevent reveal-time MEV redirection
+    ///         (spec § 9). The contract does NOT validate the commitment's
+    ///         preimage at commit time — the keccak binding is enforced at
+    ///         reveal time (revealFromPool, Session C). Caller must NOT reuse
+    ///         a commitment that was previously committed (depositEpoch != 0
+    ///         on the stored entry).
+    /// @param  commitment Precomputed keccak-256 hash; see @dev.
+    /// @param  token      address(0) = native ETH/BNB; otherwise an ERC-20 in poolBucketSizes.
+    /// @param  bucketIdx  Index into poolBucketSizes[token]; out-of-range reverts.
+    function commitToPool(
+        bytes32 commitment,
+        address token,
+        uint8 bucketIdx
+    ) external payable nonReentrant {
+        _checkAndUpdateRateLimit();
+
+        // Freshness: each commitment can only be used once (no reuse, no front-run replay).
+        require(commitments[commitment].depositEpoch == 0, "pool: commitment already used");
+
+        uint256 bucketSize = getPoolBucketSize(token, bucketIdx);  // reverts on bad bucketIdx
+        uint256 fee = _getDynamicFeeInWei();
+
+        if (token == address(0)) {
+            // Native ETH/BNB: msg.value must cover bucketSize + fee exactly.
+            // Excess reverts (would leak identity via the refund).
+            require(msg.value == bucketSize + fee, "pool: native msg.value must equal bucketSize + fee");
+            // Bucket size stays in the contract as backing for future reveals.
+        } else {
+            // ERC-20: msg.value must equal fee only; the bucket size is pulled via transferFrom.
+            require(msg.value == fee, "pool: erc20 msg.value must equal fee");
+            IERC20(token).safeTransferFrom(msg.sender, address(this), bucketSize);
+        }
+
+        // Credit the fee to feeCollector (uses the same feeVault path as Bank8 deposits).
+        feeVault[_key(feeCollector, address(0))] += fee;
+
+        uint256 epoch = currentEpoch();
+        commitments[commitment] = Commitment({
+            depositEpoch: uint64(epoch),
+            spent: false
+        });
+
+        // Emit WITHOUT msg.sender — anonymity primitive (spec § 6 "no depositor address in the event").
+        emit PoolDeposit(commitment, token, bucketIdx, epoch);
     }
 
     // --------------------------------------------------------------------
