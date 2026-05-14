@@ -50,10 +50,30 @@ npx hardhat compile
 # Produces artifacts/contracts/evm/<Contract>.sol/<Contract>.json
 ```
 
-**Deploy** (Sessions D.2 onwards — script not yet written):
+**Dry-run a deploy** (estimate gas, don't submit):
 ```bash
-# Requires .env with SEPOLIA_RPC_URL + SEPOLIA_PRIVATE_KEY (see below)
+nvm use 22.19.0
+cd tools/hardhat-deploy
+DRY_RUN=1 npx hardhat run scripts/deployCyrusTresor1.ts --network sepolia
+```
+
+**Deploy** (costs gas — only when ready):
+```bash
+nvm use 22.19.0
+cd tools/hardhat-deploy
 npx hardhat run scripts/deployCyrusTresor1.ts --network sepolia
+# Submits one tx (the constructor call). Writes a JSON deployment record
+# to tools/hardhat-deploy/deployments/cyrustresor1-<network>.json. Logs the
+# deployed address + tx hash.
+```
+
+**Verify source on the block explorer** (after deploy, optional):
+```bash
+nvm use 22.19.0
+cd tools/hardhat-deploy
+npx hardhat run scripts/verify.ts --network sepolia
+# Reads the deployment record from deployments/ and submits constructor
+# args to Etherscan/BSCScan/BaseScan. Idempotent.
 ```
 
 ## Required `.env` file (gitignored)
@@ -78,10 +98,18 @@ Rule 10). Never use it on a chain that holds real value.
   bytecode for CrossChainBank8, CyrusTresor1, TestToken.
 - ✅ Bytecode sanity: CyrusTresor1 = ~13.2 KB, Bank8 = ~10.5 KB,
   TestToken = small. All well under the 24,576-byte EIP-170 cap.
-- ❌ Deploy script for CyrusTresor1 not yet written (Session D.2).
-- ❌ No `.env` here yet — user creates it locally before first deploy.
-- ❌ Block-explorer verification automation not wired up
-  (`hardhat verify ...` works via `etherscan` config but no helper script yet).
+- ✅ Deploy script `scripts/deployCyrusTresor1.ts` — supports sepolia,
+  bscTestnet, baseSepolia. DRY_RUN=1 mode for gas estimation without
+  submitting. Per-chain price feeds + pool token + bucket schedules
+  hardcoded per spec § 5. Writes deployment record to deployments/.
+- ✅ Verification helper `scripts/verify.ts` — reloads constructor
+  args from deployment record + submits to block explorer via
+  hardhat-verify. Idempotent.
+- ✅ `.env.example` documenting required env vars.
+- ❌ User-local `.env` not in repo (gitignored). User creates it before
+  first deploy.
+- ❌ Not yet deployed anywhere. Live cyrusthegreat.dev still serves
+  Bank8 — unchanged.
 
 ## What was removed in the 2026-05-14 rework
 
