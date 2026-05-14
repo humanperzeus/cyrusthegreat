@@ -54,7 +54,7 @@ CyrusTresor1.sol
 │
 └─ Anonymity pool layer (new)
    ├─ commitToPool(commitment, token, bucketIdx)
-   ├─ revealFromPool(secret, salt, withdrawTo, token, bucketIdx, [proof])
+   ├─ revealFromPool(secret, userSalt, withdrawTo, token, bucketIdx, [proof])
    ├─ Optional view: poolBalanceForEpoch(epoch, token, bucketIdx)
    └─ Storage: see § 5
 ```
@@ -125,7 +125,7 @@ function commitToPool(
 ```solidity
 function revealFromPool(
     bytes32 secret,
-    bytes32 salt,
+    bytes32 userSalt,             // renamed from `salt` in implementation to avoid shadowing the contract's storage SALT immutable
     address withdrawTo,
     address token,
     uint8 bucketIdx,
@@ -133,7 +133,7 @@ function revealFromPool(
 ) external;
 ```
 
-- Compute `commitment = keccak256(abi.encode(secret, salt, withdrawTo, token, bucketIdx, address(this), block.chainid))`.
+- Compute `commitment = keccak256(abi.encode(secret, userSalt, withdrawTo, token, bucketIdx, address(this), block.chainid))`.
 - Check `commitments[commitment]` exists, was committed in epoch < currentEpoch, and not yet spent.
 - Mark spent, transfer `bucketSize` of `token` to `withdrawTo`. **No fee on reveal** — pool fee is paid in full at commit time (see § 7).
 - Caller (`msg.sender`) is not necessarily `withdrawTo` — anyone can submit the reveal tx if they have the secret + salt. Enables relayer pattern (depositor pre-pays, anyone broadcasts on behalf of the recipient). The recipient never has to interact with the contract at commit time and never pays a fee at reveal time — just gas.
@@ -177,7 +177,7 @@ Regular-vault storage is unchanged from Bank8 (keccak(user, token, SALT) → bal
 ```solidity
 commitment = keccak256(abi.encode(
     secret,         // bytes32, user-side entropy, dapp generates 256-bit random
-    salt,           // bytes32, additional user-side entropy
+    userSalt,       // bytes32, additional user-side entropy (named userSalt in code to avoid shadowing storage SALT)
     withdrawTo,     // address, baked in to prevent reveal front-running
     token,          // address, binds commitment to specific token
     bucketIdx,      // uint8, binds commitment to specific bucket size

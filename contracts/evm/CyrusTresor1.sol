@@ -126,6 +126,9 @@ contract CyrusTresor1 is ReentrancyGuard {
     // on the commit event being un-linkable to a specific msg.sender. Off-chain
     // observers can correlate by block timestamp only.
     event PoolDeposit(bytes32 indexed commitment, address indexed token, uint8 bucketIdx, uint256 depositEpoch);
+    // PoolReveal indexes withdrawTo (a public receiver, already on-chain via the
+    // value transfer). msg.sender intentionally omitted — caller may be a relayer.
+    event PoolReveal(bytes32 indexed commitment, address indexed token, uint8 bucketIdx, address indexed withdrawTo);
 
     // --------------------------------------------------------------------
     //  CONSTRUCTOR
@@ -704,6 +707,96 @@ contract CyrusTresor1 is ReentrancyGuard {
 
         // Emit WITHOUT msg.sender — anonymity primitive (spec § 6 "no depositor address in the event").
         emit PoolDeposit(commitment, token, bucketIdx, epoch);
+    }
+
+    // --------------------------------------------------------------------
+    //  POOL LAYER — reveal (withdraw from anonymity pool)
+    // --------------------------------------------------------------------
+    /// @notice Reveal a previously-committed pool deposit. Transfers the bucket
+    ///         to `withdrawTo`. ANYONE with (secret, salt) can call — the secret
+    ///         IS the authorization. Enables a relayer pattern: depositor (or
+    ///         dapp) shares (secret, salt) with the recipient via the teleport
+    ///         claim URI off-chain; recipient broadcasts the reveal tx from
+    ///         their own wallet (or has anyone else do it). No contract fee
+    ///         on reveal — already paid in full at commit time (spec § 7
+    ///         "pay-forward" model).
+    /// @dev    Re-derives the commitment from the supplied preimage and requires
+    ///         it match a stored unspent entry from a past epoch. Critically,
+    ///         `withdrawTo` is BAKED INTO the commitment hash — an MEV bot
+    ///         that observes (secret, salt) in the mempool CANNOT redirect
+    ///         the funds: changing withdrawTo invalidates the keccak, the
+    ///         lookup falls into a fresh slot, the freshness check reverts
+    ///         (spec § 9). `address(this)` and `block.chainid` are also in
+    ///         the preimage to prevent cross-contract / cross-chain replay.
+    /// @param  secret      bytes32 user-side entropy (matches commit-time secret)
+    /// @param  userSalt    bytes32 additional user-side entropy (matches commit-time salt).
+    ///                     Named `userSalt` (not `salt`) to disambiguate from the contract's
+    ///                     storage SALT immutable used in the Bank8-inherited _key() helper.
+    /// @param  withdrawTo  address that receives the bucket payout
+    /// @param  token       address(0) = native ETH/BNB; else ERC-20 in poolBucketSizes
+    /// @param  bucketIdx   index into poolBucketSizes[token]
+    /// @param  zkProof     RESERVED for v2 ZK extension (spec § 10). In v1
+    ///                     (zkVerifier == address(0)) this parameter is
+    ///                     accepted for ABI forward-compat but ignored.
+    function revealFromPool(
+        bytes32 secret,
+        bytes32 userSalt,
+        address withdrawTo,
+        address token,
+        uint8 bucketIdx,
+        bytes calldata zkProof
+    ) external nonReentrant {
+        // v1 sanity: zkVerifier must be address(0). A v2 deployment with a real
+        // verifier address would route to a separate proof-based reveal path;
+        // this v1 contract has no such path, so refuse to operate if misconfigured.
+        require(zkVerifier == address(0), "pool: v1 contract; zk reveal not supported");
+        require(withdrawTo != address(0), "pool: withdrawTo is zero address");
+        _checkAndUpdateRateLimit();
+
+        // Recompute the commitment hash from the preimage. Any tampering with any
+        // of the bound fields — especially withdrawTo, which is the MEV-redirect
+        // attack target — produces a different keccak → unknown commitment → revert.
+        bytes32 commitment = keccak256(abi.encode(
+            secret,
+            userSalt,
+            withdrawTo,
+            token,
+            bucketIdx,
+            address(this),
+            block.chainid
+        ));
+
+        Commitment storage c = commitments[commitment];
+
+        // Must exist (depositEpoch > 0; 0 = "never committed" sentinel).
+        require(c.depositEpoch > 0, "pool: unknown commitment");
+        // No double-spend.
+        require(!c.spent, "pool: commitment already spent");
+        // Minimum wait: at least 1 epoch must have elapsed since deposit (spec § 4).
+        require(currentEpoch() > c.depositEpoch, "pool: must wait at least 1 epoch after commit");
+
+        // Effects: mark spent BEFORE the external call (CEI pattern).
+        c.spent = true;
+
+        // Determine payout amount. getPoolBucketSize() reverts if bucketIdx is out
+        // of range — defense in depth, since a malicious bucketIdx would have
+        // produced a non-matching keccak above anyway.
+        uint256 bucketSize = getPoolBucketSize(token, bucketIdx);
+
+        // Interactions: transfer to withdrawTo. msg.sender is the broadcaster,
+        // not necessarily the beneficiary.
+        if (token == address(0)) {
+            (bool success, ) = payable(withdrawTo).call{value: bucketSize}("");
+            require(success, "pool: native transfer failed");
+        } else {
+            IERC20(token).safeTransfer(withdrawTo, bucketSize);
+        }
+
+        emit PoolReveal(commitment, token, bucketIdx, withdrawTo);
+
+        // zkProof is unused in v1 — explicitly named for ABI-stability docs.
+        // (Solidity does not warn on unused function parameters by default.)
+        zkProof;
     }
 
     // --------------------------------------------------------------------
