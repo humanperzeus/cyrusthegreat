@@ -66,12 +66,13 @@ const config: HardhatUserConfig = {
     },
   },
 
+  // Etherscan API v2 (chainid-based, single key covers ETH/Base/Optimism/etc.).
+  // The free-tier v2 key does NOT cover BSC — BSCScan still needs its own key,
+  // and even then BSC's verify path may require a different config (P2 backlog).
+  // Per the deprecation notice in hardhat-verify, the apiKey field is now a
+  // top-level string, not a per-network object (was the v1 format).
   etherscan: {
-    apiKey: {
-      sepolia: ETHERSCAN_API_KEY,
-      bscTestnet: BSCSCAN_API_KEY,
-      baseSepolia: BASESCAN_API_KEY,
-    },
+    apiKey: ETHERSCAN_API_KEY,
   },
 
   // Keep typechain output under tools/hardhat-deploy/ alongside other hardhat
