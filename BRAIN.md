@@ -4,11 +4,11 @@
 **Stack:** Vite + React 18 + TypeScript, Tailwind + shadcn/ui, Wagmi + Viem + Reown AppKit. Solidity ^0.8.20 + OpenZeppelin (EVM). Anchor (Solana, written, not integrated).
 **Repo:** `/Users/humank/Downloads/DEVELOPMENT/CYRUS/cyrusthegreat`
 **Live URL:** https://cyrusthegreat.dev (Cloudflare Pages)
-**Last updated:** 2026-05-14
+**Last updated:** 2026-05-17
 
-## Where we stand (as of 2026-05-14, verified — not from memory)
+## Where we stand (as of 2026-05-17, verified — not from memory)
 
-- **Live in production at cyrusthegreat.dev** (verified end-to-end 2026-05-09; unchanged 2026-05-14):
+- **Live in production at cyrusthegreat.dev** (verified end-to-end 2026-05-09; unchanged 2026-05-17):
   - Frontend bundle: `/assets/index-DG1Do22v.js` (latest), 958 KB
   - **Talks to CrossChainBank8** at:
     - Sepolia: `0xb83A814097C70dB79568b663662eA07e77D4D87a`  ← live deposit tx confirmed by user 2026-05-09
@@ -54,7 +54,7 @@
 | **Bank8** | `contracts/evm/CrossChainBank8.sol` (611 lines) | Sepolia `0xb83A814097C70dB79568b663662eA07e77D4D87a` · BSC Testnet `0xFb0EB1FE0b61D93C3b56a811702aAE494A8f3582` · Base Sepolia `0x2F2963FF1F68E4Bb283C34193396eF84eaC2ca5B` | **LIVE on cyrusthegreat.dev (since 2026-05-09).** **12/12 functions verified end-to-end on Sepolia 2026-05-13** via `tools/contract-debug/` (Tests b8-1 → b8-12, two-wallet flows including transfers). Covers: read-fee constants, single ETH deposit/withdraw/transfer, multi-token batch deposit (ETH+USD1+WLFI), multi-token batch withdraw, internal transfers (single + batch), `depositToken`/`withdrawToken`/`transferInternalToken`/`transferMultipleTokensInternal`/`collectFees`. **Bank5's "missing revert data" multi-token bug confirmed FIXED.** BSC Testnet + Base Sepolia deployments still not individually smoke-tested (only Sepolia is verified; share code paths with Sepolia, low risk). |
 | **Bank9** | **source missing from this repo** | unknown — referenced by `tests_evm/testing-contract/test-crosschainbank9.cjs` etc. | **MYSTERY.** Tests call `vault.registered()`, `vault.registerWithWLFI()`, `vault.mixUSD1()` — none of these exist in Bank8. So Bank9 is a real separate deployment with WLFI gating + USD1 mixing. Source either lives in another folder we haven't inspected or was deleted before commit. |
 | **Portal11** | `contracts/evm/CyrusPortal11.sol` (1042 lines) | none | **Half-baked.** Compiles. Privacy primitives sketched. **4 known bugs** (see TODO.md): fee not charged on reveal, ETH price updates never trigger, `_clearPrivacyStorage()` wipes all users' data, "MEV protection" is just 2-block delay. Uncommitted edits in working tree are fixing one (the fee path). Identical copy lives at `CTGANDRAILGUN/byteleport/contracts/CP11/` — older snapshot, not a fork. **Superseded by CyrusTresor1** (see below); Portal11 unlikely to be deployed. |
-| **CyrusTresor1** | `contracts/evm/CyrusTresor1.sol` (~830 lines) | Sepolia `0x223E25F961E29AaCc3dB49e5b00B30452D42c65e` · BSC Testnet `0xa2D2A04d6eE5887f20bF736E1d9014727d599F39` · Base Sepolia `0xc90610ce4DE152349932Af102650b6c9f8C6AD68` | **DEPLOYED + VERIFIED on all 3 testnets 2026-05-14** (deploy records in `tools/hardhat-deploy/deployments/cyrustresor1-*.json`). Source verified on Etherscan / BSCScan / BaseScan. **NOT YET LIVE on cyrusthegreat.dev** — frontend code does not reference VITE_CTGTRESOR_* slots yet (Session F+ pending). Pool layer: 1h epochs, fixed-bucket commit/reveal, withdrawTo baked into commitment for MEV-safety, commit-only fees (free reveal). Spec: `docs/cyrustresor1_spec.md`. Bank8 regular-vault surface preserved byte-for-byte (opt-in pool, not replacement). |
+| **CyrusTresor1** | `contracts/evm/CyrusTresor1.sol` (~830 lines) | Sepolia `0x223E25F961E29AaCc3dB49e5b00B30452D42c65e` · BSC Testnet `0xa2D2A04d6eE5887f20bF736E1d9014727d599F39` · Base Sepolia `0xc90610ce4DE152349932Af102650b6c9f8C6AD68` | **VERIFIED END-TO-END on Sepolia 2026-05-17**: 27/27 Foundry unit tests + 7/7 debug-UI on-chain ct-cards (commit `0xf181d72a` / reveal `0x79e50e37`, same commitment `0x14aee5b0…`) + source verified on Etherscan. BSC Testnet + Base Sepolia: deployed + source-verified but not yet debug-UI tested (byte-identical bytecode, low risk). **NOT YET LIVE on cyrusthegreat.dev** — frontend code does not reference VITE_CTGTRESOR_* slots yet (Session F+ pending). Pool layer: 1h epochs, fixed-bucket commit/reveal, withdrawTo baked into commitment for MEV-safety, commit-only fees (free reveal). Spec: `docs/cyrustresor1_spec.md`. Bank8 regular-vault surface preserved byte-for-byte (opt-in pool, not replacement). |
 
 ## Architectural decisions (ADRs)
 
