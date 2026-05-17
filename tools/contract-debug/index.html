@@ -1843,6 +1843,51 @@ const TRESOR1_TESTS = [
       };
     },
   },
+  // ---------- ct-8: collectFees (revenue withdrawal) ----------
+  {
+    id: "ct-8", name: "Collect accumulated fees (collectFees — feeCollector only)", kind: "write",
+    desc: "Drains accumulated fees from this contract's feeVault to the feeCollector address (= Wallet 1, set immutably at deploy time). Every commitToPool + Bank8-surface op contributes a dynamic fee (~$0.10). This is how revenue is realized. Only the feeCollector can call — anyone else gets reverted.",
+    expect: "If you're calling AS the feeCollector wallet: tx confirms, FeesCollected event logs the drained amount, your wallet balance increases. From any other wallet: revert with 'Not authorized'.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const isFeeCollector = account.toLowerCase() === ADDR.wallet1.toLowerCase();
+      body.innerHTML = `
+        <div class="hint" style="margin-bottom: 8px;">
+          You are connected as <code class="mono">${fmtAddr(account)}</code>.
+          feeCollector for CyrusTresor1 (immutable) is <code class="mono">${fmtAddr(ADDR.wallet1)}</code>.
+          <b>${isFeeCollector ? "✓ You can call this." : "⚠️ Will revert (only feeCollector can drain)."}</b>
+        </div>
+        <div class="hint">No public reader for the fee vault, so the drained amount is reported by the <code>FeesCollected(uint256)</code> event in the tx receipt.</div>
+      `;
+      return {
+        run: async () => {
+          ensureSigner();
+          const v = tresor1AddressForChain();
+          if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
+          const abi = await fetchAbi("CyrusTresor1");
+          const c = new ethers.Contract(v, abi, getReadProvider());
+          const ov = await prepareTx({ gasLimit: 200000n });
+          const tx = await c.connect(signer).collectFees(ov);
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          let amount = "(unknown — event not decoded)";
+          for (const lg of r.logs) {
+            try {
+              const parsed = c.interface.parseLog(lg);
+              if (parsed && parsed.name === "FeesCollected") {
+                amount = ethers.formatEther(parsed.args[0]) + " " + (NETWORKS[chainId]?.currency || "ETH");
+                break;
+              }
+            } catch {}
+          }
+          return { html: `<b>Drained:</b> ${amount}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok ✓" : "FAILED ✗"}` };
+        },
+      };
+    },
+  },
 ];
 
 // ============================================================
