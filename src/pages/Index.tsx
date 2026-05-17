@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
 import { VaultCore } from "@/components/VaultCore";
+import { PoolView } from "@/components/PoolView";
 import { DepositModal } from "@/components/modals/DepositModal";
 import { WithdrawModal } from "@/components/modals/WithdrawModal";
 import { TransferModal } from "@/components/modals/TransferModal";
 import { useVault } from "@/hooks/useVault";
 import { parseEther } from "viem";
 import { debugLog } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Shield, Lock } from "lucide-react";
+import { WEB3_CONFIG } from "@/config/web3";
 
   // DISABLED: Debounce utility function to prevent RPC spam
   // const debounce = <T extends (...args: any[]) => any>(
@@ -33,6 +37,18 @@ const Index = () => {
     localStorage.setItem('cyrusthegreat-active-chain', activeChain);
     debugLog(`💾 Chain preference saved to localStorage: ${activeChain}`);
   }, [activeChain]);
+
+  // Mode switching state (v1 = Bank8 vault, v2 = CyrusTresor1 anonymity pool).
+  // Persisted in localStorage. Only RENDERED when wallet is connected AND
+  // VITE_ENABLE_POOL=true at build time — the live site stays single-mode
+  // until the flag flips.
+  const [mode, setMode] = useState<'v1' | 'v2'>(() => {
+    const saved = localStorage.getItem('cyrusthegreat-active-mode');
+    return saved === 'v2' ? 'v2' : 'v1';
+  });
+  useEffect(() => {
+    localStorage.setItem('cyrusthegreat-active-mode', mode);
+  }, [mode]);
   
   const {
     walletBalance,
@@ -215,8 +231,33 @@ const Index = () => {
     }
   };
 
+  // Show the v1/v2 mode toggle only when the build has the feature flag on
+  // AND the user has connected a wallet (otherwise the toggle would float
+  // above a connect-screen, which is confusing UX).
+  const showModeToggle = WEB3_CONFIG.ENABLE_POOL && isConnected;
+
   return (
     <>
+      {showModeToggle && (
+        <div className="w-full pt-6 pb-2 flex justify-center">
+          <Tabs value={mode} onValueChange={(v) => setMode(v as 'v1' | 'v2')}>
+            <TabsList className="bg-card/80 backdrop-blur border border-border/50">
+              <TabsTrigger value="v1" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-foreground">
+                <Shield className="w-4 h-4" />
+                <span>v1 — Vault</span>
+              </TabsTrigger>
+              <TabsTrigger value="v2" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-foreground">
+                <Lock className="w-4 h-4" />
+                <span>v2 — Anonymity Pool</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
+
+      {mode === 'v2' && showModeToggle ? (
+        <PoolView activeChain={activeChain} />
+      ) : (
       <VaultCore
         walletBalance={walletBalance}
         vaultBalance={vaultBalance}
@@ -240,6 +281,7 @@ const Index = () => {
         activeChain={activeChain}
         setActiveChain={setActiveChain}
       />
+      )}
 
       <DepositModal
         open={depositModalOpen}
