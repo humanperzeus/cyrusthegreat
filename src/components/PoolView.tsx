@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Lock, AlertTriangle } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
 import { CommitForm } from "@/components/pool/CommitForm";
+import { Notebook } from "@/components/pool/Notebook";
 
 interface PoolViewProps {
   activeChain: 'ETH' | 'BSC' | 'BASE';
@@ -70,8 +71,11 @@ export const PoolView = ({ activeChain }: PoolViewProps) => {
         </div>
       </Card>
 
-      {/* Commit flow (F.4c). Reveal/Notebook lands in F.4d. */}
+      {/* Commit flow (F.4c). */}
       <CommitForm activeChain={activeChain} />
+
+      {/* Notebook (F.4d) — depositor's pending + revealed commits. */}
+      <Notebook activeChain={activeChain} />
 
       {/* Address debug footer — kept for now, useful for verifying which contract
           you're committing to. Remove once the dapp matures. */}
