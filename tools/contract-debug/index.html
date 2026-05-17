@@ -1496,7 +1496,23 @@ const BANK8_TESTS = [
           if (!v) throw new Error("No Bank8 on this chain");
           const abi = await fetchAbi("CrossChainBank8");
           const c = new ethers.Contract(v, abi, getReadProvider());
-          // No fee on collectFees itself (it's the fee-drain operation)
+          // Pre-flight via staticCall so we surface the contract's revert
+          // reason ("No fees" / "Not authorized") BEFORE submitting a real tx
+          // and burning gas. Bank8's collectFees reverts with "No fees" when
+          // the vault is empty — that's normal, not a failure of the test card.
+          try {
+            await c.connect(signer).collectFees.staticCall();
+          } catch (e) {
+            const msg = e.shortMessage || e.reason || e.message || String(e);
+            if (/no fees/i.test(msg)) {
+              return { html: `ℹ️ Vault is empty — already drained or never accumulated.\nNothing to collect; not submitting a tx.\n\n(This is the contract's expected behavior when feeVault is 0.)` };
+            }
+            if (/not authorized/i.test(msg)) {
+              throw new Error(`Not authorized — only feeCollector ${ADDR.wallet1} can drain. You are ${account}.`);
+            }
+            throw e; // unexpected revert reason — surface it
+          }
+          // staticCall succeeded → there are fees to drain. Submit for real.
           const tx = await c.connect(signer).collectFees({ gasLimit: 200000n });
           const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
           const r = await tx.wait();
@@ -1869,6 +1885,21 @@ const TRESOR1_TESTS = [
           if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
           const abi = await fetchAbi("CyrusTresor1");
           const c = new ethers.Contract(v, abi, getReadProvider());
+          // Pre-flight via staticCall so we surface "No fees" / "Not authorized"
+          // BEFORE submitting a real tx (same pattern as b8-12). An empty vault
+          // is normal, not a failure.
+          try {
+            await c.connect(signer).collectFees.staticCall();
+          } catch (e) {
+            const msg = e.shortMessage || e.reason || e.message || String(e);
+            if (/no fees/i.test(msg)) {
+              return { html: `ℹ️ Vault is empty — already drained or no commits/deposits yet on this chain.\nNothing to collect; not submitting a tx.` };
+            }
+            if (/not authorized/i.test(msg)) {
+              throw new Error(`Not authorized — only feeCollector ${ADDR.wallet1} can drain. You are ${account}.`);
+            }
+            throw e;
+          }
           const ov = await prepareTx({ gasLimit: 200000n });
           const tx = await c.connect(signer).collectFees(ov);
           const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
