@@ -36,7 +36,31 @@ export const WEB3_CONFIG = {
   CTGVAULT_BASE_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
     ? import.meta.env.VITE_CTGVAULT_BASE_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGVAULT_BASE_TESTNET_CONTRACT,
-  
+
+  // CyrusTresor1 contract addresses (Bank8 + anonymity pool). Deployed to
+  // testnets 2026-05-14; mainnet slots are 'notdeployednow' until launch.
+  // Frontend code path is GATED by VITE_ENABLE_POOL (see below) — even
+  // with valid addresses here, the pool UI stays hidden until the flag flips.
+  CTGTRESOR_ETH_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_CTGTRESOR_ETH_MAINNET_CONTRACT
+    : import.meta.env.VITE_CTGTRESOR_ETH_TESTNET_CONTRACT,
+
+  CTGTRESOR_BSC_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_CTGTRESOR_BSC_MAINNET_CONTRACT
+    : import.meta.env.VITE_CTGTRESOR_BSC_TESTNET_CONTRACT,
+
+  CTGTRESOR_BASE_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_CTGTRESOR_BASE_MAINNET_CONTRACT
+    : import.meta.env.VITE_CTGTRESOR_BASE_TESTNET_CONTRACT,
+
+  // Feature flag: when 'true' the dapp exposes the Anonymity Pool mode in
+  // its UI. Default false — pool routes / components stay dormant in the
+  // bundle until the user (a) sets VITE_ENABLE_POOL=true in their .env, AND
+  // (b) syncs that to Cloudflare Pages via ctg-sync-env, AND (c) deploys.
+  // Provides a kill-switch so we can ship pool code to the bundle without
+  // exposing it to live users until we're ready.
+  ENABLE_POOL: import.meta.env.VITE_ENABLE_POOL === 'true',
+
   // Ethereum RPC URLs
   ALCHEMY_ETH_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
     ? import.meta.env.VITE_ALCHEMY_ETH_MAINNET_RPC_URL
