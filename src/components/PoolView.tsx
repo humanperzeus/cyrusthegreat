@@ -11,8 +11,9 @@
  */
 
 import { Card } from "@/components/ui/card";
-import { Lock, AlertTriangle, Construction } from "lucide-react";
+import { Lock, AlertTriangle } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
+import { CommitForm } from "@/components/pool/CommitForm";
 
 interface PoolViewProps {
   activeChain: 'ETH' | 'BSC' | 'BASE';
@@ -28,6 +29,8 @@ const contractAddressFor = (chain: 'ETH' | 'BSC' | 'BASE'): string | undefined =
 export const PoolView = ({ activeChain }: PoolViewProps) => {
   const contractAddress = contractAddressFor(activeChain);
   const isDeployed = contractAddress && contractAddress !== 'notdeployednow' && contractAddress.startsWith('0x');
+  // unused for now — referenced once the address footer is removed; kept for future debug surface
+  void isDeployed;
 
   return (
     <div className="w-full max-w-2xl mx-auto px-4 space-y-4">
@@ -67,29 +70,16 @@ export const PoolView = ({ activeChain }: PoolViewProps) => {
         </div>
       </Card>
 
-      {/* Stub — actual commit/reveal UI lands in F.4c / F.4d */}
-      <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
-        <div className="flex items-center gap-3 mb-3">
-          <Construction className="w-5 h-5 text-primary" />
-          <h3 className="text-base font-semibold">Commit / Reveal UI — coming next</h3>
-        </div>
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            The next scaffold commit (F.4c) adds the commit form: bucket picker, withdrawTo input,
-            and a "Generate claim URL" flow you can share with a recipient via Signal / QR / email.
-          </p>
-          <p>
-            After that (F.4d): a notebook panel listing your pending commits + reveal buttons that
-            unlock once the epoch boundary passes.
-          </p>
-        </div>
-        <div className="mt-4 pt-4 border-t border-border/40 text-xs space-y-1.5 font-mono">
-          <div className="text-muted-foreground">Active chain: <span className="text-foreground">{activeChain}</span></div>
-          <div className="text-muted-foreground">
-            CyrusTresor1: <span className={isDeployed ? "text-foreground" : "text-yellow-500"}>
-              {isDeployed ? contractAddress : `not deployed on ${activeChain} mainnet (testnet only for now)`}
-            </span>
-          </div>
+      {/* Commit flow (F.4c). Reveal/Notebook lands in F.4d. */}
+      <CommitForm activeChain={activeChain} />
+
+      {/* Address debug footer — kept for now, useful for verifying which contract
+          you're committing to. Remove once the dapp matures. */}
+      <Card className="p-3 bg-card/40 border-border/30 text-xs font-mono">
+        <div className="text-muted-foreground">
+          Active chain: <span className="text-foreground">{activeChain}</span>
+          {" · "}
+          CyrusTresor1: <span className="text-foreground">{contractAddress || "—"}</span>
         </div>
       </Card>
     </div>

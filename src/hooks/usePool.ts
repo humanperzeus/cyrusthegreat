@@ -22,8 +22,8 @@
  * before the flag is flipped produces a clear error rather than weird state.
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useReadContract, useReadContracts } from 'wagmi';
 import { parseUnits, formatUnits, type Address, type Hex } from 'viem';
 import CyrusTresor1Artifact from '@/contracts/abis/CyrusTresor1.json';
 import { WEB3_CONFIG } from '@/config/web3';
@@ -309,3 +309,64 @@ export const usePool = (): UsePoolHook => {
 
 // Re-export utility used by formatters in UI components
 export { formatUnits, parseUnits };
+
+/**
+ * Read the bucket schedule for a given token from CyrusTresor1 on the active chain.
+ * Returns the array of bucket sizes (in wei) AND an isLoading flag.
+ * NB: bucket count varies per token per chain (e.g. Sepolia ETH has 4; BSC has 4).
+ *     We probe up to MAX_BUCKETS_PROBE, stopping on revert.
+ */
+const MAX_BUCKETS_PROBE = 8;
+export function usePoolBucketSizes(token: Address | undefined): { sizes: bigint[]; isLoading: boolean } {
+  const chainId = useChainId();
+  const addr = contractAddressForChain(chainId);
+  const probeCalls = useMemo(() => {
+    if (!addr || !token) return [];
+    return Array.from({ length: MAX_BUCKETS_PROBE }).map((_, i) => ({
+      address: addr,
+      abi: CTGTRESOR_ABI as unknown[],
+      functionName: 'getPoolBucketSize',
+      args: [token, i],
+    } as Parameters<typeof useReadContracts>[0]['contracts'][number]));
+  }, [addr, token]);
+
+  const { data, isLoading } = useReadContracts({
+    contracts: probeCalls,
+    query: { enabled: !!addr && !!token && WEB3_CONFIG.ENABLE_POOL, staleTime: 60_000 },
+  });
+
+  const sizes: bigint[] = [];
+  if (data) {
+    for (const entry of data) {
+      if (entry.status === 'success' && typeof entry.result === 'bigint') sizes.push(entry.result);
+      else break; // first revert = out of range, schedule ends here
+    }
+  }
+  return { sizes, isLoading };
+}
+
+/** Read the current dynamic fee in wei. Refreshes every block via wagmi defaults. */
+export function usePoolCurrentFee(): { feeWei: bigint | undefined; isLoading: boolean } {
+  const chainId = useChainId();
+  const addr = contractAddressForChain(chainId);
+  const { data, isLoading } = useReadContract({
+    address: addr ?? undefined,
+    abi: CTGTRESOR_ABI,
+    functionName: 'getCurrentFeeInWei',
+    query: { enabled: !!addr && WEB3_CONFIG.ENABLE_POOL, staleTime: 30_000 },
+  });
+  return { feeWei: data as bigint | undefined, isLoading };
+}
+
+/** Read the current epoch number from the contract. */
+export function usePoolCurrentEpoch(): { epoch: number | undefined; isLoading: boolean } {
+  const chainId = useChainId();
+  const addr = contractAddressForChain(chainId);
+  const { data, isLoading } = useReadContract({
+    address: addr ?? undefined,
+    abi: CTGTRESOR_ABI,
+    functionName: 'currentEpoch',
+    query: { enabled: !!addr && WEB3_CONFIG.ENABLE_POOL, staleTime: 60_000 },
+  });
+  return { epoch: data !== undefined ? Number(data) : undefined, isLoading };
+}
