@@ -99,13 +99,22 @@ const Claim = () => {
     : undefined;
   const onChainExists = onChainDepositEpoch !== undefined && onChainDepositEpoch > 0;
 
+  // Track when the page first mounted so we can distinguish "freshly opened,
+  // still waiting for chain to index a recent commit" from "truly unknown".
+  // A recent commit tx may take 5-30s to appear in the contract state via the
+  // RPC we're reading from. During that window we show "indexing…" instead of
+  // panicking with "Commitment not found on chain".
+  const [mountedAt] = useState<number>(() => Date.now());
+  const INDEXING_GRACE_MS = 45_000;
+  const stillIndexing = Date.now() - mountedAt < INDEXING_GRACE_MS;
+
   // Derived UI state (computed every render — cheap)
-  type ClaimState = "no-claim" | "loading" | "wrong-chain" | "unknown" | "already-spent" | "wait" | "eligible";
+  type ClaimState = "no-claim" | "loading" | "wrong-chain" | "indexing" | "unknown" | "already-spent" | "wait" | "eligible";
   const claimState: ClaimState = (() => {
     if (!claim) return "no-claim";
     if (!isOnRightChain) return "wrong-chain";
     if (loadingCommitment || commitmentState === undefined) return "loading";
-    if (!onChainExists) return "unknown";
+    if (!onChainExists) return stillIndexing ? "indexing" : "unknown";
     if (onChainSpent) return "already-spent";
     if (currentEpoch !== undefined && currentEpoch > (onChainDepositEpoch as number)) return "eligible";
     return "wait";
@@ -319,6 +328,28 @@ const Claim = () => {
             </a>
           )}
         </Card>
+      ) : claimState === "indexing" ? (
+        <Card className="p-6 bg-yellow-500/5 border-yellow-500/30">
+          <div className="flex items-start gap-2">
+            <Clock className="w-5 h-5 text-yellow-500 mt-0.5 animate-pulse" />
+            <div>
+              <p className="font-medium text-yellow-200">Checking on-chain state…</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                If you just submitted the commit, it can take 5–30 seconds for the RPC to index it.
+                This page auto-refreshes every 15s. If after a minute the commitment still doesn't
+                appear, it means the URL was tampered with, the tx was reverted, or you're pointed
+                at the wrong contract / chain.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchCommitment()}
+                className="mt-2 text-xs text-yellow-300 hover:text-yellow-100 underline"
+              >
+                Check now
+              </button>
+            </div>
+          </div>
+        </Card>
       ) : claimState === "unknown" ? (
         <Card className="p-6 bg-red-500/5 border-red-500/30">
           <div className="flex items-start gap-2">
@@ -330,6 +361,13 @@ const Claim = () => {
                 Possible causes: the URL was tampered with, the commit tx was reverted, or you're
                 pointed at the wrong contract / chain.
               </p>
+              <button
+                type="button"
+                onClick={() => refetchCommitment()}
+                className="mt-2 text-xs text-muted-foreground hover:text-foreground underline"
+              >
+                Refresh
+              </button>
             </div>
           </div>
         </Card>

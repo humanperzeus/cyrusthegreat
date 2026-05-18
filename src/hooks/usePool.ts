@@ -343,11 +343,28 @@ export const usePool = (): UsePoolHook => {
         functionName: 'approve',
         args: [contractAddress as Address, amount],
       })) as Hex;
-      // Wait for confirmation so subsequent allowance reads reflect the new value.
-      // Without this, the UI's useTokenAllowance might still show old value when
-      // the user clicks Commit immediately after Approve.
+      // Wait for the receipt so subsequent allowance reads reflect the new value.
+      // Also poll the allowance directly after — wagmi's useReadContract cache
+      // can lag behind the receipt by a render cycle, and the caller's refetch
+      // hook reference may be stale. This guarantees the on-chain new allowance
+      // is observed before approveToken resolves.
       if (publicClient) {
-        try { await publicClient.waitForTransactionReceipt({ hash: txHash }); } catch { /* fall through */ }
+        try {
+          await publicClient.waitForTransactionReceipt({ hash: txHash });
+          // Poll for up to 8s: read allowance() directly until it reflects the
+          // new value, then return. Bounded so a failed approve doesn't hang.
+          const owner = account as Address;
+          for (let i = 0; i < 4; i++) {
+            const current = await publicClient.readContract({
+              address: token,
+              abi: erc20Abi,
+              functionName: 'allowance',
+              args: [owner, contractAddress as Address],
+            }) as bigint;
+            if (current >= amount) break;
+            await new Promise((r) => setTimeout(r, 2_000));
+          }
+        } catch { /* network hiccup — caller's refetchInterval will catch up */ }
       }
       return { txHash };
     } catch (e) {
@@ -357,7 +374,7 @@ export const usePool = (): UsePoolHook => {
     } finally {
       setIsApproving(false);
     }
-  }, [_requireEnabled, writeContractAsync, contractAddress, publicClient]);
+  }, [_requireEnabled, writeContractAsync, contractAddress, publicClient, account]);
 
   const pendingNotebook = notebook.filter((e) => !e.spent);
 
