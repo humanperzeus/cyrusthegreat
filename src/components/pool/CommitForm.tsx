@@ -28,6 +28,7 @@ import {
   usePoolCurrentFee,
   usePoolCurrentEpoch,
 } from "@/hooks/usePool";
+import { ClaimQR } from "@/components/pool/ClaimQR";
 
 const NATIVE_TOKEN: Address = "0x0000000000000000000000000000000000000000";
 
@@ -236,7 +237,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
                 {result.txHash.slice(0, 10)}…{result.txHash.slice(-8)} <ExternalLink className="w-3 h-3" />
               </a>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2">
               <span className="text-muted-foreground">Claim URL (share with recipient):</span>
               <div className="flex gap-2">
                 <Input value={result.claimURL} readOnly className="font-mono text-xs flex-1" />
@@ -244,10 +245,14 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
                   {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-yellow-200">
-                ⚠️ Anyone with this URL can claim the funds. Share via end-to-end-encrypted channels only
-                (Signal, Matrix E2EE). Treat like cash.
-              </p>
+              <div className="flex flex-col sm:flex-row gap-3 items-start pt-2">
+                <ClaimQR value={result.claimURL} size={160} />
+                <p className="text-xs text-yellow-200 sm:flex-1">
+                  ⚠️ Anyone with this URL <em>or QR code</em> can claim the funds. Share via end-to-end-
+                  encrypted channels only (Signal, Matrix E2EE) — or show the QR directly to the
+                  recipient in person. Treat like cash.
+                </p>
+              </div>
             </div>
           </div>
         </Card>

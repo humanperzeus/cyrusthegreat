@@ -28,6 +28,7 @@ import { Clock, Check, ExternalLink, Copy, Trash2, ChevronDown, ChevronRight } f
 import { usePool, usePoolCurrentEpoch } from "@/hooks/usePool";
 import { buildClaimURL, type TeleportClaim } from "@/lib/poolURI";
 import type { NotebookEntry } from "@/hooks/usePool";
+import { ClaimQR } from "@/components/pool/ClaimQR";
 
 interface NotebookProps {
   activeChain: "ETH" | "BSC" | "BASE";
@@ -202,7 +203,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
 
               {/* Expandable claim URL */}
               {expandedClaim === entry.commitment && (
-                <div className="pt-2 space-y-1.5 border-t border-border/30">
+                <div className="pt-2 space-y-2 border-t border-border/30">
                   <div className="flex gap-2">
                     <Input
                       readOnly
@@ -213,9 +214,16 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
                       {copied === entry.commitment ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </div>
-                  <p className="text-xs text-yellow-200/80">
-                    ⚠️ Anyone with this URL can claim the funds. Share via end-to-end-encrypted channels only.
-                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 items-start pt-1">
+                    <ClaimQR
+                      value={buildClaimURL(`${window.location.origin}/claim`, entry.claim as TeleportClaim)}
+                      size={140}
+                    />
+                    <p className="text-xs text-yellow-200/80 sm:flex-1">
+                      ⚠️ Anyone with this URL <em>or QR code</em> can claim the funds. Share via end-to-end-
+                      encrypted channels only — or show the QR directly to the recipient in person.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
