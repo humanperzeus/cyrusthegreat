@@ -18,14 +18,15 @@ import { Notebook } from "@/components/pool/Notebook";
 import { ChainSwitcher } from "@/components/pool/ChainSwitcher";
 
 interface PoolViewProps {
-  activeChain: 'ETH' | 'BSC' | 'BASE';
-  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE') => void;
+  activeChain: 'ETH' | 'BSC' | 'BASE' | 'HYPER';
+  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER') => void;
 }
 
-const contractAddressFor = (chain: 'ETH' | 'BSC' | 'BASE'): string | undefined => {
+const contractAddressFor = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER'): string | undefined => {
   if (chain === 'ETH') return WEB3_CONFIG.CTGTRESOR_ETH_CONTRACT;
   if (chain === 'BSC') return WEB3_CONFIG.CTGTRESOR_BSC_CONTRACT;
   if (chain === 'BASE') return WEB3_CONFIG.CTGTRESOR_BASE_CONTRACT;
+  if (chain === 'HYPER') return WEB3_CONFIG.CTGTRESOR_HYPER_CONTRACT;
   return undefined;
 };
 

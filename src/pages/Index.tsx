@@ -24,12 +24,21 @@ import { WEB3_CONFIG } from "@/config/web3";
   // };
 
 
+// v1 supports ETH/BSC/BASE. v2 (pool) additionally supports HYPER (HyperEVM).
+// Index.tsx holds the wider 4-chain state; the v1 surface gets narrowed at
+// the boundary (see v1SafeChain / v1SetActiveChain below).
+type ActiveChain = 'ETH' | 'BSC' | 'BASE' | 'HYPER';
+type V1Chain = 'ETH' | 'BSC' | 'BASE';
+
 const Index = () => {
   // Chain switching state with persistence
-  const [activeChain, setActiveChain] = useState<'ETH' | 'BSC' | 'BASE'>(() => {
+  const [activeChain, setActiveChain] = useState<ActiveChain>(() => {
     // Try to restore from localStorage, fallback to ETH
     const saved = localStorage.getItem('cyrusthegreat-active-chain');
-    return (saved as 'ETH' | 'BSC' | 'BASE') || 'ETH';
+    if (saved === 'ETH' || saved === 'BSC' || saved === 'BASE' || saved === 'HYPER') {
+      return saved;
+    }
+    return 'ETH';
   });
 
   // Save chain preference to localStorage whenever it changes
@@ -49,6 +58,22 @@ const Index = () => {
   useEffect(() => {
     localStorage.setItem('cyrusthegreat-active-mode', mode);
   }, [mode]);
+
+  // HYPER (HyperEVM) is pool-only — v1 (Bank8 vault) has no contract there.
+  // If the user picks HYPER while in v1, auto-promote to v2 so they don't
+  // land on an empty/broken-looking vault view.
+  useEffect(() => {
+    if (activeChain === 'HYPER' && mode === 'v1') {
+      setMode('v2');
+    }
+  }, [activeChain, mode]);
+
+  // Bridge: v1 components don't know about HYPER. Narrow to ETH for v1
+  // consumers when the user is on HYPER (the useEffect above prevents the
+  // v1 view from being mounted in that case, so the fallback value is
+  // never displayed — it's just here to satisfy the type checker).
+  const v1SafeChain: V1Chain = activeChain === 'HYPER' ? 'ETH' : activeChain;
+  const v1SetActiveChain = (chain: V1Chain) => setActiveChain(chain);
   
   const {
     walletBalance,
@@ -85,7 +110,7 @@ const Index = () => {
     currentNetwork,
     isSwitchingNetwork,
     autoSwitchNetwork
-  } = useVault(activeChain);
+  } = useVault(v1SafeChain);
 
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
@@ -277,9 +302,9 @@ const Index = () => {
         onTokenDeposit={handleTokenDeposit}
         onTokenWithdraw={handleTokenWithdraw}
         onTokenTransfer={handleTokenTransfer}
-        // Chain switching props
-        activeChain={activeChain}
-        setActiveChain={setActiveChain}
+        // Chain switching props — narrowed for v1 (no HyperEVM here)
+        activeChain={v1SafeChain}
+        setActiveChain={v1SetActiveChain}
       />
       )}
 
@@ -303,8 +328,8 @@ const Index = () => {
         tokenSymbol={tokenDepositInfo?.symbol}
         tokenAddress={tokenDepositInfo?.address}
         tokenBalance={tokenDepositInfo?.balance}
-        // Chain-aware props
-        activeChain={activeChain}
+        // Chain-aware props — narrowed for v1 modals
+        activeChain={v1SafeChain}
         // Multi-token functionality
         availableTokens={walletTokens}
         rateLimitStatus={rateLimitStatus}
@@ -330,8 +355,8 @@ const Index = () => {
         tokenAddress={tokenWithdrawInfo?.address}
         tokenBalance={tokenWithdrawInfo?.balance}
         tokenDecimals={tokenWithdrawInfo?.decimals}
-        // Chain-aware props
-        activeChain={activeChain}
+        // Chain-aware props — narrowed for v1 modals
+        activeChain={v1SafeChain}
         // Multi-token functionality
         vaultTokens={vaultTokens}
         rateLimitStatus={rateLimitStatus}
@@ -356,8 +381,8 @@ const Index = () => {
         tokenAddress={tokenTransferInfo?.address}
         tokenBalance={tokenTransferInfo?.balance}
         tokenDecimals={tokenTransferInfo?.decimals}
-        // Chain-aware props
-        activeChain={activeChain}
+        // Chain-aware props — narrowed for v1 modals
+        activeChain={v1SafeChain}
         // Multi-token functionality
         onMultiTokenTransfer={transferMultipleTokensWagmi}
         vaultTokens={vaultTokens}

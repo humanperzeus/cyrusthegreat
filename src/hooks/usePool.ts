@@ -59,6 +59,12 @@ export const POOL_TOKENS_BY_CHAIN: Record<number, PoolTokenEntry[]> = {
   84532: [
     { address: NATIVE_TOKEN_ADDRESS, symbol: 'ETH',  decimals: 18 },
   ],
+  // HyperEVM testnet (998). Native HYPE only for v1 — ERC-20 stablecoin
+  // additions (USDC-on-HyperEVM-testnet, USDT-on-HyperEVM-testnet) pending
+  // canonical-address discovery.
+  998: [
+    { address: NATIVE_TOKEN_ADDRESS, symbol: 'HYPE', decimals: 18 },
+  ],
   // Mainnet entries will be added during the mainnet deploy per
   // MAINNET_DEPLOY_CHECKLIST.md (ETH, USDC=6dec, USDT=6dec, USD1).
 };
@@ -110,6 +116,7 @@ function contractAddressForChain(chainId: number | undefined): Address | null {
   if (chainId === 1 || chainId === 11155111) return WEB3_CONFIG.CTGTRESOR_ETH_CONTRACT as Address;
   if (chainId === 56 || chainId === 97) return WEB3_CONFIG.CTGTRESOR_BSC_CONTRACT as Address;
   if (chainId === 8453 || chainId === 84532) return WEB3_CONFIG.CTGTRESOR_BASE_CONTRACT as Address;
+  if (chainId === 999 || chainId === 998) return WEB3_CONFIG.CTGTRESOR_HYPER_CONTRACT as Address;
   return null;
 }
 

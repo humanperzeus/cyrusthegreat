@@ -31,13 +31,14 @@ import type { NotebookEntry } from "@/hooks/usePool";
 import { ClaimQR } from "@/components/pool/ClaimQR";
 
 interface NotebookProps {
-  activeChain: "ETH" | "BSC" | "BASE";
+  activeChain: "ETH" | "BSC" | "BASE" | "HYPER";
 }
 
-const explorerForChain = (chain: "ETH" | "BSC" | "BASE", txHash: string): string => {
+const explorerForChain = (chain: "ETH" | "BSC" | "BASE" | "HYPER", txHash: string): string => {
   if (chain === "ETH") return `https://sepolia.etherscan.io/tx/${txHash}`;
   if (chain === "BSC") return `https://testnet.bscscan.com/tx/${txHash}`;
   if (chain === "BASE") return `https://sepolia.basescan.org/tx/${txHash}`;
+  if (chain === "HYPER") return `https://testnet.purrsec.com/tx/${txHash}`;
   return "#";
 };
 
@@ -137,13 +138,22 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
           // (tokenSymbol + tokenDecimals + bucketSizeWei). Fall back gracefully
           // for older entries that pre-date these fields.
           const isNativeToken = entry.claim.token === "0x0000000000000000000000000000000000000000";
+          const nativeFallbackSymbol =
+            activeChain === "BSC" ? "tBNB"
+            : activeChain === "HYPER" ? "HYPE"
+            : "ETH";
           const displaySymbol = entry.tokenSymbol
-            ?? (isNativeToken ? (activeChain === "BSC" ? "tBNB" : "ETH") : entry.claim.token.slice(0, 6) + "…");
+            ?? (isNativeToken ? nativeFallbackSymbol : entry.claim.token.slice(0, 6) + "…");
           const displayDecimals = entry.tokenDecimals ?? 18;
           const displayAmount = entry.bucketSizeWei
             ? formatUnits(BigInt(entry.bucketSizeWei), displayDecimals)
             : null; // null = fall back to "bucket N" label
-          const isCurrentChain = entry.claim.chainId === (activeChain === "ETH" ? 11155111 : activeChain === "BSC" ? 97 : 84532);
+          const activeChainId =
+            activeChain === "ETH" ? 11155111
+            : activeChain === "BSC" ? 97
+            : activeChain === "BASE" ? 84532
+            : 998; // HYPER testnet
+          const isCurrentChain = entry.claim.chainId === activeChainId;
 
           return (
             <div

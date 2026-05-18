@@ -1,15 +1,16 @@
 import { http, createConfig } from 'wagmi'
-import { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia } from 'wagmi/chains'
+import { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia, hyperEvm, hyperliquidEvmTestnet } from 'wagmi/chains'
 import { walletConnect } from 'wagmi/connectors'
 import { WEB3_CONFIG, getCurrentNetwork, getBestRpcUrl } from '@/config/web3'
 
 // Get current network configuration
 const currentNetwork = getCurrentNetwork();
 
-// Support ETH, BSC, and BASE chains
-const chains = currentNetwork.isMainnet 
-  ? [mainnet, bsc, base] as const 
-  : [sepolia, bscTestnet, baseSepolia] as const;
+// Support ETH, BSC, BASE, and HyperEVM (Hyperliquid).
+// HyperEVM testnet (chainId 998) joined 2026-05-19 — pool-only, no Bank8.
+const chains = currentNetwork.isMainnet
+  ? [mainnet, bsc, base, hyperEvm] as const
+  : [sepolia, bscTestnet, baseSepolia, hyperliquidEvmTestnet] as const;
 
 // Dynamic transport configuration for all supported chains
 const transports = {
@@ -22,6 +23,9 @@ const transports = {
   // BASE chains
   [base.id]: http(getBestRpcUrl('BASE')),
   [baseSepolia.id]: http(getBestRpcUrl('BASE')),
+  // HyperEVM chains — single canonical RPC per network mode (no managed tier yet)
+  [hyperEvm.id]: http(getBestRpcUrl('HYPER')),
+  [hyperliquidEvmTestnet.id]: http(getBestRpcUrl('HYPER')),
 } as const;
 
 export const config = createConfig({

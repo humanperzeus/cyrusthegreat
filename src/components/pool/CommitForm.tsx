@@ -35,18 +35,19 @@ import {
 import { ClaimQR } from "@/components/pool/ClaimQR";
 
 interface CommitFormProps {
-  activeChain: "ETH" | "BSC" | "BASE";
+  activeChain: "ETH" | "BSC" | "BASE" | "HYPER";
 }
 
-const explorerForChain = (chain: "ETH" | "BSC" | "BASE", txHash: string): string => {
+const explorerForChain = (chain: "ETH" | "BSC" | "BASE" | "HYPER", txHash: string): string => {
   if (chain === "ETH") return `https://sepolia.etherscan.io/tx/${txHash}`;
   if (chain === "BSC") return `https://testnet.bscscan.com/tx/${txHash}`;
   if (chain === "BASE") return `https://sepolia.basescan.org/tx/${txHash}`;
+  if (chain === "HYPER") return `https://testnet.purrsec.com/tx/${txHash}`;
   return "#";
 };
 
 // Map UI chain label to numeric chainId so we can resolve POOL_TOKENS_BY_CHAIN.
-const CHAIN_ID_FOR: Record<"ETH" | "BSC" | "BASE", number> = { ETH: 11155111, BSC: 97, BASE: 84532 };
+const CHAIN_ID_FOR: Record<"ETH" | "BSC" | "BASE" | "HYPER", number> = { ETH: 11155111, BSC: 97, BASE: 84532, HYPER: 998 };
 
 export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const { address: account, isConnected } = useAccount();
@@ -90,7 +91,10 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   useMemo(() => { setBucketIdx(0); }, [token]);
 
   const bucketSize = bucketSizes[bucketIdx];
-  const nativeSymbol = activeChain === "BSC" ? "tBNB" : "ETH";
+  const nativeSymbol =
+    activeChain === "BSC" ? "tBNB"
+    : activeChain === "HYPER" ? "HYPE"
+    : "ETH";
 
   // Native: fee + bucketSize go via msg.value. ERC-20: only fee via msg.value;
   // bucketSize is pulled by the contract via transferFrom (requires allowance).

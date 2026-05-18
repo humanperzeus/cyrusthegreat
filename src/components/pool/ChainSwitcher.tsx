@@ -17,16 +17,17 @@ import { useChainId } from "wagmi";
 import { switchToChain, WEB3_CONFIG } from "@/config/web3";
 
 interface ChainSwitcherProps {
-  activeChain: "ETH" | "BSC" | "BASE";
-  setActiveChain: (chain: "ETH" | "BSC" | "BASE") => void;
+  activeChain: "ETH" | "BSC" | "BASE" | "HYPER";
+  setActiveChain: (chain: "ETH" | "BSC" | "BASE" | "HYPER") => void;
 }
 
 // chainId → v1's chain-label mapping, so wagmi's chainId can drive
 // the visual "active" state without needing prop drilling.
-const chainIdToLabel = (chainId: number | undefined): "ETH" | "BSC" | "BASE" | null => {
+const chainIdToLabel = (chainId: number | undefined): "ETH" | "BSC" | "BASE" | "HYPER" | null => {
   if (chainId === 1 || chainId === 11155111) return "ETH";
   if (chainId === 56 || chainId === 97) return "BSC";
   if (chainId === 8453 || chainId === 84532) return "BASE";
+  if (chainId === 999 || chainId === 998) return "HYPER";
   return null;
 };
 
@@ -34,14 +35,14 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
   const walletChainId = useChainId();
   const walletChainLabel = chainIdToLabel(walletChainId);
   const isTestnet = WEB3_CONFIG.NETWORK_MODE !== "mainnet";
-  const [isSwitching, setIsSwitching] = useState<"ETH" | "BSC" | "BASE" | null>(null);
+  const [isSwitching, setIsSwitching] = useState<"ETH" | "BSC" | "BASE" | "HYPER" | null>(null);
 
   // Source of truth: prop-driven activeChain (mirrors v1's pattern). Visual
   // is most accurate when this matches walletChainLabel — if they diverge,
   // wallet is on a different chain than what the dapp thinks.
   const effectiveActive = activeChain;
 
-  const handleSwitch = async (target: "ETH" | "BSC" | "BASE") => {
+  const handleSwitch = async (target: "ETH" | "BSC" | "BASE" | "HYPER") => {
     if (isSwitching) return;
     setIsSwitching(target);
     try {
@@ -52,7 +53,7 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
     }
   };
 
-  const buttonClass = (label: "ETH" | "BSC" | "BASE") =>
+  const buttonClass = (label: "ETH" | "BSC" | "BASE" | "HYPER") =>
     `w-10 h-8 px-1 flex items-center justify-center text-[10px] font-mono rounded cursor-pointer transition-all duration-200 ` +
     (effectiveActive === label
       ? "text-white bg-primary border border-primary"
@@ -71,6 +72,9 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
         </button>
         <button onClick={() => handleSwitch("BASE")} className={buttonClass("BASE")} title="Base / Base Sepolia">
           {isSwitching === "BASE" ? "…" : (isTestnet ? "tBASE" : "BASE")}
+        </button>
+        <button onClick={() => handleSwitch("HYPER")} className={buttonClass("HYPER")} title="Hyperliquid EVM / HyperEVM Testnet">
+          {isSwitching === "HYPER" ? "…" : (isTestnet ? "tHYPE" : "HYPE")}
         </button>
         <div
           className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"

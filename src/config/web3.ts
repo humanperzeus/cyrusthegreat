@@ -53,6 +53,14 @@ export const WEB3_CONFIG = {
     ? import.meta.env.VITE_CTGTRESOR_BASE_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_BASE_TESTNET_CONTRACT,
 
+  // HyperEVM (Hyperliquid) contract address. Pool-only (no Bank8 vault yet).
+  // Native HYPE has 18 decimals. Testnet uses MockV3Aggregator for HYPE/USD —
+  // see tools/hardhat-deploy/scripts/deployMockPriceFeed.ts. Mainnet path
+  // pending Pyth-adapter work; slot stays empty until then.
+  CTGTRESOR_HYPER_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_CTGTRESOR_HYPER_MAINNET_CONTRACT
+    : import.meta.env.VITE_CTGTRESOR_HYPER_TESTNET_CONTRACT,
+
   // Feature flag: when 'true' the dapp exposes the Anonymity Pool mode in
   // its UI. Default false — pool routes / components stay dormant in the
   // bundle until the user (a) sets VITE_ENABLE_POOL=true in their .env, AND
@@ -87,7 +95,14 @@ export const WEB3_CONFIG = {
   ANKR_BASE_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
     ? import.meta.env.VITE_ANKR_BASE_MAINNET_RPC_URL
     : import.meta.env.VITE_ANKR_BASE_TESTNET_RPC_URL,
-  
+
+  // HyperEVM RPC URLs. No managed-provider tier (Alchemy/Ankr) yet — we point
+  // at the canonical Hyperliquid endpoints by default and let users override
+  // via .env if they have a private RPC. Mainnet defaults to the public RPC.
+  HYPER_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? (import.meta.env.VITE_HYPER_MAINNET_RPC_URL || 'https://rpc.hyperliquid.xyz/evm')
+    : (import.meta.env.VITE_HYPER_TESTNET_RPC_URL || 'https://rpc.hyperliquid-testnet.xyz/evm'),
+
   // API Keys
   ANKR_API_KEY: import.meta.env.VITE_ANKR_API_KEY,
   ALCHEMY_API_KEY: import.meta.env.VITE_ALCHEMY_API_KEY,
@@ -114,29 +129,45 @@ export const getCurrentNetwork = () => {
 };
 
 // Helper function to get chain-specific network info
-export const getChainNetworkInfo = (chain: 'ETH' | 'BSC' | 'BASE') => {
+export const getChainNetworkInfo = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER') => {
   const mode = WEB3_CONFIG.NETWORK_MODE;
   return {
     mode,
     isMainnet: mode === 'mainnet',
     isTestnet: mode === 'testnet',
-    chainId: chain === 'ETH' 
+    chainId: chain === 'ETH'
       ? (mode === 'mainnet' ? 1 : 11155111)      // ETH mainnet vs Sepolia
       : chain === 'BSC'
       ? (mode === 'mainnet' ? 56 : 97)           // BSC mainnet vs testnet
-      : (mode === 'mainnet' ? 8453 : 84532),     // BASE mainnet vs Sepolia
-    chainName: chain === 'ETH' ? 'Ethereum' : chain === 'BSC' ? 'Binance Smart Chain' : 'Base',
-    networkName: chain === 'ETH' ? 'ethereum' : chain === 'BSC' ? 'bsc' : 'base',
+      : chain === 'BASE'
+      ? (mode === 'mainnet' ? 8453 : 84532)      // BASE mainnet vs Sepolia
+      : (mode === 'mainnet' ? 999 : 998),        // HyperEVM mainnet vs testnet
+    chainName: chain === 'ETH' ? 'Ethereum'
+      : chain === 'BSC' ? 'Binance Smart Chain'
+      : chain === 'BASE' ? 'Base'
+      : 'Hyperliquid EVM',
+    networkName: chain === 'ETH' ? 'ethereum'
+      : chain === 'BSC' ? 'bsc'
+      : chain === 'BASE' ? 'base'
+      : 'hyperevm',
     nativeCurrency: {
-      name: chain === 'ETH' ? 'Ether' : chain === 'BSC' ? 'BNB' : 'Ether',
-      symbol: chain === 'ETH' ? 'ETH' : chain === 'BSC' ? 'BNB' : 'ETH',
+      name: chain === 'ETH' ? 'Ether'
+        : chain === 'BSC' ? 'BNB'
+        : chain === 'BASE' ? 'Ether'
+        : 'HYPE',
+      symbol: chain === 'ETH' ? 'ETH'
+        : chain === 'BSC' ? 'BNB'
+        : chain === 'BASE' ? 'ETH'
+        : 'HYPE',
       decimals: 18,
     },
   };
 };
 
-// Helper function to get contract address for specific chain
-export const getContractAddress = (chain: 'ETH' | 'BSC' | 'BASE') => {
+// Helper function to get contract address for specific chain.
+// NOTE: HyperEVM has no Bank8/CTGVAULT deploy — there's only a CyrusTresor1
+// (pool) contract there. Bank8 callers asking for HYPER will get undefined.
+export const getContractAddress = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER') => {
   if (chain === 'ETH') {
     return WEB3_CONFIG.CTGVAULT_ETH_CONTRACT;
   }
@@ -146,11 +177,18 @@ export const getContractAddress = (chain: 'ETH' | 'BSC' | 'BASE') => {
   if (chain === 'BASE') {
     return WEB3_CONFIG.CTGVAULT_BASE_CONTRACT;
   }
+  if (chain === 'HYPER') {
+    // No Bank8 on HyperEVM. Pool consumers should read CTGTRESOR_HYPER_CONTRACT
+    // via the WEB3_CONFIG object directly (see usePool.ts POOL_TOKENS_BY_CHAIN).
+    return undefined;
+  }
   throw new Error(`Unsupported chain: ${chain}`);
 };
 
-// Helper function to get RPC URL for specific chain
-export const getRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE', provider: 'ALCHEMY' | 'ANKR') => {
+// Helper function to get RPC URL for specific chain.
+// HyperEVM has only one RPC option for now (Hyperliquid public endpoint) —
+// returns the same URL regardless of the requested provider tier.
+export const getRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER', provider: 'ALCHEMY' | 'ANKR') => {
   if (chain === 'ETH') {
     return provider === 'ALCHEMY' ? WEB3_CONFIG.ALCHEMY_ETH_RPC_URL : WEB3_CONFIG.ANKR_ETH_RPC_URL;
   }
@@ -160,11 +198,18 @@ export const getRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE', provider: 'ALCHEMY' | '
   if (chain === 'BASE') {
     return provider === 'ALCHEMY' ? WEB3_CONFIG.ALCHEMY_BASE_RPC_URL : WEB3_CONFIG.ANKR_BASE_RPC_URL;
   }
+  if (chain === 'HYPER') {
+    return WEB3_CONFIG.HYPER_RPC_URL;
+  }
   throw new Error(`Unsupported chain: ${chain}`);
 };
 
 // Helper function to get the best available RPC URL for a chain
-export const getBestRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
+export const getBestRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER') => {
+  // HyperEVM bypasses the Alchemy/Ankr try-cascade — only one canonical URL.
+  if (chain === 'HYPER') {
+    return WEB3_CONFIG.HYPER_RPC_URL;
+  }
   // Try Alchemy first, then Ankr as fallback
   try {
     const alchemyUrl = getRpcUrl(chain, 'ALCHEMY');
@@ -172,20 +217,20 @@ export const getBestRpcUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
   } catch (error) {
     debugLog(`Alchemy RPC not available for ${chain}`);
   }
-  
+
   try {
     const ankrUrl = getRpcUrl(chain, 'ANKR');
     if (ankrUrl) return ankrUrl;
   } catch (error) {
     debugLog(`Ankr RPC not available for ${chain}`);
   }
-  
+
   debugError(`❌ No valid RPC URL available for ${chain}`);
   throw new Error(`No valid RPC URL available for ${chain}. Please check your environment variables.`);
 };
 
 // Helper function to get Etherscan URL for specific chain
-export const getEtherscanUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
+export const getEtherscanUrl = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER') => {
   const networkMode = WEB3_CONFIG.NETWORK_MODE;
   
   if (chain === 'ETH') {
@@ -203,6 +248,12 @@ export const getEtherscanUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
       ? 'https://basescan.org'
       : 'https://sepolia.basescan.org';
   }
+  if (chain === 'HYPER') {
+    // Purrsec serves both mainnet + testnet under different subdomains.
+    return networkMode === 'mainnet'
+      ? 'https://purrsec.com'
+      : 'https://testnet.purrsec.com';
+  }
   throw new Error(`Unsupported chain: ${chain}`);
 };
 
@@ -218,18 +269,19 @@ export const getEtherscanUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
 // wagmi's switchChain() routes through the active connector so it works for
 // injected wallets (MetaMask-direct) AND WalletConnect-connected wallets
 // (Rabby via Reown).
-export const switchToChain = async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
+export const switchToChain = async (targetChain: 'ETH' | 'BSC' | 'BASE' | 'HYPER') => {
   const networkMode = WEB3_CONFIG.NETWORK_MODE;
   // Dynamic imports so this file doesn't take on a top-level dependency on the
   // wagmi config (avoids circular import — wagmi.ts itself imports from web3.ts).
   const { switchChain } = await import('@wagmi/core');
   const { config } = await import('@/lib/wagmi');
-  const { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia } = await import('wagmi/chains');
+  const { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia, hyperEvm, hyperliquidEvmTestnet } = await import('wagmi/chains');
 
   const chainIdMap = {
-    ETH: networkMode === 'mainnet' ? mainnet.id : sepolia.id,
-    BSC: networkMode === 'mainnet' ? bsc.id : bscTestnet.id,
-    BASE: networkMode === 'mainnet' ? base.id : baseSepolia.id,
+    ETH:   networkMode === 'mainnet' ? mainnet.id : sepolia.id,
+    BSC:   networkMode === 'mainnet' ? bsc.id     : bscTestnet.id,
+    BASE:  networkMode === 'mainnet' ? base.id    : baseSepolia.id,
+    HYPER: networkMode === 'mainnet' ? hyperEvm.id : hyperliquidEvmTestnet.id,
   } as const;
 
   const chainId = chainIdMap[targetChain];
@@ -250,14 +302,15 @@ export const getActiveChainInfo = () => {
     networkMode,
     isMainnet: networkMode === 'mainnet',
     isTestnet: networkMode === 'testnet',
-    ethChainId: networkMode === 'mainnet' ? 1 : 11155111,      // ETH mainnet vs Sepolia
-    bscChainId: networkMode === 'mainnet' ? 56 : 97,           // BSC mainnet vs testnet
-    baseChainId: networkMode === 'mainnet' ? 8453 : 84532,     // BASE mainnet vs Sepolia
+    ethChainId:   networkMode === 'mainnet' ? 1     : 11155111,  // ETH mainnet vs Sepolia
+    bscChainId:   networkMode === 'mainnet' ? 56    : 97,        // BSC mainnet vs testnet
+    baseChainId:  networkMode === 'mainnet' ? 8453  : 84532,     // BASE mainnet vs Sepolia
+    hyperChainId: networkMode === 'mainnet' ? 999   : 998,       // HyperEVM mainnet vs testnet
   };
 };
 
 // Get comprehensive chain configuration for a specific chain
-export const getChainConfig = (chain: 'ETH' | 'BSC' | 'BASE') => {
+export const getChainConfig = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER') => {
   const networkMode = WEB3_CONFIG.NETWORK_MODE;
   
   if (chain === 'ETH') {
@@ -313,6 +366,28 @@ export const getChainConfig = (chain: 'ETH' | 'BSC' | 'BASE') => {
       }
     };
   }
-  
+
+  if (chain === 'HYPER') {
+    // contractAddress is the CTGTRESOR (pool) address, since HyperEVM has no
+    // Bank8 deploy. getContractAddress('HYPER') returns undefined by design;
+    // we read the pool address directly off WEB3_CONFIG here so consumers that
+    // call getChainConfig get something useful.
+    return {
+      chain,
+      networkMode,
+      isMainnet: networkMode === 'mainnet',
+      isTestnet: networkMode === 'testnet',
+      chainId: networkMode === 'mainnet' ? 999 : 998,
+      contractAddress: WEB3_CONFIG.CTGTRESOR_HYPER_CONTRACT,
+      rpcUrl: getBestRpcUrl('HYPER'),
+      etherscanUrl: getEtherscanUrl('HYPER'),
+      nativeCurrency: {
+        name: 'HYPE',
+        symbol: 'HYPE',
+        decimals: 18
+      }
+    };
+  }
+
   throw new Error(`Unsupported chain: ${chain}`);
 };

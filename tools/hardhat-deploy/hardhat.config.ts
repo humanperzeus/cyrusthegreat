@@ -16,13 +16,20 @@ const {
   SEPOLIA_RPC_URL = "",
   BSC_TESTNET_RPC_URL = "",
   BASE_SEPOLIA_RPC_URL = "",
-  SEPOLIA_PRIVATE_KEY = "",                  // deployer privkey (Sepolia-only — see workflow_rules.md Rule 10)
+  HYPER_TESTNET_RPC_URL = "https://rpc.hyperliquid-testnet.xyz/evm",
+  SEPOLIA_PRIVATE_KEY = "",                  // deployer privkey (testnet-only burner per Rule 10)
+  HYPER_TESTNET_PRIVATE_KEY = "",            // optional dedicated HyperEVM burner (separate from Sepolia)
   ETHERSCAN_API_KEY = "",
   BSCSCAN_API_KEY = "",
   BASESCAN_API_KEY = "",
 } = process.env;
 
 const accounts = SEPOLIA_PRIVATE_KEY ? [SEPOLIA_PRIVATE_KEY] : [];
+// HyperEVM accepts a SEPARATE burner if HYPER_TESTNET_PRIVATE_KEY is set,
+// otherwise falls back to the shared Sepolia burner. Either way: testnet-only.
+const hyperAccounts = HYPER_TESTNET_PRIVATE_KEY
+  ? [HYPER_TESTNET_PRIVATE_KEY]
+  : accounts;
 
 const config: HardhatUserConfig = {
   // Bumped to 0.8.27 to safely cover CyrusTresor1's pragma ^0.8.20 (Bank8 base
@@ -63,6 +70,15 @@ const config: HardhatUserConfig = {
       url: BASE_SEPOLIA_RPC_URL,
       accounts,
       chainId: 84532,
+    },
+    // HyperEVM Testnet (Hyperliquid). No Chainlink HYPE/USD feed exists on this
+    // chain yet, so deploys use a MockV3Aggregator from contracts/evm/mocks/ —
+    // deployed via scripts/deployMockPriceFeed.ts ahead of CyrusTresor1.
+    // Block explorer: https://testnet.purrsec.com/
+    hyperEvmTestnet: {
+      url: HYPER_TESTNET_RPC_URL,
+      accounts: hyperAccounts,
+      chainId: 998,
     },
   },
 

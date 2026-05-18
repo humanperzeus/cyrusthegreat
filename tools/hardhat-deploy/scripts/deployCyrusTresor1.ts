@@ -35,6 +35,13 @@ const PRICE_FEEDS: Record<string, string> = {
   sepolia:     "0x694AA1769357215DE4FAC081bf1f309aDC325306", // Sepolia ETH/USD
   bscTestnet:  "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526", // BSC Testnet BNB/USD
   baseSepolia: "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1", // Base Sepolia ETH/USD
+  // HyperEVM Testnet: no Chainlink HYPE/USD feed exists. Must deploy
+  // MockV3Aggregator via scripts/deployMockPriceFeed.ts FIRST, then either:
+  //   (a) paste the deployed mock address here, OR
+  //   (b) set PRICE_FEED_OVERRIDE=<mock-addr> in your shell when running
+  //       this script. The env override takes precedence over the map.
+  // Empty string = unset; the script will fail loudly until one path is filled.
+  hyperEvmTestnet: "",
 };
 
 // Known testnet ERC-20s per chain (must match .env entries used by frontend).
@@ -48,6 +55,9 @@ const TOKENS: Record<string, { addr: string; symbol: string }[]> = {
   ],
   bscTestnet:  [{ addr: ZERO, symbol: "tBNB" }],
   baseSepolia: [{ addr: ZERO, symbol: "ETH" }],
+  // HyperEVM testnet — native HYPE only for v1.  ERC-20s (USDC/USDT analogs)
+  // can be added once we identify their canonical testnet addresses.
+  hyperEvmTestnet: [{ addr: ZERO, symbol: "HYPE" }],
 };
 
 // Bucket schedules per (network, symbol). Sizes are in HUMAN units (e.g. "0.01"
@@ -61,6 +71,9 @@ const BUCKETS: Record<string, Record<string, string[]>> = {
   },
   bscTestnet:  { tBNB: ["0.005", "0.05", "0.5", "5"] },
   baseSepolia: { ETH:  ["0.001", "0.01", "0.1", "1.0"] },
+  // HYPE buckets — picked to give a comparable USD spread to ETH at $40 HYPE
+  // (≈ $0.04 / $0.4 / $4 / $40). Adjust as testnet usage informs real sizes.
+  hyperEvmTestnet: { HYPE: ["0.001", "0.01", "0.1", "1.0"] },
 };
 
 // --------------------------------------------------------------------
@@ -92,12 +105,21 @@ function envOr(name: string, fallback?: string): string | undefined {
 async function main() {
   // Resolve config for the active network.
   const netName = network.name;
-  const priceFeed = PRICE_FEEDS[netName];
+  // PRICE_FEED_OVERRIDE env wins over the map. Use case: HyperEVM testnet,
+  // where the operator first runs deployMockPriceFeed.ts, captures the mock
+  // address, then exports it here without editing source.
+  const priceFeed = envOr("PRICE_FEED_OVERRIDE") || PRICE_FEEDS[netName];
   const tokens = TOKENS[netName];
   const bucketsByToken = BUCKETS[netName];
   if (!priceFeed || !tokens || !bucketsByToken) {
     throw new Error(
-      `No deploy config for network "${netName}". Add an entry to PRICE_FEEDS/TOKENS/BUCKETS in scripts/deployCyrusTresor1.ts.`,
+      `No deploy config for network "${netName}". Add an entry to PRICE_FEEDS/TOKENS/BUCKETS in scripts/deployCyrusTresor1.ts, OR set PRICE_FEED_OVERRIDE (for chains with no live Chainlink feed).`,
+    );
+  }
+  // Sanity check on the resolved address — refuses zero or malformed hex.
+  if (!/^0x[a-fA-F0-9]{40}$/.test(priceFeed)) {
+    throw new Error(
+      `Resolved priceFeed is not a 20-byte address: "${priceFeed}". Set PRICE_FEED_OVERRIDE to the MockV3Aggregator address you just deployed (HyperEVM-style chains), or fill PRICE_FEEDS["${netName}"].`,
     );
   }
 

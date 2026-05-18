@@ -75,9 +75,16 @@ that turns the verified testnet code into a real product.
   in tech_learnings.md L-006 lessons. ~1w design + 2-3w dev + audit delta. Adds real
   privacy WITHOUT requiring ZK.
 
-- [P2] **HyperEVM 4th chain deploy.** Cheap gas + 1s blocks. Differentiation. Per
-  earlier strategy discussion: 1 day of work (add to hardhat config, deploy, verify,
-  add to UI). Independent of mainnet decision.
+- [P2] **HyperEVM 4th chain deploy — 90% built 2026-05-19, pending operator deploy.**
+  Frontend (chain switcher with `tHYPE` button, wagmi config, contract slot,
+  POOL_TOKENS_BY_CHAIN[998], all consumers widened) is done. Hardhat config has
+  `hyperEvmTestnet` (chainId 998), `scripts/deployMockPriceFeed.ts` deploys a
+  testnet-only MockV3Aggregator with HYPE/USD pegged to $40, `scripts/deployCyrusTresor1.ts`
+  supports `PRICE_FEED_OVERRIDE` env for the mock address. Step-by-step runbook
+  at `docs/HYPEREVM_DEPLOY_RUNBOOK.md`. Operator action remaining: fund HyperEVM
+  testnet burner from faucet → run the two deploys → paste contract address into
+  `.env` → sync to Cloudflare. After that, verify by clicking `tHYPE` → committing
+  0.001 HYPE → revealing after one epoch.
 
 - [P3] **Yield-bearing pool wrapper** (Aave v3 USDC pool). Parked capital earns 3-5%
   APY; spread between earned APY and what's returned to user → fee_collector. SEPARATE
