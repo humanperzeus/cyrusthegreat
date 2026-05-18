@@ -24,7 +24,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useReadContract, useReadContracts } from 'wagmi';
-import { parseUnits, formatUnits, type Address, type Hex } from 'viem';
+import { parseUnits, formatUnits, erc20Abi, type Address, type Hex } from 'viem';
 import CyrusTresor1Artifact from '@/contracts/abis/CyrusTresor1.json';
 import { WEB3_CONFIG } from '@/config/web3';
 import {
@@ -39,6 +39,29 @@ const CTGTRESOR_ABI = (CyrusTresor1Artifact as { abi: readonly unknown[] }).abi;
 
 // Notebook persistence key — versioned so future schema changes don't clobber.
 const NOTEBOOK_KEY = 'ctg.tresor1.commits.v1';
+
+/** Sentinel for native (ETH/BNB) — must match the contract's address(0) check. */
+export const NATIVE_TOKEN_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
+
+/** Tokens shown in the pool UI per chain. Native first. Decimals hardcoded for
+ *  known tokens — for unknown tokens, use useTokenDecimals(token) to read on-chain. */
+export interface PoolTokenEntry { address: Address; symbol: string; decimals: number; }
+export const POOL_TOKENS_BY_CHAIN: Record<number, PoolTokenEntry[]> = {
+  // Sepolia (current deploy has ETH+USD1+WLFI configured; WLFI hidden in UI per
+  // 2026-05-18 stablecoin-only UX decision — can re-enable by adding it back here).
+  11155111: [
+    { address: NATIVE_TOKEN_ADDRESS, symbol: 'ETH',  decimals: 18 },
+    { address: '0xD649712915595bcE7A4BA3a821C64850853FcD02', symbol: 'USD1', decimals: 18 },
+  ],
+  97: [
+    { address: NATIVE_TOKEN_ADDRESS, symbol: 'tBNB', decimals: 18 },
+  ],
+  84532: [
+    { address: NATIVE_TOKEN_ADDRESS, symbol: 'ETH',  decimals: 18 },
+  ],
+  // Mainnet entries will be added during the mainnet deploy per
+  // MAINNET_DEPLOY_CHECKLIST.md (ETH, USDC=6dec, USDT=6dec, USD1).
+};
 
 /** A notebook entry = a claim + on-chain metadata + state. */
 export interface NotebookEntry {
@@ -114,6 +137,13 @@ export interface UsePoolHook {
 
   /** Clear the entire notebook. DESTRUCTIVE: unrevealed commits become unrecoverable. */
   clearNotebook: () => void;
+
+  /** ERC-20 token approval — sets allowance(user, contract) to `amount`. No-op
+   *  for native token (returns immediately). Throws if disabled. */
+  approveToken: (args: { token: Address; amount: bigint }) => Promise<{ txHash: Hex }>;
+
+  /** State flag for the approve flow */
+  isApproving: boolean;
 }
 
 export const usePool = (): UsePoolHook => {
@@ -125,6 +155,7 @@ export const usePool = (): UsePoolHook => {
   const [notebook, setNotebook] = useState<NotebookEntry[]>(_loadNotebook);
   const [isCommitting, setIsCommitting] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
 
   // Sync state ↔ localStorage when other tabs / windows modify it
@@ -161,14 +192,12 @@ export const usePool = (): UsePoolHook => {
 
       // Native vs ERC-20 distinction:
       //  - native (address(0)): msg.value = bucketSize + fee
-      //  - erc20:                msg.value = fee only; tokens pulled via transferFrom
-      const isNative = token === '0x0000000000000000000000000000000000000000';
+      //  - erc20:                msg.value = fee only; tokens pulled via transferFrom.
+      //    Allowance MUST be set ≥ bucketSize via approveToken() BEFORE calling commit().
+      //    The CommitForm UI enforces this via the live useTokenAllowance hook;
+      //    if a caller bypasses it, the on-chain transferFrom will revert.
+      const isNative = token === NATIVE_TOKEN_ADDRESS;
       const value = isNative ? bucketSize + feeWei : feeWei;
-      if (!isNative) {
-        // TODO: add ERC-20 approve() handling here before the commitToPool call.
-        // For scaffold, raise clearly so a caller knows they need to approve first.
-        throw new Error('ERC-20 pool deposits require allowance setup — TODO in a later commit');
-      }
 
       const txHash = (await writeContractAsync({
         address: contractAddress as Address,
@@ -300,6 +329,36 @@ export const usePool = (): UsePoolHook => {
     setNotebook([]);
   }, []);
 
+  const approveToken: UsePoolHook['approveToken'] = useCallback(async ({ token, amount }) => {
+    _requireEnabled();
+    if (token === NATIVE_TOKEN_ADDRESS) {
+      throw new Error('Native token does not require approval');
+    }
+    setIsApproving(true);
+    setLastError(null);
+    try {
+      const txHash = (await writeContractAsync({
+        address: token,
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [contractAddress as Address, amount],
+      })) as Hex;
+      // Wait for confirmation so subsequent allowance reads reflect the new value.
+      // Without this, the UI's useTokenAllowance might still show old value when
+      // the user clicks Commit immediately after Approve.
+      if (publicClient) {
+        try { await publicClient.waitForTransactionReceipt({ hash: txHash }); } catch { /* fall through */ }
+      }
+      return { txHash };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setLastError(msg);
+      throw e;
+    } finally {
+      setIsApproving(false);
+    }
+  }, [_requireEnabled, writeContractAsync, contractAddress, publicClient]);
+
   const pendingNotebook = notebook.filter((e) => !e.spent);
 
   return {
@@ -309,11 +368,13 @@ export const usePool = (): UsePoolHook => {
     pendingNotebook,
     isCommitting,
     isRevealing,
+    isApproving,
     lastError,
     commit,
     reveal,
     revealFromURL,
     clearNotebook,
+    approveToken,
   };
 };
 
@@ -366,6 +427,38 @@ export function usePoolCurrentFee(): { feeWei: bigint | undefined; isLoading: bo
     query: { enabled: !!addr && WEB3_CONFIG.ENABLE_POOL, staleTime: 30_000 },
   });
   return { feeWei: data as bigint | undefined, isLoading };
+}
+
+/** Read the current allowance(owner, spender) for an ERC-20 token.
+ *  Returns 2^256-1 (effectively infinite) for the native sentinel so callers
+ *  can use the same comparison logic uniformly. */
+export function useTokenAllowance(token: Address | undefined, owner: Address | undefined): { allowance: bigint; isLoading: boolean; refetch: () => void } {
+  const chainId = useChainId();
+  const spender = contractAddressForChain(chainId);
+  const isNative = token === NATIVE_TOKEN_ADDRESS;
+  const { data, isLoading, refetch } = useReadContract({
+    address: isNative ? undefined : token,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: owner && spender ? [owner, spender] : undefined,
+    query: { enabled: !!owner && !!spender && !!token && !isNative && WEB3_CONFIG.ENABLE_POOL, refetchInterval: 8_000 },
+  });
+  const allowance = isNative
+    ? (2n ** 256n - 1n)
+    : ((data as bigint | undefined) ?? 0n);
+  return { allowance, isLoading, refetch: () => { refetch(); } };
+}
+
+/** Read ERC-20 decimals() on-chain. Returns 18 for native sentinel without an RPC call. */
+export function useTokenDecimals(token: Address | undefined): { decimals: number; isLoading: boolean } {
+  const isNative = token === NATIVE_TOKEN_ADDRESS;
+  const { data, isLoading } = useReadContract({
+    address: isNative ? undefined : token,
+    abi: erc20Abi,
+    functionName: 'decimals',
+    query: { enabled: !!token && !isNative, staleTime: Infinity },
+  });
+  return { decimals: isNative ? 18 : ((data as number | undefined) ?? 18), isLoading };
 }
 
 /** Read the current epoch number from the contract. */

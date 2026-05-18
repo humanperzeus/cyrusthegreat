@@ -2,35 +2,37 @@
  * CommitForm — depositor-side flow for the CyrusTresor1 anonymity pool.
  *
  * UX:
- *   1. User picks a bucket size (from the on-chain schedule)
- *   2. Sets withdrawTo (their own address by default; can paste any address
+ *   1. User picks a token (ETH or stablecoin per POOL_TOKENS_BY_CHAIN)
+ *   2. User picks a bucket size (from the on-chain schedule for that token)
+ *   3. Sets withdrawTo (their own address by default; can paste any address
  *      including a recipient for the teleport-to-someone-else flow)
- *   3. Reviews the cost (bucketSize + dynamicFee) and the eligible epoch
- *   4. Clicks Commit → Rabby pops up → tx submits
- *   5. After confirmation, the form shows the tx link + the claim URL
+ *   4. Reviews the cost (bucketSize + dynamicFee) and the eligible epoch
+ *   5. For ERC-20 tokens: if allowance < bucketSize, Approve button shows
+ *      → Rabby pops up → approve tx confirms → Commit button enables
+ *   6. Clicks Commit → Rabby pops up → tx submits
+ *   7. After confirmation, the form shows the tx link + the claim URL
  *      they can share with the recipient via Signal/QR/email
- *
- * Native (ETH/BNB) only for now. ERC-20 buckets are deferred until the
- * approve() flow is implemented in usePool.
  */
 
 import { useState, useMemo } from "react";
 import { useAccount } from "wagmi";
-import { formatEther, type Address } from "viem";
+import { formatUnits, type Address } from "viem";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, ExternalLink, Copy, Check, AlertTriangle } from "lucide-react";
+import { Lock, ExternalLink, Copy, Check, AlertTriangle, ShieldCheck } from "lucide-react";
 import {
   usePool,
   usePoolBucketSizes,
   usePoolCurrentFee,
   usePoolCurrentEpoch,
+  useTokenAllowance,
+  POOL_TOKENS_BY_CHAIN,
+  NATIVE_TOKEN_ADDRESS,
+  type PoolTokenEntry,
 } from "@/hooks/usePool";
 import { ClaimQR } from "@/components/pool/ClaimQR";
-
-const NATIVE_TOKEN: Address = "0x0000000000000000000000000000000000000000";
 
 interface CommitFormProps {
   activeChain: "ETH" | "BSC" | "BASE";
@@ -43,12 +45,35 @@ const explorerForChain = (chain: "ETH" | "BSC" | "BASE", txHash: string): string
   return "#";
 };
 
+// Map UI chain label to numeric chainId so we can resolve POOL_TOKENS_BY_CHAIN.
+const CHAIN_ID_FOR: Record<"ETH" | "BSC" | "BASE", number> = { ETH: 11155111, BSC: 97, BASE: 84532 };
+
 export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const { address: account, isConnected } = useAccount();
-  const { commit, isCommitting, lastError, contractAddress } = usePool();
-  const { sizes: bucketSizes, isLoading: loadingBuckets } = usePoolBucketSizes(NATIVE_TOKEN);
+  const { commit, approveToken, isCommitting, isApproving, lastError, contractAddress } = usePool();
+
+  // Available tokens for the active chain (filtered to pool-supported ones).
+  // Defaults to the first entry (native), but user can switch.
+  const availableTokens: PoolTokenEntry[] = POOL_TOKENS_BY_CHAIN[CHAIN_ID_FOR[activeChain]] ?? [];
+  const [selectedToken, setSelectedToken] = useState<PoolTokenEntry | undefined>(undefined);
+
+  // Sync selectedToken to the first available when chain changes
+  useMemo(() => {
+    if (availableTokens.length === 0) { setSelectedToken(undefined); return; }
+    if (!selectedToken || !availableTokens.some((t) => t.address === selectedToken.address)) {
+      setSelectedToken(availableTokens[0]);
+    }
+  }, [availableTokens, selectedToken]);
+
+  const token = selectedToken?.address ?? NATIVE_TOKEN_ADDRESS;
+  const tokenDecimals = selectedToken?.decimals ?? 18;
+  const tokenSymbol = selectedToken?.symbol ?? "ETH";
+  const isNative = token === NATIVE_TOKEN_ADDRESS;
+
+  const { sizes: bucketSizes, isLoading: loadingBuckets } = usePoolBucketSizes(token);
   const { feeWei, isLoading: loadingFee } = usePoolCurrentFee();
   const { epoch: currentEpoch } = usePoolCurrentEpoch();
+  const { allowance, refetch: refetchAllowance } = useTokenAllowance(token, account);
 
   const [bucketIdx, setBucketIdx] = useState<number>(0);
   const [withdrawTo, setWithdrawTo] = useState<string>("");
@@ -61,31 +86,59 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
     if (!withdrawTo && account) setWithdrawTo(account);
   }, [account, withdrawTo]);
 
+  // Reset bucketIdx when token changes (different schedules may have fewer buckets)
+  useMemo(() => { setBucketIdx(0); }, [token]);
+
   const bucketSize = bucketSizes[bucketIdx];
   const nativeSymbol = activeChain === "BSC" ? "tBNB" : "ETH";
 
-  const totalWei = bucketSize != null && feeWei != null ? bucketSize + feeWei : undefined;
+  // Native: fee + bucketSize go via msg.value. ERC-20: only fee via msg.value;
+  // bucketSize is pulled by the contract via transferFrom (requires allowance).
+  const totalNativeWei = bucketSize != null && feeWei != null
+    ? (isNative ? bucketSize + feeWei : feeWei)
+    : undefined;
   const eligibleEpoch = currentEpoch != null ? currentEpoch + 1 : undefined;
   const eligibleAtMs = eligibleEpoch != null ? eligibleEpoch * 3600 * 1000 : undefined;
 
   const withdrawToValid = /^0x[a-fA-F0-9]{40}$/.test(withdrawTo);
-  const canSubmit =
-    isConnected && contractAddress && bucketSize != null && feeWei != null && withdrawToValid && !isCommitting;
+  const needsApproval = !isNative && bucketSize != null && allowance < bucketSize;
+
+  const canApprove =
+    isConnected && contractAddress && !isNative && bucketSize != null && !isApproving && needsApproval;
+  const canCommit =
+    isConnected &&
+    contractAddress &&
+    bucketSize != null &&
+    feeWei != null &&
+    withdrawToValid &&
+    !isCommitting &&
+    !needsApproval;
+
+  const handleApprove = async () => {
+    if (!canApprove || bucketSize == null) return;
+    try {
+      await approveToken({ token, amount: bucketSize });
+      // After mining, wagmi's useReadContract polls; nudge it for instant UX.
+      refetchAllowance();
+    } catch (e) {
+      // hook recorded lastError
+    }
+  };
 
   const handleCommit = async () => {
-    if (!canSubmit || bucketSize == null || feeWei == null) return;
+    if (!canCommit || bucketSize == null || feeWei == null) return;
     setResult(null);
     try {
       const { txHash, claimURL } = await commit({
         withdrawTo: withdrawTo as Address,
-        token: NATIVE_TOKEN,
+        token,
         bucketIdx,
         bucketSize,
         feeWei,
       });
       setResult({ txHash, claimURL });
     } catch (e) {
-      // commit() already records lastError; nothing else to do
+      // commit() already records lastError
     }
   };
 
@@ -121,6 +174,29 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         <h3 className="text-base font-semibold">Commit to Anonymity Pool</h3>
       </div>
 
+      {/* Token picker (shows only if >1 token is available on this chain) */}
+      {availableTokens.length > 1 && (
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">Token</Label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {availableTokens.map((t) => (
+              <button
+                key={t.address}
+                type="button"
+                onClick={() => setSelectedToken(t)}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors border ${
+                  selectedToken?.address === t.address
+                    ? "bg-primary/20 border-primary/40 text-foreground"
+                    : "bg-card/50 border-border/40 text-muted-foreground hover:border-border"
+                }`}
+              >
+                {t.symbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Bucket picker */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Bucket size</Label>
@@ -141,7 +217,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
                     : "bg-card/50 border-border/40 text-muted-foreground hover:border-border"
                 }`}
               >
-                {formatEther(size)} {nativeSymbol}
+                {formatUnits(size, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
               </button>
             ))}
           </div>
@@ -183,15 +259,22 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         <div className="rounded-md border border-border/40 bg-card/50 p-3 space-y-1.5 text-xs font-mono">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Bucket size:</span>
-            <span>{formatEther(bucketSize)} {nativeSymbol}</span>
+            <span>{formatUnits(bucketSize, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Dynamic fee:</span>
-            <span>{formatEther(feeWei)} {nativeSymbol}</span>
+            <span>{formatUnits(feeWei, 18)} {nativeSymbol}</span>
           </div>
           <div className="flex justify-between border-t border-border/40 pt-1.5 mt-1.5">
-            <span>Total sent:</span>
-            <span className="font-semibold">{totalWei != null ? formatEther(totalWei) : "—"} {nativeSymbol}</span>
+            <span>{isNative ? "Total sent:" : "msg.value (fee only):"}</span>
+            <span className="font-semibold">
+              {totalNativeWei != null ? formatUnits(totalNativeWei, 18) : "—"} {nativeSymbol}
+              {!isNative && (
+                <span className="block text-muted-foreground font-normal text-[10px] mt-0.5">
+                  + {formatUnits(bucketSize, tokenDecimals)} {tokenSymbol} pulled via transferFrom
+                </span>
+              )}
+            </span>
           </div>
           {eligibleAtMs != null && (
             <div className="flex justify-between text-muted-foreground pt-1.5 border-t border-border/40 mt-1.5">
@@ -202,14 +285,38 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         </div>
       )}
 
-      {/* Action */}
+      {/* Allowance status row — only relevant for ERC-20 tokens */}
+      {!isNative && bucketSize != null && (
+        <div className="rounded-md border border-border/30 bg-card/30 px-3 py-2 text-xs font-mono flex items-center gap-2">
+          <ShieldCheck className={`w-3.5 h-3.5 ${needsApproval ? 'text-yellow-500' : 'text-emerald-400'}`} />
+          <span className="text-muted-foreground">Allowance:</span>
+          <span className={needsApproval ? "text-yellow-200" : "text-emerald-200"}>
+            {formatUnits(allowance, tokenDecimals)} {tokenSymbol}
+          </span>
+          {needsApproval && (
+            <span className="text-yellow-200/70 ml-auto">need ≥ {formatUnits(bucketSize, tokenDecimals)}</span>
+          )}
+        </div>
+      )}
+
+      {/* Action button(s) — Approve when allowance insufficient, else Commit */}
+      {!isNative && needsApproval ? (
+        <Button
+          onClick={handleApprove}
+          disabled={!canApprove}
+          className="w-full bg-primary hover:bg-primary/90"
+        >
+          {isApproving ? "Approving…" : !isConnected ? "Connect wallet first" : `Approve ${formatUnits(bucketSize!, tokenDecimals)} ${tokenSymbol}`}
+        </Button>
+      ) : (
       <Button
         onClick={handleCommit}
-        disabled={!canSubmit}
+        disabled={!canCommit}
         className="w-full bg-primary hover:bg-primary/90"
       >
         {isCommitting ? "Committing…" : !isConnected ? "Connect wallet first" : !withdrawToValid ? "Enter a valid recipient address" : "Commit"}
       </Button>
+      )}
 
       {/* Error surface */}
       {lastError && !result && (
