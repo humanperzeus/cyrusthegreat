@@ -207,31 +207,35 @@ export const getEtherscanUrl = (chain: 'ETH' | 'BSC' | 'BASE') => {
 };
 
 // Chain Switcher Utility Functions
+//
+// Replaced the original `connectMetaMaskTo*` helpers with wagmi's imperative
+// switchChain() action. The original helpers called `window.ethereum.request`
+// directly, which silently fails when the wallet is connected via WalletConnect
+// (Reown AppKit's default) — the active session goes through a relay, NOT
+// through window.ethereum. Symptom: clicking tBSC/tBASE in the dapp's chain
+// selector did nothing (no popup, no error, silent no-op). Diagnosed 2026-05-18.
+//
+// wagmi's switchChain() routes through the active connector so it works for
+// injected wallets (MetaMask-direct) AND WalletConnect-connected wallets
+// (Rabby via Reown).
 export const switchToChain = async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
   const networkMode = WEB3_CONFIG.NETWORK_MODE;
-  
+  // Dynamic imports so this file doesn't take on a top-level dependency on the
+  // wagmi config (avoids circular import — wagmi.ts itself imports from web3.ts).
+  const { switchChain } = await import('@wagmi/core');
+  const { config } = await import('@/lib/wagmi');
+  const { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia } = await import('wagmi/chains');
+
+  const chainIdMap = {
+    ETH: networkMode === 'mainnet' ? mainnet.id : sepolia.id,
+    BSC: networkMode === 'mainnet' ? bsc.id : bscTestnet.id,
+    BASE: networkMode === 'mainnet' ? base.id : baseSepolia.id,
+  } as const;
+
+  const chainId = chainIdMap[targetChain];
   try {
-    if (targetChain === 'ETH') {
-      if (networkMode === 'mainnet') {
-        await connectMetaMaskToEthMainnet();
-      } else {
-        await connectMetaMaskToEthTestnet();
-      }
-    } else if (targetChain === 'BSC') {
-      if (networkMode === 'mainnet') {
-        await connectMetaMaskToBscMainnet();
-      } else {
-        await connectMetaMaskToBscTestnet();
-      }
-    } else if (targetChain === 'BASE') {
-      if (networkMode === 'mainnet') {
-        await connectMetaMaskToBaseMainnet();
-      } else {
-        await connectMetaMaskToBaseTestnet();
-      }
-    }
-    
-    debugLog(`✅ Successfully switched to ${targetChain} ${networkMode}`);
+    await switchChain(config, { chainId });
+    debugLog(`✅ Successfully switched to ${targetChain} ${networkMode} (chainId ${chainId})`);
     return true;
   } catch (error) {
     debugError(`❌ Failed to switch to ${targetChain} ${networkMode}:`, error);
