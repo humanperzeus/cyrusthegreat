@@ -4,11 +4,11 @@
 **Stack:** Vite + React 18 + TypeScript, Tailwind + shadcn/ui, Wagmi + Viem + Reown AppKit. Solidity ^0.8.20 + OpenZeppelin (EVM). Anchor (Solana, written, not integrated).
 **Repo:** `/Users/humank/Downloads/DEVELOPMENT/CYRUS/cyrusthegreat`
 **Live URL:** https://cyrusthegreat.dev (Cloudflare Pages)
-**Last updated:** 2026-05-17
+**Last updated:** 2026-05-19
 
-## Where we stand (as of 2026-05-17, verified — not from memory)
+## Where we stand (as of 2026-05-19, verified — not from memory)
 
-- **Live in production at cyrusthegreat.dev** (verified end-to-end 2026-05-09; unchanged 2026-05-17):
+- **Live in production at cyrusthegreat.dev** (verified end-to-end 2026-05-09; unchanged 2026-05-19):
   - Frontend bundle: `/assets/index-DG1Do22v.js` (latest), 958 KB
   - **Talks to CrossChainBank8** at:
     - Sepolia: `0xb83A814097C70dB79568b663662eA07e77D4D87a`  ← live deposit tx confirmed by user 2026-05-09
@@ -19,14 +19,25 @@
   - Deploy mechanism: Cloudflare Pages auto-deploy on push to main. Env vars in dashboard. `tools/cf-sync-env.sh` (alias `ctg-sync-env`) syncs `.env` → Cloudflare in one command.
   - All Alchemy / Ankr / Etherscan API keys rotated 2026-05-09 after security incident; new keys verified working via debug-UI API health check.
   - **Still no mainnet deployment on any chain.** All `_MAINNET_CONTRACT` slots are `notdeployednow`.
-- **Local `main` branch:**
-  - 80 commits ahead / 61 behind `origin/main` (last rebase reference: `5eb421d v1.17.4`). Heavy divergence from the rewritten origin/main; **do NOT push** until divergence is sorted. Today's 2 new commits (`d7f1f10`, `bc6fac1`) sit on top of the unpushed Portal-experimentation stack.
-  - Uncommitted in working tree (out-of-scope for current session): Portal fee-model edits (`contracts/evm/CyrusPortal11.sol`, `src/components/portal/PortalInterface.tsx`, `src/contracts/abis/CyrusPortal11.json`), plus minor edits to BRAIN.md / TODO.md / `.env.production` deletion.
-  - Already promoted: **CrossChainBank8** is what cyrusthegreat.dev serves (see "Live" section above). Local main does NOT need a separate "promote Bank8" step — that landed via the 2026-05-09 origin rewrite.
-- **Other branches:** `backup` is **HISTORICAL only** (was live-matching pre-Portal, before the Bank8 promotion). Do not use as live reference. `solana-reown-integration` (status unknown, not investigated).
-- **Active priorities:** see [TODO.md](TODO.md)
+- **Local `main` branch:** RESET 2026-05-19. Now matches `origin/main` exactly (0 ahead / 0 behind, HEAD `be8d247`). The previous 86-commits-ahead Portal-experimentation stack is preserved on the `portal-experiment-2025-08` local-only branch (HEAD `cdf86df`). Recovery line if needed: `git reset --hard portal-experiment-2025-08`.
+- **`sync-2026-05-13` branch:** on `origin/sync-2026-05-13` since 2026-05-17. 44+ single-intent commits carrying everything since the methodology scaffold: contract source (Bank8 + CyrusTresor1), spec, Foundry suite, hardhat-deploy pipeline, full pool frontend (commit/reveal/notebook/claim/QR/ChainSwitcher/decimal-aware display), deploy records, mainnet checklist, audit RFP. **This is the forward direction** — main eventually merges this when audit + legal preconditions land.
+- **Other branches:** `backup` is **HISTORICAL only** (live-matching pre-Portal). `portal-experiment-2025-08` is the archive of the divergence sort-out. `solana-reown-integration` (status unknown, not investigated). `sync-2026-05-13-pre-scrub` is a local-only backup ref from the 2026-05-17 secret-scrub.
+- **Active priorities:** see [TODO.md](TODO.md) — restructured 2026-05-19 around mainnet roadmap.
 
-## Recent context (this session, 2026-05-13)
+## Recent context (this session, 2026-05-19)
+
+- **Local-main divergence resolved.** 86-ahead/61-behind state cleared via `git reset --hard origin/main` after archiving the Portal-experimentation stack to a `portal-experiment-2025-08` branch. Main is now clean and reproducible.
+- **TODO.md hygiene pass.** Closed 10 resolved items from 2026-05-08 (Bank8 promotion, Portal11 bugs superseded by CyrusTresor1, hardhat-deploy recovery). Restructured ACTIVE PRIORITIES around the mainnet roadmap (audit / foundation / multisig as the gating P0s).
+- **Decimal-aware display.** Notebook + Claim now use `formatUnits(amount, decimals)` instead of `formatEther`. Mainnet-ready for USDC/USDT (6 decimals). No visual change on Sepolia where USD1 is 18-decimal.
+- **v1 chain switcher fix (Reown/WalletConnect compat).** The original `metamask.js` helpers called `window.ethereum.request` directly — silently no-op under WalletConnect. Replaced with wagmi's imperative `switchChain()`. User-verified by depositing+withdrawing 0.1 tBSC on Bank8.
+- **v2 ChainSwitcher** added so users can change chains while in pool mode without bouncing back to v1.
+- **Notebook dedup + `/claim` indexing grace + post-Approve allowance polling.** Three small UX fixes from the on-chain USD1 test session: dedup notebook entries by commitment hash, distinguish "freshly committed, waiting for index" from "truly unknown" on `/claim`, poll allowance() for up to 8s after `approveToken` so the Commit button auto-enables.
+- **AUDIT_RFP.md drafted** (`docs/`, 204 lines) — 1-page proposal request ready to send to Trail of Bits / OpenZeppelin / Spearbit / Consensys / Code4rena once audit budget materializes. Currently on hold (no budget).
+- **CTGANDRAILGUN/ folder deleted.** 35 GB of abandoned RailGun-fork research removed.
+- **CyrusTresor1 verified end-to-end on Sepolia 2026-05-17.** All 4 reveals confirmed via PoolReveal event filter at `0x223E25F961E29AaCc3dB49e5b00B30452D42c65e`: 1 ETH from initial debug-UI ct-7 (`0x14aee5b0…`), 2 ETH from dapp commits (`0x3a51cff0…`, `0xcc0f22f5…`), 1 USD1 from full ERC-20 flow including Approve→Commit→Reveal (`0x1b1d1c2f30…`).
+- **`sync-2026-05-13` pushed to origin.** Same-branch, no force, never touched origin/main. Pre-push secret-scrub via `git filter-repo --replace-text` removed an Alchemy key suffix that was accidentally documented in a session log.
+
+## Recent context (2026-05-13)
 
 - **Bank8 fully verified 12/12 on Sepolia** via the debug UI (Tests b8-1 → b8-12). Closes the 2026-05-09 open thread "untested Bank8 functions" — `depositToken`, `withdrawToken`, `transferInternalToken`, `transferMultipleTokensInternal`, `collectFees` all confirmed working on real Sepolia transactions. Wallet 1 (`0x8406…691E`) and Wallet 2 (`0xa5f8…892E`) used as sender/recipient.
 - **Debug UI moved into the repo** at `cyrusthegreat/tools/contract-debug/` (was previously outside any git repo at `../tools/contract-debug/`). Now versioned alongside the contracts it tests.
