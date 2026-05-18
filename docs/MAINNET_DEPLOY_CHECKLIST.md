@@ -64,11 +64,18 @@ These are NON-NEGOTIABLE. Skip any and you risk a Roman-Storm-style outcome.
   - Base mainnet ETH/USD: `0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`
   - BSC mainnet BNB/USD: `0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE`
   - Optimism / Arbitrum / Hyperliquid: look up at docs.chain.link
-- [ ] **`poolTokens` + `bucketSchedules`** sized for mainnet economics.
-  Suggested mainnet first deploy (small, conservative — bumps later):
-  - ETH buckets: 0.01 / 0.1 / 1 / 10 ETH (testnet was 0.001-1)
-  - Stablecoin buckets (USDC, USDT, DAI): 100 / 1,000 / 10,000 / 100,000
-  - WLFI / LDO / other governance tokens: depends on token price
+- [ ] **`poolTokens` + `bucketSchedules`** — STABLECOIN-FIRST per the 2026-05-18
+  scope decision. Bucket math is cleanest when amounts are USD-denominated;
+  larger volume per token = larger k-anonymity sets per (bucket × epoch).
+  Suggested mainnet first deploy (small + conservative — can ratchet up later):
+  - **ETH**  buckets 0.01 / 0.1 / 1 / 10 ETH (testnet was 0.001-1; mainnet floor higher to keep dust out of the pool)
+  - **USDC** buckets 100 / 1,000 / 10,000 / 100,000 USDC (mainnet `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` on Ethereum)
+  - **USDT** buckets 100 / 1,000 / 10,000 / 100,000 USDT (mainnet `0xdAC17F958D2ee523a2206206994597C13D831ec7` on Ethereum)
+  - **USD1** buckets 100 / 1,000 / 10,000 / 100,000 USD1 — only if it has real volume on mainnet by deploy time
+  - DEFERRED for v1.0: DAI, FRAX, PYUSD, governance tokens (WLFI/LDO/etc.).
+    Add in v1.1 if user demand emerges. Every additional token = one more
+    array of buckets in the constructor; not a contract change, just a
+    different deploy.
 - [ ] **`zkVerifier`** = `address(0)` for CyrusTresor1 v1; real verifier
   for v2.
 
