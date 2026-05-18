@@ -20,7 +20,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { formatEther } from "viem";
+import { formatUnits } from "viem";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,7 +73,9 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
     for (const entry of notebook) {
       const prev = map.get(entry.commitment);
       if (!prev) { map.set(entry.commitment, entry); continue; }
-      // Merge: prefer whichever has commitTx + revealTx + spent state
+      // Merge: prefer whichever has commitTx + revealTx + spent state.
+      // Also prefer whichever has the new bucketSize/decimals/symbol fields
+      // (added 2026-05-19) so older entries inherit them when present.
       const merged: NotebookEntry = {
         ...prev,
         ...entry,
@@ -81,6 +83,9 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
         revealTx: (entry.revealTx ?? prev.revealTx),
         spent: prev.spent || entry.spent,
         depositEpoch: prev.depositEpoch || entry.depositEpoch,
+        bucketSizeWei: entry.bucketSizeWei ?? prev.bucketSizeWei,
+        tokenDecimals: entry.tokenDecimals ?? prev.tokenDecimals,
+        tokenSymbol: entry.tokenSymbol ?? prev.tokenSymbol,
       };
       map.set(entry.commitment, merged);
     }
@@ -128,9 +133,16 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
           const eligibleEpoch = entry.depositEpoch + 1;
           const eligibleAtMs = eligibleEpoch * 3600 * 1000;
           const msUntil = eligibleAtMs - Date.now();
-          const nativeSymbol = entry.claim.token === "0x0000000000000000000000000000000000000000"
-            ? (activeChain === "BSC" ? "tBNB" : "ETH")
-            : entry.claim.token.slice(0, 6) + "…";
+          // Decimal-aware display: prefer fields stored at commit time
+          // (tokenSymbol + tokenDecimals + bucketSizeWei). Fall back gracefully
+          // for older entries that pre-date these fields.
+          const isNativeToken = entry.claim.token === "0x0000000000000000000000000000000000000000";
+          const displaySymbol = entry.tokenSymbol
+            ?? (isNativeToken ? (activeChain === "BSC" ? "tBNB" : "ETH") : entry.claim.token.slice(0, 6) + "…");
+          const displayDecimals = entry.tokenDecimals ?? 18;
+          const displayAmount = entry.bucketSizeWei
+            ? formatUnits(BigInt(entry.bucketSizeWei), displayDecimals)
+            : null; // null = fall back to "bucket N" label
           const isCurrentChain = entry.claim.chainId === (activeChain === "ETH" ? 11155111 : activeChain === "BSC" ? 97 : 84532);
 
           return (
@@ -158,7 +170,9 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
                   </span>
                 )}
                 <span className="font-mono text-foreground">
-                  bucket {entry.claim.bucketIdx} ({nativeSymbol})
+                  {displayAmount
+                    ? `${displayAmount} ${displaySymbol}`
+                    : `bucket ${entry.claim.bucketIdx} (${displaySymbol})`}
                 </span>
                 <span className="text-muted-foreground">→</span>
                 <span className="font-mono text-muted-foreground" title={entry.claim.withdrawTo}>

@@ -24,12 +24,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount, useChainId, useReadContract } from "wagmi";
-import { type Address } from "viem";
+import { type Address, formatUnits } from "viem";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Lock, ExternalLink, AlertTriangle, Check, ChevronLeft, Clock } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
-import { usePool, usePoolCurrentEpoch } from "@/hooks/usePool";
+import { usePool, usePoolCurrentEpoch, usePoolBucketSizes, useTokenDecimals, POOL_TOKENS_BY_CHAIN, NATIVE_TOKEN_ADDRESS } from "@/hooks/usePool";
 import { decodeTeleportClaim, computeCommitment, type TeleportClaim } from "@/lib/poolURI";
 import CyrusTresor1Artifact from "@/contracts/abis/CyrusTresor1.json";
 
@@ -90,6 +90,23 @@ const Claim = () => {
     query: { enabled: !!claim && WEB3_CONFIG.ENABLE_POOL && isOnRightChain, refetchInterval: 15_000 },
   });
   const { epoch: currentEpoch } = usePoolCurrentEpoch();
+
+  // Fetch the bucket size + token decimals so we can show a decimal-aware
+  // amount ("10 USDC" instead of "bucket 0"). These hooks run unconditionally
+  // for stable hooks-order; `enabled` gates keep them no-op until the claim
+  // is decoded + on the right chain.
+  const { sizes: bucketSizes } = usePoolBucketSizes(claim?.token as Address | undefined);
+  const { decimals: tokenDecimals } = useTokenDecimals(claim?.token as Address | undefined);
+  // Use the per-chain registry if available (most reliable), else fall back to
+  // the on-chain decimals() read above, else default to 18.
+  const registryEntry = claim
+    ? (POOL_TOKENS_BY_CHAIN[claim.chainId] || []).find((t) => t.address.toLowerCase() === claim.token.toLowerCase())
+    : undefined;
+  const displayDecimals = registryEntry?.decimals ?? tokenDecimals;
+  const displaySymbol = registryEntry?.symbol
+    ?? (claim?.token === NATIVE_TOKEN_ADDRESS ? (claim?.chainId === 97 ? "tBNB" : "ETH") : "TOKEN");
+  const bucketWei = claim && bucketSizes.length > claim.bucketIdx ? bucketSizes[claim.bucketIdx] : undefined;
+  const bucketHumanAmount = bucketWei != null ? formatUnits(bucketWei, displayDecimals) : undefined;
 
   const onChainDepositEpoch = commitmentState
     ? Number((commitmentState as readonly [bigint, boolean])[0])
@@ -217,7 +234,9 @@ const Claim = () => {
           <div>
             <h1 className="text-xl font-bold">Pool Claim</h1>
             <p className="text-xs text-muted-foreground">
-              A CyrusTresor1 commit is waiting to be revealed to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span>
+              {bucketHumanAmount
+                ? <>You can claim <span className="text-foreground font-semibold">{bucketHumanAmount} {displaySymbol}</span> to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span></>
+                : <>A CyrusTresor1 commit is waiting to be revealed to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span></>}
             </p>
           </div>
         </div>
@@ -247,8 +266,12 @@ const Claim = () => {
             </span>
           </div>
           <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Bucket index:</span>
-            <span>{claim.bucketIdx}</span>
+            <span className="text-muted-foreground">Amount:</span>
+            <span>
+              {bucketHumanAmount
+                ? `${bucketHumanAmount} ${displaySymbol}`
+                : `bucket ${claim.bucketIdx} (loading…)`}
+            </span>
           </div>
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">Recipient (withdrawTo):</span>

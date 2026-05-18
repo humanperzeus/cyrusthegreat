@@ -77,6 +77,14 @@ export interface NotebookEntry {
   savedAt: string;
   /** Becomes true after a successful reveal */
   spent: boolean;
+  /** Bucket size in wei (token's smallest unit). Stored so display is decimal-aware
+   *  without needing to refetch the schedule. OPTIONAL — older entries from before
+   *  this field was added won't have it; display falls back to "bucket N" then. */
+  bucketSizeWei?: string;
+  /** Token's decimals at commit time. e.g. 18 for ETH/USD1, 6 for USDC/USDT. */
+  tokenDecimals?: number;
+  /** Display symbol at commit time. e.g. "ETH", "USD1", "USDC". */
+  tokenSymbol?: string;
 }
 
 function _loadNotebook(): NotebookEntry[] {
@@ -224,6 +232,13 @@ export const usePool = (): UsePoolHook => {
         // Best effort — if RPC is flaky, notebook can be patched up by re-running ct-1.
       }
 
+      // Look up the token's display metadata from the per-chain registry so we
+      // can render decimal-aware amounts in the notebook + claim URL UI later
+      // (this matters on mainnet where USDC/USDT use 6 decimals — formatEther
+      // would render their amounts as ~1e-12 of expected).
+      const tokenEntry = (POOL_TOKENS_BY_CHAIN[chainId as number] || [])
+        .find((t) => t.address.toLowerCase() === token.toLowerCase());
+
       const entry: NotebookEntry = {
         claim,
         commitment,
@@ -231,6 +246,9 @@ export const usePool = (): UsePoolHook => {
         depositEpoch,
         savedAt: new Date().toISOString(),
         spent: false,
+        bucketSizeWei: bucketSize.toString(),
+        tokenDecimals: tokenEntry?.decimals ?? 18,
+        tokenSymbol: tokenEntry?.symbol ?? (isNative ? "ETH" : "???"),
       };
       const next = [entry, ..._loadNotebook()];
       _saveNotebook(next);
