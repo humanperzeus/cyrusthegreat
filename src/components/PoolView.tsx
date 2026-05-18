@@ -15,9 +15,11 @@ import { Lock, AlertTriangle } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
 import { CommitForm } from "@/components/pool/CommitForm";
 import { Notebook } from "@/components/pool/Notebook";
+import { ChainSwitcher } from "@/components/pool/ChainSwitcher";
 
 interface PoolViewProps {
   activeChain: 'ETH' | 'BSC' | 'BASE';
+  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE') => void;
 }
 
 const contractAddressFor = (chain: 'ETH' | 'BSC' | 'BASE'): string | undefined => {
@@ -27,7 +29,7 @@ const contractAddressFor = (chain: 'ETH' | 'BSC' | 'BASE'): string | undefined =
   return undefined;
 };
 
-export const PoolView = ({ activeChain }: PoolViewProps) => {
+export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
   const contractAddress = contractAddressFor(activeChain);
   const isDeployed = contractAddress && contractAddress !== 'notdeployednow' && contractAddress.startsWith('0x');
   // unused for now — referenced once the address footer is removed; kept for future debug surface
@@ -35,6 +37,13 @@ export const PoolView = ({ activeChain }: PoolViewProps) => {
 
   return (
     <div className="w-full max-w-2xl mx-auto px-4 space-y-4">
+      {/* Chain switcher — same UX as v1's, kept inside v2 so users can change
+          chain without leaving pool mode. Uses the shared switchToChain helper
+          (wagmi-imperative since 2026-05-18 — works for WalletConnect/Reown too). */}
+      <div className="flex justify-center pt-2">
+        <ChainSwitcher activeChain={activeChain} setActiveChain={setActiveChain} />
+      </div>
+
       {/* Header card — mirrors the Secure Vault hero in VaultCore */}
       <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
         <div className="flex items-center gap-3 mb-2">

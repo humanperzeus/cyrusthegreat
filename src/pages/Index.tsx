@@ -256,7 +256,7 @@ const Index = () => {
       )}
 
       {mode === 'v2' && showModeToggle ? (
-        <PoolView activeChain={activeChain} />
+        <PoolView activeChain={activeChain} setActiveChain={setActiveChain} />
       ) : (
       <VaultCore
         walletBalance={walletBalance}
