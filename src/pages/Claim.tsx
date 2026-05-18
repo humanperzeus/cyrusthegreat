@@ -21,16 +21,19 @@
  *  - All ENS / multi-chain warnings clearly surfaced
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAccount, useChainId } from "wagmi";
-import { formatEther } from "viem";
+import { useAccount, useChainId, useReadContract } from "wagmi";
+import { type Address } from "viem";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Lock, ExternalLink, AlertTriangle, Check, ChevronLeft } from "lucide-react";
+import { Lock, ExternalLink, AlertTriangle, Check, ChevronLeft, Clock } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
-import { usePool } from "@/hooks/usePool";
+import { usePool, usePoolCurrentEpoch } from "@/hooks/usePool";
 import { decodeTeleportClaim, computeCommitment, type TeleportClaim } from "@/lib/poolURI";
+import CyrusTresor1Artifact from "@/contracts/abis/CyrusTresor1.json";
+
+const CTGTRESOR_ABI = (CyrusTresor1Artifact as { abi: readonly unknown[] }).abi;
 
 const CHAIN_NAMES: Record<number, { display: string; explorer: string }> = {
   11155111: { display: "Sepolia Testnet", explorer: "https://sepolia.etherscan.io" },
@@ -50,9 +53,11 @@ const Claim = () => {
   const [parseError, setParseError] = useState<string | null>(null);
   const [claim, setClaim] = useState<TeleportClaim | null>(null);
   const [result, setResult] = useState<{ txHash: string } | null>(null);
+  // Tick state for countdown re-renders — declared unconditionally to keep
+  // hooks order stable (React Rules of Hooks: same hooks every render).
+  const [, setTick] = useState(0);
 
-  // Decode the URL hash fragment on mount. window.location.hash includes the
-  // leading '#' — decodeTeleportClaim handles either form.
+  // Decode the URL hash fragment on mount.
   useEffect(() => {
     try {
       const fragment = window.location.hash;
@@ -66,6 +71,52 @@ const Claim = () => {
       setParseError(e instanceof Error ? e.message : String(e));
     }
   }, []);
+
+  // Derived from `claim` — null-safe so we can compute these BEFORE the
+  // early returns. Solves "hooks must run in same order" violation.
+  const computedCommitment = claim ? computeCommitment(claim) : undefined;
+  const claimChainId = claim?.chainId;
+  const claimContract = claim?.contractAddress as Address | undefined;
+  const isOnRightChain = walletChainId === claimChainId;
+
+  // On-chain commitment lookup — gated by enabled flag so it doesn't run
+  // until `claim` is decoded. Always called as a hook (stable order).
+  const { data: commitmentState, isLoading: loadingCommitment, refetch: refetchCommitment } = useReadContract({
+    address: claimContract,
+    abi: CTGTRESOR_ABI,
+    functionName: "commitments",
+    args: computedCommitment ? [computedCommitment] : undefined,
+    chainId: claimChainId,
+    query: { enabled: !!claim && WEB3_CONFIG.ENABLE_POOL && isOnRightChain, refetchInterval: 15_000 },
+  });
+  const { epoch: currentEpoch } = usePoolCurrentEpoch();
+
+  const onChainDepositEpoch = commitmentState
+    ? Number((commitmentState as readonly [bigint, boolean])[0])
+    : undefined;
+  const onChainSpent = commitmentState
+    ? (commitmentState as readonly [bigint, boolean])[1]
+    : undefined;
+  const onChainExists = onChainDepositEpoch !== undefined && onChainDepositEpoch > 0;
+
+  // Derived UI state (computed every render — cheap)
+  type ClaimState = "no-claim" | "loading" | "wrong-chain" | "unknown" | "already-spent" | "wait" | "eligible";
+  const claimState: ClaimState = (() => {
+    if (!claim) return "no-claim";
+    if (!isOnRightChain) return "wrong-chain";
+    if (loadingCommitment || commitmentState === undefined) return "loading";
+    if (!onChainExists) return "unknown";
+    if (onChainSpent) return "already-spent";
+    if (currentEpoch !== undefined && currentEpoch > (onChainDepositEpoch as number)) return "eligible";
+    return "wait";
+  })();
+
+  // Countdown tick — runs only while waiting; stable hooks order regardless.
+  useEffect(() => {
+    if (claimState !== "wait") return;
+    const id = setInterval(() => setTick((t) => t + 1), 10_000);
+    return () => clearInterval(id);
+  }, [claimState]);
 
   // Pool feature gate — refuse to render the claim flow if the build has
   // VITE_ENABLE_POOL=false. Stays parallel to PoolView's same gate.
@@ -110,13 +161,12 @@ const Claim = () => {
     );
   }
 
-  // Sanity-check that the local poolURI computation matches what the user pasted.
-  // If someone hand-edited the URL this would catch typos (though the on-chain
-  // reveal would fail anyway). Useful for debugging.
-  const computedCommitment = computeCommitment(claim);
+  // Derived values used in render (only safe to compute past the !claim early return).
   const chainInfo = CHAIN_NAMES[claim.chainId];
-  const isOnRightChain = walletChainId === claim.chainId;
-  const canClaim = isConnected && isOnRightChain && !isRevealing;
+  const canClaim = isConnected && claimState === "eligible" && !isRevealing;
+  const eligibleEpoch = onChainDepositEpoch !== undefined ? onChainDepositEpoch + 1 : undefined;
+  const eligibleAtMs = eligibleEpoch !== undefined ? eligibleEpoch * 3600 * 1000 : undefined;
+  const msUntil = eligibleAtMs !== undefined ? eligibleAtMs - Date.now() : undefined;
 
   const handleClaim = async () => {
     if (!canClaim) return;
@@ -124,9 +174,20 @@ const Claim = () => {
     try {
       const { txHash } = await revealFromURL(window.location.href);
       setResult({ txHash });
+      // Refresh the on-chain commitment state — should now read spent=true.
+      // Without this, the button would show "Claim" again until next refetch.
+      refetchCommitment();
     } catch (e) {
       // lastError captured by the hook
     }
+  };
+
+  const formatCountdown = (ms: number): string => {
+    if (ms <= 0) return "eligible now";
+    const minutes = Math.floor(ms / 60_000);
+    const seconds = Math.floor((ms % 60_000) / 1_000);
+    if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+    return `${minutes}m ${seconds}s`;
   };
 
   const isNative = claim.token === "0x0000000000000000000000000000000000000000";
@@ -235,23 +296,80 @@ const Claim = () => {
         </Card>
       )}
 
-      {/* Action */}
-      <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
-        <Button onClick={handleClaim} disabled={!canClaim} className="w-full bg-primary hover:bg-primary/90">
-          {isRevealing
-            ? "Claiming…"
-            : !isConnected
-              ? "Connect wallet first"
-              : !isOnRightChain
-                ? `Switch to ${chainInfo?.display ?? `chainId ${claim.chainId}`}`
-                : "Claim"}
-        </Button>
-        <p className="text-xs text-muted-foreground mt-3">
-          You ({account ? <span className="font-mono">{account.slice(0, 8)}…{account.slice(-6)}</span> : "connected wallet"})
-          will pay the gas. The bucket value goes to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span>
-          {" "}— even if that's not you.
-        </p>
-      </Card>
+      {/* Action — state-aware. The button text + enabled status reflect the
+          on-chain commitment state, NOT just wallet connection. Prevents
+          users from paying gas on a "commitment already spent" revert. */}
+      {claimState === "already-spent" ? (
+        <Card className="p-6 bg-emerald-500/5 border-emerald-500/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Check className="w-5 h-5 text-emerald-400" />
+            <p className="font-semibold text-emerald-200">Already claimed</p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            This commitment has been revealed. The bucket was paid to the recipient address shown above.
+            No further action needed.
+          </p>
+          {chainInfo && (
+            <a
+              href={`${chainInfo.explorer}/address/${claim.contractAddress}`}
+              target="_blank" rel="noreferrer noopener"
+              className="inline-flex items-center gap-1 mt-3 text-xs text-primary hover:underline font-mono"
+            >
+              View contract events <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </Card>
+      ) : claimState === "unknown" ? (
+        <Card className="p-6 bg-red-500/5 border-red-500/30">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
+            <div>
+              <p className="font-medium text-red-200">Commitment not found on chain</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                The URL decoded successfully but the contract has no record of this commitment.
+                Possible causes: the URL was tampered with, the commit tx was reverted, or you're
+                pointed at the wrong contract / chain.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : claimState === "wait" ? (
+        <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="w-5 h-5 text-primary" />
+            <p className="font-semibold">Not eligible yet</p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Reveals must wait at least 1 epoch after commit (spec § 4 — anonymity primitive).
+            Eligible in approximately <span className="font-mono text-foreground">{msUntil !== undefined ? formatCountdown(msUntil) : "…"}</span>
+            {eligibleAtMs !== undefined && (
+              <> at <span className="font-mono text-foreground">{new Date(eligibleAtMs).toLocaleString()}</span></>
+            )}.
+          </p>
+          <Button disabled className="w-full bg-primary hover:bg-primary/90 mt-3 opacity-60">
+            Wait {msUntil !== undefined ? formatCountdown(msUntil) : "…"}
+          </Button>
+        </Card>
+      ) : (
+        <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+          <Button onClick={handleClaim} disabled={!canClaim} className="w-full bg-primary hover:bg-primary/90">
+            {isRevealing
+              ? "Claiming…"
+              : claimState === "loading"
+                ? "Checking commitment on chain…"
+                : !isConnected
+                  ? "Connect wallet first"
+                  : claimState === "wrong-chain"
+                    ? `Switch to ${chainInfo?.display ?? `chainId ${claim.chainId}`}`
+                    : "Claim"}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-3">
+            You ({account ? <span className="font-mono">{account.slice(0, 8)}…{account.slice(-6)}</span> : "connected wallet"})
+            will pay the gas. The bucket value goes to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span>
+            {" "}— even if that's not you.
+          </p>
+        </Card>
+      )}
 
       {/* Result */}
       {lastError && !result && (
