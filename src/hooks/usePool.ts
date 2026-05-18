@@ -266,8 +266,16 @@ export const usePool = (): UsePoolHook => {
   const revealFromURL: UsePoolHook['revealFromURL'] = useCallback(async (claimURL) => {
     const claim = decodeTeleportClaim(claimURL);
     const commitment = computeCommitment(claim);
-    // Build a transient notebook entry (not persisted unless it succeeds)
-    const tempEntry: NotebookEntry = {
+    // Dedup: if this commitment is ALREADY in the notebook (e.g. user is both
+    // depositor and recipient, or they re-opened a claim URL they previously
+    // saved), reuse that entry. reveal() will mark it spent in-place. Prevents
+    // duplicate notebook entries with the same commitment hash.
+    const all = _loadNotebook();
+    const existing = all.find((e) => e.commitment === commitment);
+    if (existing?.spent) {
+      throw new Error('This commitment is already marked as revealed in your notebook. If the on-chain reveal failed, reset the notebook entry and try again.');
+    }
+    const entry: NotebookEntry = existing ?? {
       claim,
       commitment,
       commitTx: '0x' as Hex, // unknown — recipient may not have the commit tx hash
@@ -275,12 +283,14 @@ export const usePool = (): UsePoolHook => {
       savedAt: new Date().toISOString(),
       spent: false,
     };
-    const result = await reveal(tempEntry);
-
-    // After successful reveal, save it to notebook for posterity (recipient-side history)
-    const all = _loadNotebook();
-    _saveNotebook([{ ...tempEntry, spent: true, revealTx: result.txHash }, ...all]);
-    setNotebook(_loadNotebook());
+    const result = await reveal(entry);
+    // reveal() above already updated the existing entry (or no-op'd if not present).
+    // Only add a NEW entry if it wasn't already in the notebook.
+    if (!existing) {
+      const fresh = [{ ...entry, spent: true, revealTx: result.txHash }, ..._loadNotebook()];
+      _saveNotebook(fresh);
+      setNotebook(_loadNotebook());
+    }
     return result;
   }, [reveal]);
 

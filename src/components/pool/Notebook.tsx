@@ -64,7 +64,30 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
     return () => clearInterval(id);
   }, []);
 
-  if (notebook.length === 0) return null;
+  // Dedup by commitment hash. Defense-in-depth against any older notebook
+  // state that may contain duplicates from before the revealFromURL dedup fix.
+  // When duplicates exist for the same commitment, prefer the one with the
+  // most info (commitTx present > only revealTx > neither).
+  const dedupedNotebook = (() => {
+    const map = new Map<string, NotebookEntry>();
+    for (const entry of notebook) {
+      const prev = map.get(entry.commitment);
+      if (!prev) { map.set(entry.commitment, entry); continue; }
+      // Merge: prefer whichever has commitTx + revealTx + spent state
+      const merged: NotebookEntry = {
+        ...prev,
+        ...entry,
+        commitTx: (entry.commitTx && entry.commitTx !== '0x' ? entry.commitTx : prev.commitTx) as `0x${string}`,
+        revealTx: (entry.revealTx ?? prev.revealTx),
+        spent: prev.spent || entry.spent,
+        depositEpoch: prev.depositEpoch || entry.depositEpoch,
+      };
+      map.set(entry.commitment, merged);
+    }
+    return Array.from(map.values());
+  })();
+
+  if (dedupedNotebook.length === 0) return null;
 
   const handleReveal = async (entry: NotebookEntry) => {
     setRevealError(null);
@@ -89,7 +112,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
           <Clock className="w-5 h-5 text-primary" />
           <h3 className="text-base font-semibold">Your Commits (notebook)</h3>
           <span className="text-xs text-muted-foreground">
-            {notebook.filter((e) => !e.spent).length} pending · {notebook.filter((e) => e.spent).length} revealed
+            {dedupedNotebook.filter((e) => !e.spent).length} pending · {dedupedNotebook.filter((e) => e.spent).length} revealed
           </span>
         </div>
       </div>
@@ -100,7 +123,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
       </p>
 
       <div className="space-y-3">
-        {notebook.map((entry) => {
+        {dedupedNotebook.map((entry) => {
           const isEligible = currentEpoch != null && currentEpoch > entry.depositEpoch;
           const eligibleEpoch = entry.depositEpoch + 1;
           const eligibleAtMs = eligibleEpoch * 3600 * 1000;
