@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 # tools/sync-deploy-keys-to-frontend.sh
 #
-# Companion to tools/rotate-burner-keys.sh. After rotating, this propagates
-# the new key material from tools/hardhat-deploy/.env into cyrusthegreat/.env
-# (the frontend env), updating:
-#   WALLET1_PRIVK   = SEPOLIA_PRIVATE_KEY        (used by tests + Bank8 deploy shell)
-#   WALLET2_PRIVK   = HYPER_TESTNET_PRIVATE_KEY
-#   WALLET1_PUBK    = address derived from wallet 1
-#   WALLET2_PUBK    = address derived from wallet 2
-#   FEE_COLLECTOR   = address of wallet 1
+# Companion to tools/rotate-burner-keys.sh. Finalises the rotation by:
 #
-# Backs up cyrusthegreat/.env before writing. No private keys are echoed.
+#   (a) Copying the rotated keys from tools/hardhat-deploy/.env into the
+#       frontend's cyrusthegreat/.env, mapping:
+#         WALLET1_PRIVK  ← SEPOLIA_PRIVATE_KEY        (tests + scripts)
+#         WALLET2_PRIVK  ← HYPER_TESTNET_PRIVATE_KEY  (test counterparty)
+#         WALLET1_PUBK   ← address derived from wallet 1
+#         WALLET2_PUBK   ← address derived from wallet 2
+#         FEE_COLLECTOR  ← address of wallet 1
+#
+#   (b) Removing HYPER_TESTNET_PRIVATE_KEY from tools/hardhat-deploy/.env
+#       so hardhat falls back to SEPOLIA_PRIVATE_KEY (= wallet 1) for the
+#       hyperEvmTestnet network. This realises the "one deploy wallet for
+#       all 4 chains, wallet 2 retired to test-counterparty role" model.
+#
+# Backs up both files first. No private keys are echoed.
 #
 # Run from repo root:
 #     bash tools/sync-deploy-keys-to-frontend.sh
@@ -68,8 +74,13 @@ echo "Source (tools/hardhat-deploy/.env):"
 echo "  Wallet 1: $W1_ADDR"
 echo "  Wallet 2: $W2_ADDR"
 echo ""
-echo "Target: $FRONTEND_ENV"
-echo "Will update WALLET1_PRIVK, WALLET2_PRIVK, WALLET1_PUBK, WALLET2_PUBK, FEE_COLLECTOR."
+echo "Plan:"
+echo "  1. Update $FRONTEND_ENV"
+echo "       WALLET1_PRIVK, WALLET1_PUBK, FEE_COLLECTOR  → wallet 1"
+echo "       WALLET2_PRIVK, WALLET2_PUBK                 → wallet 2 (testing counterparty)"
+echo "  2. Remove HYPER_TESTNET_PRIVATE_KEY from $HARDHAT_ENV"
+echo "     so hardhat's hyperEvmTestnet network uses wallet 1 (via fallback)."
+echo "     → wallet 1 deploys to ALL 4 chains; wallet 2 is retired from deploys."
 echo ""
 read -rp "Proceed? [y/N] " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
@@ -101,10 +112,33 @@ set_env "WALLET1_PUBK"   "$W1_ADDR"  "$FRONTEND_ENV"
 set_env "WALLET2_PUBK"   "$W2_ADDR"  "$FRONTEND_ENV"
 set_env "FEE_COLLECTOR"  "$W1_ADDR"  "$FRONTEND_ENV"
 
+# Step 2: remove HYPER_TESTNET_PRIVATE_KEY from the hardhat env so
+# hyperEvmTestnet falls back to SEPOLIA_PRIVATE_KEY (= wallet 1).
+# Backup first.
+cp "$HARDHAT_ENV" "$HARDHAT_ENV.backup.$TS"
+echo "Backed up: $HARDHAT_ENV.backup.$TS"
+if grep -q "^HYPER_TESTNET_PRIVATE_KEY=" "$HARDHAT_ENV"; then
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' '/^HYPER_TESTNET_PRIVATE_KEY=/d' "$HARDHAT_ENV"
+  else
+    sed -i '/^HYPER_TESTNET_PRIVATE_KEY=/d' "$HARDHAT_ENV"
+  fi
+  echo "Removed HYPER_TESTNET_PRIVATE_KEY from $HARDHAT_ENV"
+else
+  echo "(no HYPER_TESTNET_PRIVATE_KEY line in $HARDHAT_ENV — nothing to remove)"
+fi
+
 unset W1_KEY W2_KEY || true
 
 echo ""
-echo "✅ Frontend .env updated."
+echo "✅ Done."
+echo ""
+echo "Result:"
+echo "  • cyrusthegreat/.env       — WALLET1/2_PRIVK + PUBK + FEE_COLLECTOR updated"
+echo "  • tools/hardhat-deploy/.env — only SEPOLIA_PRIVATE_KEY remains (wallet 1)"
+echo "  • All 4 testnet deploys will run as wallet 1: $W1_ADDR"
 echo ""
 echo "Note: ctg-sync-env only pushes VITE_* vars to Cloudflare — these wallet"
-echo "variables stay LOCAL on your machine (gitignored). Good for testnet."
+echo "vars stay LOCAL on your machine (gitignored). Good for testnet."
+echo ""
+echo "Next step: fund wallet 1 on all 4 testnets, then run the redeploys."
