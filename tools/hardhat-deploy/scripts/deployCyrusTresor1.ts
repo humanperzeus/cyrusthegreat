@@ -135,9 +135,18 @@ async function main() {
   console.log(`Deployer:    ${deployer.address}`);
   console.log(`Balance:     ${ethers.formatEther(balance)} (native)`);
 
-  // Constructor args.
-  const feeCollector =
-    envOr("FEE_COLLECTOR", "0x84064947bcD9729872c5Be91D2aE50380Cbd691E")!;
+  // Constructor args. FEE_COLLECTOR is REQUIRED — no hardcoded default. The
+  // previous default was a wallet later treated as leaked; refusing to deploy
+  // without an explicit FEE_COLLECTOR prevents that recurring.
+  const feeCollector = envOr("FEE_COLLECTOR");
+  if (!feeCollector) {
+    throw new Error(
+      "FEE_COLLECTOR env var is required. Set it in tools/hardhat-deploy/.env to the wallet that should receive pool fees.",
+    );
+  }
+  if (!/^0x[a-fA-F0-9]{40}$/.test(feeCollector)) {
+    throw new Error(`FEE_COLLECTOR is not a 20-byte address: "${feeCollector}"`);
+  }
   const salt = envOr("SALT", "0x" + randomBytes(32).toString("hex"))!;
   if (!/^0x[a-fA-F0-9]{64}$/.test(salt)) {
     throw new Error(`SALT must be hex-32 (0x + 64 chars); got: ${salt}`);
