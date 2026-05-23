@@ -12,10 +12,13 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "dotenv/config";
 
+// Default to canonical public RPCs when no per-network URL is set in .env.
+// Operators with private endpoints (Alchemy/Infura/etc.) can override by
+// setting *_RPC_URL in tools/hardhat-deploy/.env.
 const {
-  SEPOLIA_RPC_URL = "",
-  BSC_TESTNET_RPC_URL = "",
-  BASE_SEPOLIA_RPC_URL = "",
+  SEPOLIA_RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com",
+  BSC_TESTNET_RPC_URL = "https://bsc-testnet-rpc.publicnode.com",
+  BASE_SEPOLIA_RPC_URL = "https://base-sepolia-rpc.publicnode.com",
   HYPER_TESTNET_RPC_URL = "https://rpc.hyperliquid-testnet.xyz/evm",
   SEPOLIA_PRIVATE_KEY = "",                  // deployer privkey (testnet-only burner per Rule 10)
   HYPER_TESTNET_PRIVATE_KEY = "",            // optional dedicated HyperEVM burner (separate from Sepolia)
