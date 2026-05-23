@@ -987,14 +987,13 @@ export const VaultCore = ({
               >
                 {currentNetwork.networkMode === 'mainnet' ? 'ETH' : 'tETH'}
               </div>
-              <div 
-                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
-                  activeChain === 'BSC' 
-                    ? 'text-white bg-vault-primary border border-vault-primary' 
-                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
-                }`}
-                onClick={() => handleChainSwitch('BSC')}
-                title={`Binance Chain ${currentNetwork.networkMode === 'mainnet' ? 'Mainnet' : 'Testnet'} (Click to switch)`}
+              {/* BSC currently disabled — Bank8/CyrusTresor1 not yet redeployed
+                  on BSC Testnet post-2026-05-19 key rotation (faucet wait).
+                  Re-enable by restoring the onClick={() => handleChainSwitch('BSC')}
+                  div once the BSC testnet contracts are live again. */}
+              <div
+                className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed"
+                title="BSC (pending redeploy)"
               >
                 {currentNetwork.networkMode === 'mainnet' ? 'BSC' : 'tBSC'}
               </div>

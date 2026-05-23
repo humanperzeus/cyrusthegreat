@@ -67,15 +67,25 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
         <button onClick={() => handleSwitch("ETH")} className={buttonClass("ETH")} title="Ethereum / Sepolia">
           {isSwitching === "ETH" ? "…" : (isTestnet ? "tETH" : "ETH")}
         </button>
-        <button onClick={() => handleSwitch("BSC")} className={buttonClass("BSC")} title="BSC / BSC Testnet">
-          {isSwitching === "BSC" ? "…" : (isTestnet ? "tBSC" : "BSC")}
-        </button>
+        {/* BSC + HYPER currently disabled — contracts not yet redeployed on these
+            chains post-2026-05-19 key rotation (faucet wait). Re-enable by
+            restoring the <button onClick={…handleSwitch}> form once the
+            VITE_CTG{VAULT,TRESOR}_<CHAIN>_TESTNET_CONTRACT slots are real. */}
+        <div
+          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
+          title="BSC — pending redeploy"
+        >
+          {isTestnet ? "tBSC" : "BSC"}
+        </div>
         <button onClick={() => handleSwitch("BASE")} className={buttonClass("BASE")} title="Base / Base Sepolia">
           {isSwitching === "BASE" ? "…" : (isTestnet ? "tBASE" : "BASE")}
         </button>
-        <button onClick={() => handleSwitch("HYPER")} className={buttonClass("HYPER")} title="Hyperliquid EVM / HyperEVM Testnet">
-          {isSwitching === "HYPER" ? "…" : (isTestnet ? "tHYPE" : "HYPE")}
-        </button>
+        <div
+          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
+          title="HyperEVM — pending faucet + redeploy"
+        >
+          {isTestnet ? "tHYPE" : "HYPE"}
+        </div>
         <div
           className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
           title="Solana — not yet integrated"
