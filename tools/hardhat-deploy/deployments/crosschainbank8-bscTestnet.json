@@ -1,0 +1,15 @@
+{
+  "network": "bscTestnet",
+  "chainId": 97,
+  "contract": "CrossChainBank8",
+  "address": "0xd2fC71E2fbF7a267c2F884160F01c82994175958",
+  "deployTx": "0x60cecf024bc0bd49379d2d70070ea14d67153896e0fd510371e9244b984d07ce",
+  "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+  "blockNumber": 110653457,
+  "timestamp": "2026-05-31T14:18:39.705Z",
+  "constructorArgs": {
+    "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+    "salt": "0x73040bfa9223783059a5c5776313da8c0ac1ffe07e5b031c25813d37f534a7c3",
+    "priceFeed": "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526"
+  }
+}

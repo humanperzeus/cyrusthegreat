@@ -67,16 +67,11 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
         <button onClick={() => handleSwitch("ETH")} className={buttonClass("ETH")} title="Ethereum / Sepolia">
           {isSwitching === "ETH" ? "…" : (isTestnet ? "tETH" : "ETH")}
         </button>
-        {/* BSC + HYPER currently disabled — contracts not yet redeployed on these
-            chains post-2026-05-19 key rotation (faucet wait). Re-enable by
-            restoring the <button onClick={…handleSwitch}> form once the
-            VITE_CTG{VAULT,TRESOR}_<CHAIN>_TESTNET_CONTRACT slots are real. */}
-        <div
-          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
-          title="BSC — pending redeploy"
-        >
-          {isTestnet ? "tBSC" : "BSC"}
-        </div>
+        {/* BSC re-enabled 2026-05-30 (contracts redeployed). HYPER stays
+            disabled until HyperEVM testnet faucet drips through. */}
+        <button onClick={() => handleSwitch("BSC")} className={buttonClass("BSC")} title="BSC / BSC Testnet">
+          {isSwitching === "BSC" ? "…" : (isTestnet ? "tBSC" : "BSC")}
+        </button>
         <button onClick={() => handleSwitch("BASE")} className={buttonClass("BASE")} title="Base / Base Sepolia">
           {isSwitching === "BASE" ? "…" : (isTestnet ? "tBASE" : "BASE")}
         </button>
