@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, usePublicClient, useWalletClient, useSwitchChain } from 'wagmi';
 import { readContract, waitForTransactionReceipt, writeContract } from '@wagmi/core';
-import { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia } from 'wagmi/chains';
+import { sepolia, mainnet, bsc, bscTestnet, base, baseSepolia, arbitrum, arbitrumSepolia, hyperEvm, hyperliquidEvmTestnet } from 'wagmi/chains';
 import { formatEther, parseEther, parseUnits, formatUnits } from 'viem';
 import { getContract } from 'viem';
 import { WEB3_CONFIG, VAULT_ABI, getContractAddress, getCurrentNetwork, getRpcUrl, getChainConfig, getBestRpcUrl, getChainNetworkInfo } from '@/config/web3';
@@ -55,11 +55,15 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   // Additional safety: clear vault tokens when chainId changes
   useEffect(() => {
     if (chainId && activeChain) {
-      const expectedChainId = activeChain === 'ETH' 
+      const expectedChainId = activeChain === 'ETH'
         ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)
         : activeChain === 'BSC'
         ? (currentNetwork.mode === 'mainnet' ? 56 : 97)
-        : (currentNetwork.mode === 'mainnet' ? 8453 : 84532);
+        : activeChain === 'BASE'
+        ? (currentNetwork.mode === 'mainnet' ? 8453 : 84532)
+        : activeChain === 'ARB'
+        ? (currentNetwork.mode === 'mainnet' ? 42161 : 421614)
+        : (currentNetwork.mode === 'mainnet' ? 999 : 998);  // HYPER
       
       if (chainId !== expectedChainId) {
         debugLog(`🔄 Chain ID changed from ${expectedChainId} to ${chainId}, clearing vault tokens`);
@@ -139,9 +143,22 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       } else {
         return baseSepolia; // Base testnet (Base Sepolia)
       }
+    } else if (activeChain === 'ARB') {
+      if (currentNetwork.mode === 'mainnet') {
+        return arbitrum; // Arbitrum One mainnet
+      } else {
+        return arbitrumSepolia; // Arbitrum Sepolia testnet
+      }
+    } else if (activeChain === 'HYPER') {
+      if (currentNetwork.mode === 'mainnet') {
+        return hyperEvm; // HyperEVM mainnet
+      } else {
+        return hyperliquidEvmTestnet; // HyperEVM testnet
+      }
     }
-    
-    // Fallback to ETH if activeChain is not recognized
+
+    // Fallback to ETH if activeChain is not recognized — should be unreachable
+    // now that all 5 chains are handled above; kept as defensive catch-all.
     debugWarn(`⚠️ Unknown activeChain: ${activeChain}, falling back to ETH`);
     return currentNetwork.mode === 'mainnet' ? mainnet : sepolia;
   };
@@ -1025,16 +1042,14 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           debugLog('✅ Token balances found:', data.result.tokenBalances);
           await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
         }
-      } else if (activeChain === 'BASE') {
-        // Use Alchemy API for BASE chains (same as ETH/BSC, just different RPC)
+      } else if (activeChain === 'BASE' || activeChain === 'ARB') {
+        // Use Alchemy API for BASE + ARB chains (Alchemy supports both —
+        // same method as ETH/BSC, just different RPC URL).
         const alchemyUrl = getActiveRpcUrl();
 
-        // Use Alchemy API to get token balances (same method as ETH/BSC)
         const response = await fetch(alchemyUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 1,
@@ -1044,7 +1059,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         });
 
         debugLog('📡 HTTP Response status:', response.status);
-        debugLog('📡 HTTP Response headers:', response.headers);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -1053,14 +1067,18 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
 
         const data = await response.json();
-        
-        if (data.error) {
-        }
 
         if (data.result && data.result.tokenBalances) {
           debugLog('✅ Token balances found:', data.result.tokenBalances);
           await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
         }
+      } else if (activeChain === 'HYPER') {
+        // HyperEVM has no Alchemy-style indexer — skip ERC-20 token enumeration.
+        // Users can still deposit/withdraw the native token (HYPE) and any
+        // ERC-20s they paste an address for, but the auto-populated token list
+        // stays empty until a HyperEVM indexer (Pyth-Whirlpool?) ships.
+        debugLog('🪙 HYPER: skipping ERC-20 enumeration (no indexer on HyperEVM)');
+        setWalletTokens([]);
       }
       
     } catch (error) {
@@ -4014,24 +4032,48 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
     
     // Determine chain ID based on active chain and network mode
-    const chainId = activeChain === 'ETH' 
+    const chainId = activeChain === 'ETH'
       ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)      // ETH mainnet vs Sepolia
       : activeChain === 'BSC'
       ? (currentNetwork.mode === 'mainnet' ? 56 : 97)           // BSC mainnet vs testnet
-      : (currentNetwork.mode === 'mainnet' ? 8453 : 84532);     // BASE mainnet vs Sepolia
-    
+      : activeChain === 'BASE'
+      ? (currentNetwork.mode === 'mainnet' ? 8453 : 84532)      // BASE mainnet vs Sepolia
+      : activeChain === 'ARB'
+      ? (currentNetwork.mode === 'mainnet' ? 42161 : 421614)    // Arbitrum One vs Arbitrum Sepolia
+      : (currentNetwork.mode === 'mainnet' ? 999 : 998);        // HyperEVM mainnet vs testnet
+
     // Create the transport with explicit typing
     const transport = http(rpcUrl as `http://${string}` | `https://${string}`);
-    
+
     return createPublicClient({
       transport,
       chain: {
         id: chainId,
-        name: activeChain === 'ETH' ? 'Ethereum' : activeChain === 'BSC' ? 'Binance Smart Chain' : 'Base',
-        network: activeChain === 'ETH' ? 'ethereum' : activeChain === 'BSC' ? 'bsc' : 'base',
+        name:
+          activeChain === 'ETH' ? 'Ethereum'
+          : activeChain === 'BSC' ? 'Binance Smart Chain'
+          : activeChain === 'BASE' ? 'Base'
+          : activeChain === 'ARB' ? 'Arbitrum'
+          : 'Hyperliquid EVM',
+        network:
+          activeChain === 'ETH' ? 'ethereum'
+          : activeChain === 'BSC' ? 'bsc'
+          : activeChain === 'BASE' ? 'base'
+          : activeChain === 'ARB' ? 'arbitrum'
+          : 'hyperevm',
         nativeCurrency: {
-          name: activeChain === 'ETH' ? 'Ether' : activeChain === 'BSC' ? 'BNB' : 'Ether',
-          symbol: activeChain === 'ETH' ? 'ETH' : activeChain === 'BSC' ? 'BNB' : 'ETH',
+          name:
+            activeChain === 'ETH' ? 'Ether'
+            : activeChain === 'BSC' ? 'BNB'
+            : activeChain === 'BASE' ? 'Ether'
+            : activeChain === 'ARB' ? 'Ether'
+            : 'HYPE',
+          symbol:
+            activeChain === 'ETH' ? 'ETH'
+            : activeChain === 'BSC' ? 'BNB'
+            : activeChain === 'BASE' ? 'ETH'
+            : activeChain === 'ARB' ? 'ETH'
+            : 'HYPE',
           decimals: 18,
         },
         rpcUrls: {
