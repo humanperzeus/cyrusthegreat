@@ -29,7 +29,7 @@ interface DepositModalProps {
   tokenAddress?: string;
   tokenBalance?: string;
   // Chain-aware props
-  activeChain?: 'ETH' | 'BSC' | 'BASE';
+  activeChain?: 'ETH' | 'BSC' | 'BASE' | 'ARB';
   // Multi-token functionality
   availableTokens?: Array<{
     address: string;

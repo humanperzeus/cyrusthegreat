@@ -19,6 +19,7 @@ const {
   SEPOLIA_RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com",
   BSC_TESTNET_RPC_URL = "https://bsc-testnet-rpc.publicnode.com",
   BASE_SEPOLIA_RPC_URL = "https://base-sepolia-rpc.publicnode.com",
+  ARBITRUM_SEPOLIA_RPC_URL = "https://sepolia-rollup.arbitrum.io/rpc",
   HYPER_TESTNET_RPC_URL = "https://rpc.hyperliquid-testnet.xyz/evm",
   SEPOLIA_PRIVATE_KEY = "",                  // deployer privkey (testnet-only burner per Rule 10)
   HYPER_TESTNET_PRIVATE_KEY = "",            // optional dedicated HyperEVM burner (separate from Sepolia)
@@ -73,6 +74,13 @@ const config: HardhatUserConfig = {
       url: BASE_SEPOLIA_RPC_URL,
       accounts,
       chainId: 84532,
+    },
+    // Arbitrum Sepolia (Arbitrum's L2 testnet over Ethereum Sepolia).
+    // Chainlink ETH/USD feed at 0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165.
+    arbitrumSepolia: {
+      url: ARBITRUM_SEPOLIA_RPC_URL,
+      accounts,
+      chainId: 421614,
     },
     // HyperEVM Testnet (Hyperliquid). No Chainlink HYPE/USD feed exists on this
     // chain yet, so deploys use a MockV3Aggregator from contracts/evm/mocks/ —

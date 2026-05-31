@@ -32,7 +32,7 @@ export interface BalanceManagementHook {
   hasSufficientBalance: (required: string, type: 'wallet' | 'vault') => boolean;
 }
 
-export const useBalanceManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'): BalanceManagementHook => {
+export const useBalanceManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH'): BalanceManagementHook => {
   const { address, isConnected } = useAccount();
 
   // Loading states

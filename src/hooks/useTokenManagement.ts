@@ -37,7 +37,7 @@ export interface TokenManagementHook {
   removeToken: (token: Token) => void;
 }
 
-export const useTokenManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'): TokenManagementHook => {
+export const useTokenManagement = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH'): TokenManagementHook => {
   const { address, isConnected } = useAccount();
 
   // Wallet tokens state

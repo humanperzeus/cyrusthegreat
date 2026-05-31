@@ -10,7 +10,7 @@ import { getChainConfig } from "@/config/web3";
 interface BalanceDisplayProps {
   walletBalance: string;
   vaultBalance: string;
-  chain: 'ETH' | 'BSC' | 'BASE';
+  chain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
   isLoading?: boolean;
 }
 

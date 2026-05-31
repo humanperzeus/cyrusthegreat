@@ -31,14 +31,15 @@ import type { NotebookEntry } from "@/hooks/usePool";
 import { ClaimQR } from "@/components/pool/ClaimQR";
 
 interface NotebookProps {
-  activeChain: "ETH" | "BSC" | "BASE" | "HYPER";
+  activeChain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB";
 }
 
-const explorerForChain = (chain: "ETH" | "BSC" | "BASE" | "HYPER", txHash: string): string => {
+const explorerForChain = (chain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB", txHash: string): string => {
   if (chain === "ETH") return `https://sepolia.etherscan.io/tx/${txHash}`;
   if (chain === "BSC") return `https://testnet.bscscan.com/tx/${txHash}`;
   if (chain === "BASE") return `https://sepolia.basescan.org/tx/${txHash}`;
   if (chain === "HYPER") return `https://testnet.purrsec.com/tx/${txHash}`;
+  if (chain === "ARB") return `https://sepolia.arbiscan.io/tx/${txHash}`;
   return "#";
 };
 
@@ -141,7 +142,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
           const nativeFallbackSymbol =
             activeChain === "BSC" ? "tBNB"
             : activeChain === "HYPER" ? "HYPE"
-            : "ETH";
+            : "ETH"; // ETH, BASE, ARB all use ETH
           const displaySymbol = entry.tokenSymbol
             ?? (isNativeToken ? nativeFallbackSymbol : entry.claim.token.slice(0, 6) + "…");
           const displayDecimals = entry.tokenDecimals ?? 18;
@@ -152,7 +153,8 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
             activeChain === "ETH" ? 11155111
             : activeChain === "BSC" ? 97
             : activeChain === "BASE" ? 84532
-            : 998; // HYPER testnet
+            : activeChain === "HYPER" ? 998
+            : 421614; // ARB Sepolia
           const isCurrentChain = entry.claim.chainId === activeChainId;
 
           return (

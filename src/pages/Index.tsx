@@ -24,18 +24,18 @@ import { WEB3_CONFIG } from "@/config/web3";
   // };
 
 
-// v1 supports ETH/BSC/BASE. v2 (pool) additionally supports HYPER (HyperEVM).
-// Index.tsx holds the wider 4-chain state; the v1 surface gets narrowed at
+// v1 supports ETH/BSC/BASE/ARB. v2 (pool) additionally supports HYPER (HyperEVM).
+// Index.tsx holds the wider 5-chain state; the v1 surface gets narrowed at
 // the boundary (see v1SafeChain / v1SetActiveChain below).
-type ActiveChain = 'ETH' | 'BSC' | 'BASE' | 'HYPER';
-type V1Chain = 'ETH' | 'BSC' | 'BASE';
+type ActiveChain = 'ETH' | 'BSC' | 'BASE' | 'HYPER' | 'ARB';
+type V1Chain = 'ETH' | 'BSC' | 'BASE' | 'ARB';
 
 const Index = () => {
   // Chain switching state with persistence
   const [activeChain, setActiveChain] = useState<ActiveChain>(() => {
     // Try to restore from localStorage, fallback to ETH
     const saved = localStorage.getItem('cyrusthegreat-active-chain');
-    if (saved === 'ETH' || saved === 'BSC' || saved === 'BASE' || saved === 'HYPER') {
+    if (saved === 'ETH' || saved === 'BSC' || saved === 'BASE' || saved === 'HYPER' || saved === 'ARB') {
       return saved;
     }
     return 'ETH';

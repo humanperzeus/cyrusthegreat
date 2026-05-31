@@ -21,7 +21,7 @@ export enum MigrationPhase {
 
 // Migration helper hook
 export const useVaultMigration = (
-  activeChain: 'ETH' | 'BSC' | 'BASE',
+  activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB',
   phase: MigrationPhase = MigrationPhase.LEGACY
 ) => {
   debugLog(`🔄 Vault Migration Phase: ${phase} for chain: ${activeChain}`);

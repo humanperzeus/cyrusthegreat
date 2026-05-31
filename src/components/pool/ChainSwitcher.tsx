@@ -17,17 +17,18 @@ import { useChainId } from "wagmi";
 import { switchToChain, WEB3_CONFIG } from "@/config/web3";
 
 interface ChainSwitcherProps {
-  activeChain: "ETH" | "BSC" | "BASE" | "HYPER";
-  setActiveChain: (chain: "ETH" | "BSC" | "BASE" | "HYPER") => void;
+  activeChain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB";
+  setActiveChain: (chain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB") => void;
 }
 
 // chainId → v1's chain-label mapping, so wagmi's chainId can drive
 // the visual "active" state without needing prop drilling.
-const chainIdToLabel = (chainId: number | undefined): "ETH" | "BSC" | "BASE" | "HYPER" | null => {
+const chainIdToLabel = (chainId: number | undefined): "ETH" | "BSC" | "BASE" | "HYPER" | "ARB" | null => {
   if (chainId === 1 || chainId === 11155111) return "ETH";
   if (chainId === 56 || chainId === 97) return "BSC";
   if (chainId === 8453 || chainId === 84532) return "BASE";
   if (chainId === 999 || chainId === 998) return "HYPER";
+  if (chainId === 42161 || chainId === 421614) return "ARB";
   return null;
 };
 
@@ -35,14 +36,14 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
   const walletChainId = useChainId();
   const walletChainLabel = chainIdToLabel(walletChainId);
   const isTestnet = WEB3_CONFIG.NETWORK_MODE !== "mainnet";
-  const [isSwitching, setIsSwitching] = useState<"ETH" | "BSC" | "BASE" | "HYPER" | null>(null);
+  const [isSwitching, setIsSwitching] = useState<"ETH" | "BSC" | "BASE" | "HYPER" | "ARB" | null>(null);
 
   // Source of truth: prop-driven activeChain (mirrors v1's pattern). Visual
   // is most accurate when this matches walletChainLabel — if they diverge,
   // wallet is on a different chain than what the dapp thinks.
   const effectiveActive = activeChain;
 
-  const handleSwitch = async (target: "ETH" | "BSC" | "BASE" | "HYPER") => {
+  const handleSwitch = async (target: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB") => {
     if (isSwitching) return;
     setIsSwitching(target);
     try {
@@ -53,7 +54,7 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
     }
   };
 
-  const buttonClass = (label: "ETH" | "BSC" | "BASE" | "HYPER") =>
+  const buttonClass = (label: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB") =>
     `w-10 h-8 px-1 flex items-center justify-center text-[10px] font-mono rounded cursor-pointer transition-all duration-200 ` +
     (effectiveActive === label
       ? "text-white bg-primary border border-primary"
@@ -63,12 +64,20 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
 
   return (
     <div className="flex flex-col items-center gap-1">
+      {/* Visual order standardized 2026-05-30: HYPER / ETH / BSC / BASE / ARB / SOL.
+          HYPER + ARB stay disabled until their contracts land — HYPER waiting on
+          HyperEVM testnet faucet, ARB waiting on contract deploy. SOL permanently
+          disabled (Solana program exists but not wired into the EVM dapp). */}
       <div className="flex items-center gap-1">
+        <div
+          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
+          title="HyperEVM — pending faucet + redeploy"
+        >
+          {isTestnet ? "tHYPE" : "HYPE"}
+        </div>
         <button onClick={() => handleSwitch("ETH")} className={buttonClass("ETH")} title="Ethereum / Sepolia">
           {isSwitching === "ETH" ? "…" : (isTestnet ? "tETH" : "ETH")}
         </button>
-        {/* BSC re-enabled 2026-05-30 (contracts redeployed). HYPER stays
-            disabled until HyperEVM testnet faucet drips through. */}
         <button onClick={() => handleSwitch("BSC")} className={buttonClass("BSC")} title="BSC / BSC Testnet">
           {isSwitching === "BSC" ? "…" : (isTestnet ? "tBSC" : "BSC")}
         </button>
@@ -77,9 +86,9 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
         </button>
         <div
           className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
-          title="HyperEVM — pending faucet + redeploy"
+          title="Arbitrum — pending contract deploy"
         >
-          {isTestnet ? "tHYPE" : "HYPE"}
+          {isTestnet ? "tARB" : "ARB"}
         </div>
         <div
           className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"

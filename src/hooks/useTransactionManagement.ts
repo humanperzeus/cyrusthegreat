@@ -20,7 +20,7 @@ export interface TransactionState {
 
 export interface TransactionManagementHook {
   // Chain-specific transaction states
-  transactionStates: Record<'ETH' | 'BSC' | 'BASE', TransactionState>;
+  transactionStates: Record<'ETH' | 'BSC' | 'BASE' | 'ARB', TransactionState>;
 
   // Transaction operations
   depositETH: (amount: string) => Promise<void>;
@@ -37,15 +37,15 @@ export interface TransactionManagementHook {
   transferMultipleTokensInternal: (tokens: string[], to: string, amounts: string[]) => Promise<void>;
 
   // Transaction state management
-  setTransactionState: (chain: 'ETH' | 'BSC' | 'BASE', state: Partial<TransactionState>) => void;
-  clearTransactionStates: (chain?: 'ETH' | 'BSC' | 'BASE') => void;
+  setTransactionState: (chain: 'ETH' | 'BSC' | 'BASE' | 'ARB', state: Partial<TransactionState>) => void;
+  clearTransactionStates: (chain?: 'ETH' | 'BSC' | 'BASE' | 'ARB') => void;
 
   // Utility functions
-  getChainFinalityDelay: (chain: 'ETH' | 'BSC' | 'BASE') => number;
+  getChainFinalityDelay: (chain: 'ETH' | 'BSC' | 'BASE' | 'ARB') => number;
 }
 
 export const useTransactionManagement = (
-  activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH',
+  activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH',
   onTransactionSuccess?: () => void,
   onTransactionError?: (error: string) => void
 ): TransactionManagementHook => {
@@ -53,7 +53,7 @@ export const useTransactionManagement = (
   const { switchChain } = useSwitchChain();
 
   // Chain-specific transaction states
-  const [transactionStates, setTransactionStates] = useState<Record<'ETH' | 'BSC' | 'BASE', TransactionState>>({
+  const [transactionStates, setTransactionStates] = useState<Record<'ETH' | 'BSC' | 'BASE' | 'ARB', TransactionState>>({
     ETH: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
     BSC: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
     BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null }
@@ -68,7 +68,7 @@ export const useTransactionManagement = (
   });
 
   // Chain-specific finality delays
-  const getChainFinalityDelay = useCallback((chain: 'ETH' | 'BSC' | 'BASE'): number => {
+  const getChainFinalityDelay = useCallback((chain: 'ETH' | 'BSC' | 'BASE' | 'ARB'): number => {
     switch (chain) {
       case 'ETH':
         return 12000; // 12 seconds
@@ -82,7 +82,7 @@ export const useTransactionManagement = (
   }, []);
 
   // Update transaction state for a specific chain
-  const setTransactionState = useCallback((chain: 'ETH' | 'BSC' | 'BASE', state: Partial<TransactionState>) => {
+  const setTransactionState = useCallback((chain: 'ETH' | 'BSC' | 'BASE' | 'ARB', state: Partial<TransactionState>) => {
     setTransactionStates(prev => ({
       ...prev,
       [chain]: { ...prev[chain], ...state }
@@ -90,7 +90,7 @@ export const useTransactionManagement = (
   }, []);
 
   // Clear transaction states
-  const clearTransactionStates = useCallback((chain?: 'ETH' | 'BSC' | 'BASE') => {
+  const clearTransactionStates = useCallback((chain?: 'ETH' | 'BSC' | 'BASE' | 'ARB') => {
     if (chain) {
       setTransactionStates(prev => ({
         ...prev,

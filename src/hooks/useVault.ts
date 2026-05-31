@@ -18,7 +18,7 @@ declare global {
   }
 }
 
-export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH') => {
+export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH') => {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { toast } = useToast();

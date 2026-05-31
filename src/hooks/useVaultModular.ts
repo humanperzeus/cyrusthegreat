@@ -16,8 +16,8 @@ export interface VaultHook {
   chainId: number | undefined;
 
   // Chain management
-  activeChain: 'ETH' | 'BSC' | 'BASE';
-  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE') => void;
+  activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
+  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE' | 'ARB') => void;
   isSwitchingNetwork: boolean;
 
   // Network info
@@ -72,13 +72,13 @@ export interface VaultHook {
   clearTokens: () => void;
 }
 
-export const useVaultModular = (initialChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'): VaultHook => {
+export const useVaultModular = (initialChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH'): VaultHook => {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
 
   // Chain state
-  const [activeChain, setActiveChainState] = useState<'ETH' | 'BSC' | 'BASE'>(initialChain);
+  const [activeChain, setActiveChainState] = useState<'ETH' | 'BSC' | 'BASE' | 'ARB'>(initialChain);
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
 
   // Network configuration
@@ -93,7 +93,7 @@ export const useVaultModular = (initialChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'): V
   const transactionManagement = registry.transactionManagement;
 
   // Chain switching logic
-  const setActiveChain = useCallback(async (targetChain: 'ETH' | 'BSC' | 'BASE') => {
+  const setActiveChain = useCallback(async (targetChain: 'ETH' | 'BSC' | 'BASE' | 'ARB') => {
     if (targetChain === activeChain) return;
 
     debugLog(`🔄 Switching from ${activeChain} to ${targetChain}`);
@@ -129,7 +129,7 @@ export const useVaultModular = (initialChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'): V
   }, [activeChain, isConnected, switchChain, registry]);
 
   // Get expected chain ID for a target chain
-  const getExpectedChainId = useCallback((chain: 'ETH' | 'BSC' | 'BASE'): number => {
+  const getExpectedChainId = useCallback((chain: 'ETH' | 'BSC' | 'BASE' | 'ARB'): number => {
     const networkMode = currentNetwork.mode;
     switch (chain) {
       case 'ETH':

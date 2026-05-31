@@ -29,7 +29,7 @@ export interface VaultRegistry {
   clearAll: () => void;
 }
 
-export const useVaultRegistry = (activeChain: 'ETH' | 'BSC' | 'BASE' = 'ETH'): VaultRegistry => {
+export const useVaultRegistry = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH'): VaultRegistry => {
   const { address, isConnected } = useAccount();
   const [hooks, setHooks] = useState<Record<string, any>>({});
 

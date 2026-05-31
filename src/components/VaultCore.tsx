@@ -32,13 +32,13 @@ interface VaultCoreProps {
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
   // Chain switching props
-  activeChain: 'ETH' | 'BSC' | 'BASE';
-  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE') => void;
+  activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
+  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE' | 'ARB') => void;
 }
 
 // Add animated chain cycling state
 const useAnimatedChainDisplay = (isConnected: boolean) => {
-  const [currentDisplayChain, setCurrentDisplayChain] = useState<'ETH' | 'BSC' | 'BASE'>('ETH');
+  const [currentDisplayChain, setCurrentDisplayChain] = useState<'ETH' | 'BSC' | 'BASE' | 'ARB'>('ETH');
   const [currentMessage, setCurrentMessage] = useState(0);
   
   const vaultMessages = [
@@ -54,6 +54,7 @@ const useAnimatedChainDisplay = (isConnected: boolean) => {
       setCurrentDisplayChain(prev => {
         if (prev === 'ETH') return 'BSC';
         if (prev === 'BSC') return 'BASE';
+        if (prev === 'BASE') return 'ARB';
         return 'ETH';
       });
       setCurrentMessage(prev => (prev + 1) % vaultMessages.length);
@@ -114,7 +115,7 @@ export const VaultCore = ({
   
   // Chain switching state
   const [isSwitchingChain, setIsSwitchingChain] = useState(false);
-  const [targetChain, setTargetChain] = useState<'ETH' | 'BSC' | 'BASE' | null>(null);
+  const [targetChain, setTargetChain] = useState<'ETH' | 'BSC' | 'BASE' | 'ARB' | null>(null);
   
   // Get current network info
   const currentNetwork = getActiveChainInfo();
@@ -194,7 +195,7 @@ export const VaultCore = ({
   };
 
   // Handle chain switching
-  const handleChainSwitch = async (targetChainParam: 'ETH' | 'BSC' | 'BASE') => {
+  const handleChainSwitch = async (targetChainParam: 'ETH' | 'BSC' | 'BASE' | 'ARB') => {
     if (targetChainParam === activeChain || isSwitchingChain) return;
     
     debugLog(`🔄 Chain switch initiated: ${activeChain} → ${targetChainParam}`);
@@ -974,12 +975,22 @@ export const VaultCore = ({
           <div className="flex flex-col items-center space-y-4">
             <WalletConnector />
             
-            {/* Chain Switcher - Icons Only */}
+            {/* Chain Switcher - Icons Only.
+                Visual order standardized 2026-05-30: HYPER / ETH / BSC / BASE / ARB / SOL.
+                HYPER is grayed because Bank8 isn't deployed there (pool-only chain).
+                ARB is grayed until the Bank8 + Tresor1 deploys on Arbitrum Sepolia land.
+                SOL grayed permanently (no EVM dapp wiring). */}
             <div className="flex justify-center space-x-2">
-              <div 
+              <div
+                className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed"
+                title="HyperEVM (pool-only — no v1 vault)"
+              >
+                {currentNetwork.networkMode === 'mainnet' ? 'HYPE' : 'tHYPE'}
+              </div>
+              <div
                 className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
-                  activeChain === 'ETH' 
-                    ? 'text-white bg-vault-primary border border-vault-primary' 
+                  activeChain === 'ETH'
+                    ? 'text-white bg-vault-primary border border-vault-primary'
                     : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
                 }`}
                 onClick={() => handleChainSwitch('ETH')}
@@ -998,16 +1009,22 @@ export const VaultCore = ({
               >
                 {currentNetwork.networkMode === 'mainnet' ? 'BSC' : 'tBSC'}
               </div>
-              <div 
+              <div
                 className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
-                  activeChain === 'BASE' 
-                    ? 'text-white bg-vault-primary border border-vault-primary' 
+                  activeChain === 'BASE'
+                    ? 'text-white bg-vault-primary border border-vault-primary'
                     : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
                 }`}
                 onClick={() => handleChainSwitch('BASE')}
                 title={`Base ${currentNetwork.networkMode === 'mainnet' ? 'Mainnet' : 'Testnet'} (Click to switch)`}
               >
                 {currentNetwork.networkMode === 'mainnet' ? 'BASE' : 'tBASE'}
+              </div>
+              <div
+                className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed"
+                title="Arbitrum (pending contract deploy)"
+              >
+                {currentNetwork.networkMode === 'mainnet' ? 'ARB' : 'tARB'}
               </div>
               <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Solana (Coming Soon)">
                 SOL
@@ -1032,7 +1049,7 @@ export const VaultCore = ({
             {isSwitchingChain && targetChain && (
               <div className="flex items-center space-x-2 text-xs text-vault-warning">
                 <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>Switching to {targetChain === 'ETH' ? 'Ethereum' : targetChain === 'BSC' ? 'Binance Chain' : 'Base'}...</span>
+                <span>Switching to {targetChain === 'ETH' ? 'Ethereum' : targetChain === 'BSC' ? 'Binance Chain' : targetChain === 'BASE' ? 'Base' : 'Arbitrum'}...</span>
               </div>
             )}
 
@@ -1128,7 +1145,7 @@ export const VaultCore = ({
                     }}
                   >
                     <Shield className="w-3 h-3 mr-1" />
-                    View Contract on {activeChain === 'ETH' ? 'Etherscan' : activeChain === 'BSC' ? 'BscScan' : 'BaseScan'}
+                    View Contract on {activeChain === 'ETH' ? 'Etherscan' : activeChain === 'BSC' ? 'BscScan' : activeChain === 'BASE' ? 'BaseScan' : 'Arbiscan'}
                   </Button>
                 ) : (
                   // When disconnected, show both contract links

@@ -32,9 +32,10 @@ import path from "path";
 // Chainlink native/USD price feeds (testnet-only; mainnet should be added later
 // alongside the mainnet deploy decision — explicitly NOT here per Rule 10).
 const PRICE_FEEDS: Record<string, string> = {
-  sepolia:     "0x694AA1769357215DE4FAC081bf1f309aDC325306", // Sepolia ETH/USD
-  bscTestnet:  "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526", // BSC Testnet BNB/USD
-  baseSepolia: "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1", // Base Sepolia ETH/USD
+  sepolia:         "0x694AA1769357215DE4FAC081bf1f309aDC325306", // Sepolia ETH/USD
+  bscTestnet:      "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526", // BSC Testnet BNB/USD
+  baseSepolia:     "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1", // Base Sepolia ETH/USD
+  arbitrumSepolia: "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165", // Arbitrum Sepolia ETH/USD (live, verified 2026-05-31)
   // HyperEVM Testnet: no Chainlink HYPE/USD feed exists. Must deploy
   // MockV3Aggregator via scripts/deployMockPriceFeed.ts FIRST, then either:
   //   (a) paste the deployed mock address here, OR
@@ -53,8 +54,9 @@ const TOKENS: Record<string, { addr: string; symbol: string }[]> = {
     { addr: "0xD649712915595bcE7A4BA3a821C64850853FcD02", symbol: "USD1" },
     { addr: "0x4Ed43Ca34731696caa2B813070AB65F18510eaA1", symbol: "WLFI" },
   ],
-  bscTestnet:  [{ addr: ZERO, symbol: "tBNB" }],
-  baseSepolia: [{ addr: ZERO, symbol: "ETH" }],
+  bscTestnet:      [{ addr: ZERO, symbol: "tBNB" }],
+  baseSepolia:     [{ addr: ZERO, symbol: "ETH" }],
+  arbitrumSepolia: [{ addr: ZERO, symbol: "ETH" }],
   // HyperEVM testnet — native HYPE only for v1.  ERC-20s (USDC/USDT analogs)
   // can be added once we identify their canonical testnet addresses.
   hyperEvmTestnet: [{ addr: ZERO, symbol: "HYPE" }],
@@ -69,8 +71,9 @@ const BUCKETS: Record<string, Record<string, string[]>> = {
     USD1: ["10",    "100",  "1000", "10000"],
     WLFI: ["10",    "100",  "1000", "10000"],
   },
-  bscTestnet:  { tBNB: ["0.005", "0.05", "0.5", "5"] },
-  baseSepolia: { ETH:  ["0.001", "0.01", "0.1", "1.0"] },
+  bscTestnet:      { tBNB: ["0.005", "0.05", "0.5", "5"] },
+  baseSepolia:     { ETH:  ["0.001", "0.01", "0.1", "1.0"] },
+  arbitrumSepolia: { ETH:  ["0.001", "0.01", "0.1", "1.0"] },
   // HYPE buckets — picked to give a comparable USD spread to ETH at $40 HYPE
   // (≈ $0.04 / $0.4 / $4 / $40). Adjust as testnet usage informs real sizes.
   hyperEvmTestnet: { HYPE: ["0.001", "0.01", "0.1", "1.0"] },

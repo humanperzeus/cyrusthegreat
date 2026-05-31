@@ -65,6 +65,11 @@ export const POOL_TOKENS_BY_CHAIN: Record<number, PoolTokenEntry[]> = {
   998: [
     { address: NATIVE_TOKEN_ADDRESS, symbol: 'HYPE', decimals: 18 },
   ],
+  // Arbitrum Sepolia testnet (421614). Native ETH only for v1 — ERC-20
+  // stablecoin additions deferred until canonical testnet addresses settle.
+  421614: [
+    { address: NATIVE_TOKEN_ADDRESS, symbol: 'ETH', decimals: 18 },
+  ],
   // Mainnet entries will be added during the mainnet deploy per
   // MAINNET_DEPLOY_CHECKLIST.md (ETH, USDC=6dec, USDT=6dec, USD1).
 };
@@ -117,6 +122,7 @@ function contractAddressForChain(chainId: number | undefined): Address | null {
   if (chainId === 56 || chainId === 97) return WEB3_CONFIG.CTGTRESOR_BSC_CONTRACT as Address;
   if (chainId === 8453 || chainId === 84532) return WEB3_CONFIG.CTGTRESOR_BASE_CONTRACT as Address;
   if (chainId === 999 || chainId === 998) return WEB3_CONFIG.CTGTRESOR_HYPER_CONTRACT as Address;
+  if (chainId === 42161 || chainId === 421614) return WEB3_CONFIG.CTGTRESOR_ARB_CONTRACT as Address;
   return null;
 }
 

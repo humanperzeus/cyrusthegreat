@@ -24,7 +24,7 @@ import { debugLog } from "@/lib/utils";
 interface DepositModalMigratedProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  chain: 'ETH' | 'BSC' | 'BASE';
+  chain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
   // Optional token-specific deposit
   isTokenDeposit?: boolean;
   tokenSymbol?: string;

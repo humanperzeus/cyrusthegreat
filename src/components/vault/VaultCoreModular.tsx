@@ -40,15 +40,15 @@ interface VaultCoreProps {
   refetchWalletTokens: () => void;
   refetchVaultTokens: () => void;
   // Chain switching props
-  activeChain: 'ETH' | 'BSC' | 'BASE';
-  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE') => void;
+  activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
+  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE' | 'ARB') => void;
   // Network state
   isSwitchingNetwork?: boolean;
 }
 
 // Keep the animated chain display logic (this was nice UX)
 const useAnimatedChainDisplay = (isConnected: boolean) => {
-  const [currentDisplayChain, setCurrentDisplayChain] = useState<'ETH' | 'BSC' | 'BASE'>('ETH');
+  const [currentDisplayChain, setCurrentDisplayChain] = useState<'ETH' | 'BSC' | 'BASE' | 'ARB'>('ETH');
   const [currentMessage, setCurrentMessage] = useState(0);
 
   const vaultMessages = [
