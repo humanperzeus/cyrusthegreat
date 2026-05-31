@@ -36,7 +36,7 @@ interface BatchTransaction {
   type: 'deposit' | 'withdraw' | 'transfer';
   tokens: TokenTransaction[];
   recipient?: string;
-  chain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
+  chain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
 }
 
 interface BatchTransactionPreviewProps {

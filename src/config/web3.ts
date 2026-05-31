@@ -53,10 +53,14 @@ export const WEB3_CONFIG = {
     ? import.meta.env.VITE_CTGTRESOR_BASE_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_BASE_TESTNET_CONTRACT,
 
-  // HyperEVM (Hyperliquid) contract address. Pool-only (no Bank8 vault yet).
-  // Native HYPE has 18 decimals. Testnet uses MockV3Aggregator for HYPE/USD —
-  // see tools/hardhat-deploy/scripts/deployMockPriceFeed.ts. Mainnet path
-  // pending Pyth-adapter work; slot stays empty until then.
+  // HyperEVM (Hyperliquid) contract addresses. Bank8 + CyrusTresor1 both
+  // deployed on testnet (2026-05-30). Native HYPE has 18 decimals.
+  // Testnet uses MockV3Aggregator for HYPE/USD — see deployMockPriceFeed.ts.
+  // Mainnet slots stay empty pending Pyth-adapter work for a real HYPE/USD feed.
+  CTGVAULT_HYPER_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+    ? import.meta.env.VITE_CTGVAULT_HYPER_MAINNET_CONTRACT
+    : import.meta.env.VITE_CTGVAULT_HYPER_TESTNET_CONTRACT,
+
   CTGTRESOR_HYPER_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
     ? import.meta.env.VITE_CTGTRESOR_HYPER_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_HYPER_TESTNET_CONTRACT,
@@ -206,9 +210,7 @@ export const getContractAddress = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER' | 'AR
     return WEB3_CONFIG.CTGVAULT_BASE_CONTRACT;
   }
   if (chain === 'HYPER') {
-    // No Bank8 on HyperEVM. Pool consumers should read CTGTRESOR_HYPER_CONTRACT
-    // via the WEB3_CONFIG object directly (see usePool.ts POOL_TOKENS_BY_CHAIN).
-    return undefined;
+    return WEB3_CONFIG.CTGVAULT_HYPER_CONTRACT;
   }
   if (chain === 'ARB') {
     return WEB3_CONFIG.CTGVAULT_ARB_CONTRACT;
@@ -409,17 +411,15 @@ export const getChainConfig = (chain: 'ETH' | 'BSC' | 'BASE' | 'HYPER' | 'ARB') 
   }
 
   if (chain === 'HYPER') {
-    // contractAddress is the CTGTRESOR (pool) address, since HyperEVM has no
-    // Bank8 deploy. getContractAddress('HYPER') returns undefined by design;
-    // we read the pool address directly off WEB3_CONFIG here so consumers that
-    // call getChainConfig get something useful.
+    // Both Bank8 + CyrusTresor1 deployed 2026-05-30. contractAddress here is
+    // the Bank8 (v1 vault) — pool consumers use POOL_TOKENS_BY_CHAIN / usePool.
     return {
       chain,
       networkMode,
       isMainnet: networkMode === 'mainnet',
       isTestnet: networkMode === 'testnet',
       chainId: networkMode === 'mainnet' ? 999 : 998,
-      contractAddress: WEB3_CONFIG.CTGTRESOR_HYPER_CONTRACT,
+      contractAddress: getContractAddress('HYPER'),
       rpcUrl: getBestRpcUrl('HYPER'),
       etherscanUrl: getEtherscanUrl('HYPER'),
       nativeCurrency: {

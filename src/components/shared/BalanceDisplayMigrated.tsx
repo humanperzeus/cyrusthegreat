@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { debugLog } from "@/lib/utils";
 
 interface BalanceDisplayMigratedProps {
-  chain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
+  chain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
   showRefreshButtons?: boolean; // Show individual refresh buttons
   showMigrationInfo?: boolean; // Show migration status info
 }

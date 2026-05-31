@@ -10,8 +10,8 @@ import { getChainConfig } from "@/config/web3";
 import { useAccount } from "wagmi";
 
 interface ChainIndicatorProps {
-  activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB';
-  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE' | 'ARB') => void;
+  activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
+  setActiveChain: (chain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER') => void;
   isSwitchingNetwork?: boolean;
 }
 

@@ -24,11 +24,11 @@ import { WEB3_CONFIG } from "@/config/web3";
   // };
 
 
-// v1 supports ETH/BSC/BASE/ARB. v2 (pool) additionally supports HYPER (HyperEVM).
-// Index.tsx holds the wider 5-chain state; the v1 surface gets narrowed at
-// the boundary (see v1SafeChain / v1SetActiveChain below).
+// As of 2026-05-30 both v1 (Bank8) and v2 (CyrusTresor1) cover the same
+// 5 EVM chains. ActiveChain and V1Chain are now identical — the historical
+// v1SafeChain bridge is a no-op pass-through (kept for naming clarity).
 type ActiveChain = 'ETH' | 'BSC' | 'BASE' | 'HYPER' | 'ARB';
-type V1Chain = 'ETH' | 'BSC' | 'BASE' | 'ARB';
+type V1Chain = 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
 
 const Index = () => {
   // Chain switching state with persistence
@@ -59,20 +59,11 @@ const Index = () => {
     localStorage.setItem('cyrusthegreat-active-mode', mode);
   }, [mode]);
 
-  // HYPER (HyperEVM) is pool-only — v1 (Bank8 vault) has no contract there.
-  // If the user picks HYPER while in v1, auto-promote to v2 so they don't
-  // land on an empty/broken-looking vault view.
-  useEffect(() => {
-    if (activeChain === 'HYPER' && mode === 'v1') {
-      setMode('v2');
-    }
-  }, [activeChain, mode]);
-
-  // Bridge: v1 components don't know about HYPER. Narrow to ETH for v1
-  // consumers when the user is on HYPER (the useEffect above prevents the
-  // v1 view from being mounted in that case, so the fallback value is
-  // never displayed — it's just here to satisfy the type checker).
-  const v1SafeChain: V1Chain = activeChain === 'HYPER' ? 'ETH' : activeChain;
+  // Bank8 (v1) is now deployed on HyperEVM as of 2026-05-30, so v1 supports
+  // the same 5 chains as v2. The HYPER → v2 auto-promote effect is removed.
+  // v1SafeChain is a no-op pass-through (kept for naming clarity / future
+  // chain-set divergence).
+  const v1SafeChain: V1Chain = activeChain;
   const v1SetActiveChain = (chain: V1Chain) => setActiveChain(chain);
   
   const {

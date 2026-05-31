@@ -27,7 +27,7 @@ interface TransferModalProps {
   tokenBalance?: string;
   tokenDecimals?: number;
   // Chain-aware props
-  activeChain?: 'ETH' | 'BSC' | 'BASE' | 'ARB';
+  activeChain?: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
   // Multi-token functionality
   vaultTokens?: Array<{address: string, symbol: string, balance: string, decimals: number}>;
   rateLimitStatus?: {

@@ -37,8 +37,9 @@ const PRICE_FEEDS: Record<string, string> = {
   bscTestnet:      "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526", // BSC Testnet BNB/USD
   baseSepolia:     "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1", // Base Sepolia ETH/USD
   arbitrumSepolia: "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165", // Arbitrum Sepolia ETH/USD (live, verified 2026-05-31)
-  // No hyperEvmTestnet entry here — Bank8 isn't deployed on HyperEVM (pool-only chain).
-  // If a future deploy needs it, set PRICE_FEED_OVERRIDE and add an entry.
+  // hyperEvmTestnet: no canonical Chainlink HYPE/USD on HyperEVM yet — pass
+  // PRICE_FEED_OVERRIDE with the MockV3Aggregator from deployMockPriceFeed.ts.
+  // Bank8 was deployed via this path on 2026-05-30.
 };
 
 function envOr(name: string, fallback?: string): string | undefined {

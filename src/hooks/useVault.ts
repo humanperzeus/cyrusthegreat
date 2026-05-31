@@ -18,7 +18,7 @@ declare global {
   }
 }
 
-export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH') => {
+export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' = 'ETH') => {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { toast } = useToast();
@@ -759,7 +759,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH') =>
     ETH: { ...defaultChainState },
     BSC: { ...defaultChainState },
     BASE: { ...defaultChainState },
-    ARB: { ...defaultChainState }
+    ARB: { ...defaultChainState },
+    HYPER: { ...defaultChainState }
   });
 
   // Get current chain transaction state
@@ -3892,7 +3893,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH') =>
           ETH: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
           BSC: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
           BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
-          ARB: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null }
+          ARB: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
+          HYPER: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null }
         });
         
         debugLog('🧹 All chain transaction states reset to false');
@@ -3910,7 +3912,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' = 'ETH') =>
           ETH: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
           BSC: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
           BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
-          ARB: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null }
+          ARB: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null },
+          HYPER: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null }
         });
         
         // Force clear any remaining Wagmi states by triggering a re-render
