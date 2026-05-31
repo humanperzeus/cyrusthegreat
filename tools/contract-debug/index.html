@@ -270,13 +270,16 @@ const ADDR = (() => {
   const raw = {
     // Vault contracts
     bank5_sepolia:       "0x3d6e43cbf157110015edf062173bbebf78de61b4",
-    bank8_sepolia:       "0xb83a814097c70db79568b663662ea07e77d4d87a",
-    bank8_bsc_testnet:   "0xfb0eb1fe0b61d93c3b56a811702aae494a8f3582",
-    bank8_base_testnet:  "0x2f2963ff1f68e4bb283c34193396ef84eac2ca5b",
-    // CyrusTresor1 — deployed 2026-05-14, NOT live on cyrusthegreat.dev yet
-    tresor1_sepolia:      "0x223e25f961e29aacc3db49e5b00b30452d42c65e",
-    tresor1_bsc_testnet:  "0xa2d2a04d6ee5887f20bf736e1d9014727d599f39",
-    tresor1_base_testnet: "0xc90610ce4de152349932af102650b6c9f8c6ad68",
+    // Bank8 (CrossChainBank8) — REDEPLOYED 2026-05-23 (Sepolia + Base) + 2026-05-30 (BSC)
+    // after the 2026-05-19 key rotation. Same address on all 3 EVM chains because
+    // wallet 1 deploys with the same nonce on each — coincidence, not by design.
+    bank8_sepolia:       "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
+    bank8_bsc_testnet:   "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
+    bank8_base_testnet:  "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
+    // CyrusTresor1 — REDEPLOYED with the same chain-parity pattern.
+    tresor1_sepolia:      "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
+    tresor1_bsc_testnet:  "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
+    tresor1_base_testnet: "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
     // Test wallets (Sepolia, dev only). Rotated 2026-05-19 — previous wallet 1
     // (0x84064947…) and wallet 2 (0xa5f83D48…) were treated as leaked and drained.
     wallet1:             "0x35fe77e4e8b4af616f2b540ea143b6e27e512cc8",
