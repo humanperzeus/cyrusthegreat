@@ -65,16 +65,13 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
   return (
     <div className="flex flex-col items-center gap-1">
       {/* Visual order standardized 2026-05-30: HYPER / ETH / BSC / BASE / ARB / SOL.
-          HYPER + ARB stay disabled until their contracts land — HYPER waiting on
-          HyperEVM testnet faucet, ARB waiting on contract deploy. SOL permanently
-          disabled (Solana program exists but not wired into the EVM dapp). */}
+          5 chains live in v2 as of 2026-05-30 — all CyrusTresor1 contracts share
+          the same address 0x15fE4Fd1… by deploy-nonce coincidence. SOL stays
+          permanently disabled (Solana program exists but not wired into EVM dapp). */}
       <div className="flex items-center gap-1">
-        <div
-          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
-          title="HyperEVM — pending faucet + redeploy"
-        >
-          {isTestnet ? "tHYPE" : "HYPE"}
-        </div>
+        <button onClick={() => handleSwitch("HYPER")} className={buttonClass("HYPER")} title="Hyperliquid EVM / HyperEVM Testnet">
+          {isSwitching === "HYPER" ? "…" : (isTestnet ? "tHYPE" : "HYPE")}
+        </button>
         <button onClick={() => handleSwitch("ETH")} className={buttonClass("ETH")} title="Ethereum / Sepolia">
           {isSwitching === "ETH" ? "…" : (isTestnet ? "tETH" : "ETH")}
         </button>

@@ -284,6 +284,12 @@ const ADDR = (() => {
     // 3 EVM chains (4-chain parity from same nonce on each).
     bank8_arb_testnet:    "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
     tresor1_arb_testnet:  "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
+    // HyperEVM Testnet — deployed 2026-05-30 via big blocks (required for
+    // CyrusTresor1's ~4M-gas deploy on HyperEVM's small-block default).
+    // No Bank8 here — pool-only chain by design.
+    // priceFeed_hyper_testnet = MockV3Aggregator (HYPE = $40, testnet only).
+    mock_pricefeed_hyper_testnet: "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
+    tresor1_hyper_testnet:        "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
     // Test wallets (Sepolia, dev only). Rotated 2026-05-19 — previous wallet 1
     // (0x84064947…) and wallet 2 (0xa5f83D48…) were treated as leaked and drained.
     wallet1:             "0x35fe77e4e8b4af616f2b540ea143b6e27e512cc8",
