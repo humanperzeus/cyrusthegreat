@@ -262,6 +262,14 @@ const NETWORKS = {
        rpcUrls: ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://1rpc.io/base"] },
   84532: { name: "Base Sepolia", currency: "ETH", explorer: "https://sepolia.basescan.org",
        rpcUrls: ["https://sepolia.base.org", "https://base-sepolia-rpc.publicnode.com"] },
+  42161: { name: "Arbitrum One", currency: "ETH", explorer: "https://arbiscan.io",
+       rpcUrls: ["https://arb1.arbitrum.io/rpc", "https://arbitrum-rpc.publicnode.com", "https://rpc.ankr.com/arbitrum"] },
+  421614: { name: "Arbitrum Sepolia", currency: "ETH", explorer: "https://sepolia.arbiscan.io",
+       rpcUrls: ["https://sepolia-rollup.arbitrum.io/rpc", "https://arbitrum-sepolia-rpc.publicnode.com"] },
+  999: { name: "HyperEVM Mainnet", currency: "HYPE", explorer: "https://purrsec.com",
+       rpcUrls: ["https://rpc.hyperliquid.xyz/evm"] },
+  998: { name: "HyperEVM Testnet", currency: "HYPE", explorer: "https://testnet.purrsec.com",
+       rpcUrls: ["https://rpc.hyperliquid-testnet.xyz/evm", "https://rpcs.chain.link/hyperevm/testnet"] },
 };
 
 // All addresses pulled from cyrusthegreat/.env, normalized to EIP-55 checksum
@@ -766,12 +774,13 @@ async function switchNetwork(target) {
 // ============================================================
 function refreshAddrBook() {
   const cur = NETWORKS[chainId];
-  const vault = chainId === 11155111 ? ADDR.bank8_sepolia
-              : chainId === 97       ? ADDR.bank8_bsc_testnet
-              : chainId === 84532    ? ADDR.bank8_base_testnet
-              : null;
+  const vault = bank8AddressForChain();
+  const tresor1 = tresor1AddressForChain();
+  const isHyperTestnet = chainId === 998;
   const rows = [
-    { lbl: "Active Bank8 vault", val: vault, link: !!vault },
+    { lbl: "Active Bank8 vault (v1)", val: vault, link: !!vault },
+    { lbl: "Active CyrusTresor1 (v2)", val: tresor1, link: !!tresor1 },
+    { lbl: "Mock HYPE/USD price feed", val: ADDR.mock_pricefeed_hyper_testnet, link: isHyperTestnet, note: isHyperTestnet ? "" : "(only used on HyperEVM testnet)" },
     { lbl: "Bank5 (live prod)",  val: ADDR.bank5_sepolia, link: chainId === 11155111 },
     { lbl: "Wallet 1 (you)",     val: ADDR.wallet1, link: true },
     { lbl: "Wallet 2 (test recv.)", val: ADDR.wallet2, link: true },
@@ -801,10 +810,7 @@ function refreshAddrBook() {
 async function refreshStateFor(addr, panelEl, statusEl, walletLabel = "Wallet") {
   if (!panelEl) return;
   const cur = NETWORKS[chainId];
-  const vault = chainId === 11155111 ? ADDR.bank8_sepolia
-              : chainId === 97       ? ADDR.bank8_bsc_testnet
-              : chainId === 84532    ? ADDR.bank8_base_testnet
-              : null;
+  const vault = bank8AddressForChain();
   if (!provider || !vault || !addr) {
     panelEl.innerHTML = `<div class="stat"><div class="lbl">State</div><div class="val hint">${
       !addr ? "No address"
@@ -1074,7 +1080,7 @@ const BANK8_TESTS = [
     expect: "Fee is small wei. MAX_BATCH_SIZE=25, MAX_TOKENS_PER_USER=200.",
     run: async () => {
       const abi = await fetchAbi("CrossChainBank8");
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) throw new Error("No Bank8 deployment on this chain. Switch to Sepolia/BSC Testnet/Base Sepolia.");
       const c = new ethers.Contract(v, abi, getReadProvider());
       const [fee, maxBatch, maxPerUser, maxNew, rateLimit] = await Promise.all([
@@ -1088,7 +1094,7 @@ const BANK8_TESTS = [
     desc: "Read your current vault contents. Empty if you've never deposited.",
     run: async () => {
       const abi = await fetchAbi("CrossChainBank8");
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) throw new Error("No Bank8 on this chain");
       const c = new ethers.Contract(v, abi, getReadProvider());
       const [tokens, balances] = await c.getMyVaultedTokens.staticCall({ from: account });
@@ -1104,7 +1110,7 @@ const BANK8_TESTS = [
     run: async ([amt]) => {
       ensureSigner();
       const abi = await fetchAbi("CrossChainBank8");
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) throw new Error("No Bank8 on this chain");
       const c = new ethers.Contract(v, abi, getReadProvider());
       const fee = await c.getCurrentFeeInWei();
@@ -1135,7 +1141,7 @@ const BANK8_TESTS = [
           ensureSigner();
           const sel = picker.getSelected();
           if (!sel.length) throw new Error("Tick at least one token and enter an amount.");
-          const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+          const v = bank8AddressForChain();
           if (!v) throw new Error("No Bank8 deployment on this chain — switch network.");
           const abi = await fetchAbi("CrossChainBank8");
           const c = new ethers.Contract(v, abi, getReadProvider());
@@ -1178,7 +1184,7 @@ const BANK8_TESTS = [
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
         return { run: async () => { throw new Error("No Bank8"); } };
@@ -1230,7 +1236,7 @@ const BANK8_TESTS = [
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
         return { run: async () => { throw new Error("No Bank8"); } };
@@ -1275,7 +1281,7 @@ const BANK8_TESTS = [
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 deployment on this chain.</div>`;
         return { run: async () => { throw new Error("No Bank8 on this chain"); } };
@@ -1327,7 +1333,7 @@ const BANK8_TESTS = [
           const sel = picker.getSelected();
           if (sel.length !== 1) throw new Error("Pick exactly ONE token (this is the single-token test).");
           const t = sel[0];
-          const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+          const v = bank8AddressForChain();
           if (!v) throw new Error("No Bank8 deployment on this chain — switch network.");
           const abi = await fetchAbi("CrossChainBank8");
           const c = new ethers.Contract(v, abi, getReadProvider());
@@ -1361,7 +1367,7 @@ const BANK8_TESTS = [
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
         return { run: async () => { throw new Error("No Bank8"); } };
@@ -1400,7 +1406,7 @@ const BANK8_TESTS = [
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
         return { run: async () => { throw new Error("No Bank8"); } };
@@ -1451,7 +1457,7 @@ const BANK8_TESTS = [
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
-      const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+      const v = bank8AddressForChain();
       if (!v) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
         return { run: async () => { throw new Error("No Bank8"); } };
@@ -1508,7 +1514,7 @@ const BANK8_TESTS = [
       return {
         run: async () => {
           ensureSigner();
-          const v = chainId === 11155111 ? ADDR.bank8_sepolia : chainId === 97 ? ADDR.bank8_bsc_testnet : chainId === 84532 ? ADDR.bank8_base_testnet : null;
+          const v = bank8AddressForChain();
           if (!v) throw new Error("No Bank8 on this chain");
           const abi = await fetchAbi("CrossChainBank8");
           const c = new ethers.Contract(v, abi, getReadProvider());
@@ -1581,6 +1587,21 @@ function tresor1AddressForChain() {
   return chainId === 11155111 ? ADDR.tresor1_sepolia
        : chainId === 97        ? ADDR.tresor1_bsc_testnet
        : chainId === 84532     ? ADDR.tresor1_base_testnet
+       : chainId === 421614    ? ADDR.tresor1_arb_testnet
+       : chainId === 998       ? ADDR.tresor1_hyper_testnet
+       : null;
+}
+
+// Resolve the deployed CrossChainBank8 address for the current chain.
+// Note: bank8_hyper_testnet lives at a different address than the other 4
+// EVM chains (0xf9AAB9b4… vs 0xd2fC71E2…) because wallet 1's HyperEVM nonce
+// had advanced by the time Bank8 deployed there.
+function bank8AddressForChain() {
+  return chainId === 11155111 ? ADDR.bank8_sepolia
+       : chainId === 97        ? ADDR.bank8_bsc_testnet
+       : chainId === 84532     ? ADDR.bank8_base_testnet
+       : chainId === 421614    ? ADDR.bank8_arb_testnet
+       : chainId === 998       ? ADDR.bank8_hyper_testnet
        : null;
 }
 
