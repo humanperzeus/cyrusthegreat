@@ -56,7 +56,8 @@ export const useTransactionManagement = (
   const [transactionStates, setTransactionStates] = useState<Record<'ETH' | 'BSC' | 'BASE' | 'ARB', TransactionState>>({
     ETH: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
     BSC: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
-    BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null }
+    BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
+    ARB: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null }
   });
 
   // Contract write functions
@@ -100,7 +101,8 @@ export const useTransactionManagement = (
       setTransactionStates({
         ETH: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
         BSC: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
-        BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null }
+        BASE: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null },
+        ARB: { isLoading: false, isSimulating: false, hasRefreshedAfterConfirmation: false, lastTransactionHash: null, error: null }
       });
     }
   }, []);
