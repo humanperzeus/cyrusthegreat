@@ -410,8 +410,8 @@ contract CyrusTresor1Test is Test {
     }
 
     function test_revealFromPool_revertsOnZeroWithdrawTo() public {
-        bytes32 commitment = _commitmentHash(SECRET_A, SALT_A, address(0), address(0), 0);
-        // Don't even need to commit — we expect early revert
+        // Don't even need to commit — we expect early revert before the
+        // commitment lookup runs.
         vm.prank(BOB);
         vm.expectRevert("pool: withdrawTo is zero address");
         vault.revealFromPool(SECRET_A, SALT_A, address(0), address(0), 0, "");
