@@ -1,0 +1,39 @@
+{
+  "network": "arbitrumSepolia",
+  "chainId": 421614,
+  "contract": "CyrusTresor1",
+  "address": "0x15fE4Fd173599b248C6B89f5E3caeA60E1c1a1Db",
+  "deployTx": "0x501e42f0a27eb225aecdbcac0cf14e4b46e427c87a5c37aa303757e3db66f1a7",
+  "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+  "blockNumber": 272490478,
+  "timestamp": "2026-05-31T14:50:41.273Z",
+  "constructorArgs": {
+    "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+    "salt": "0x4b55e2bc6e01c4d892346092ce15beccf2903318f7b0462f8f871a746bee1ec7",
+    "priceFeed": "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165",
+    "poolTokens": [
+      "0x0000000000000000000000000000000000000000"
+    ],
+    "bucketSchedules": [
+      [
+        "1000000000000000",
+        "10000000000000000",
+        "100000000000000000",
+        "1000000000000000000"
+      ]
+    ],
+    "zkVerifier": "0x0000000000000000000000000000000000000000"
+  },
+  "poolBucketsHuman": [
+    {
+      "symbol": "ETH",
+      "addr": "0x0000000000000000000000000000000000000000",
+      "sizes": [
+        "0.001",
+        "0.01",
+        "0.1",
+        "1.0"
+      ]
+    }
+  ]
+}

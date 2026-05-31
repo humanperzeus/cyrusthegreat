@@ -84,12 +84,9 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
         <button onClick={() => handleSwitch("BASE")} className={buttonClass("BASE")} title="Base / Base Sepolia">
           {isSwitching === "BASE" ? "…" : (isTestnet ? "tBASE" : "BASE")}
         </button>
-        <div
-          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
-          title="Arbitrum — pending contract deploy"
-        >
-          {isTestnet ? "tARB" : "ARB"}
-        </div>
+        <button onClick={() => handleSwitch("ARB")} className={buttonClass("ARB")} title="Arbitrum / Arbitrum Sepolia">
+          {isSwitching === "ARB" ? "…" : (isTestnet ? "tARB" : "ARB")}
+        </button>
         <div
           className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
           title="Solana — not yet integrated"

@@ -1021,8 +1021,13 @@ export const VaultCore = ({
                 {currentNetwork.networkMode === 'mainnet' ? 'BASE' : 'tBASE'}
               </div>
               <div
-                className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed"
-                title="Arbitrum (pending contract deploy)"
+                className={`w-8 h-8 p-0 flex items-center justify-center text-xs font-mono rounded cursor-pointer transition-all duration-200 ${
+                  activeChain === 'ARB'
+                    ? 'text-white bg-vault-primary border border-vault-primary'
+                    : 'text-muted-foreground/50 bg-transparent border border-muted/30 hover:bg-background/20'
+                }`}
+                onClick={() => handleChainSwitch('ARB')}
+                title={`Arbitrum ${currentNetwork.networkMode === 'mainnet' ? 'Mainnet' : 'Sepolia'} (Click to switch)`}
               >
                 {currentNetwork.networkMode === 'mainnet' ? 'ARB' : 'tARB'}
               </div>
