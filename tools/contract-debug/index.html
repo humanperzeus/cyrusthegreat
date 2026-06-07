@@ -2144,11 +2144,11 @@ function tresor1ComputeCommitment(secret, userSalt, withdrawTo, token, bucketIdx
 const TRESOR1_TESTS = [
   // ---------- ct-1: sanity reads ----------
   {
-    id: "ct-1", name: "Sanity: read pool config + epoch state", kind: "read",
+    id: "ct-1", name: "Sanity: pool config + current epoch", kind: "read",
 
     phase: "Step 1 · Sanity reads (no gas)", phaseSub: "Pool config + epoch state — confirm the deployment.",
-    desc: "Confirms the deployed contract responds. Reads currentEpoch(), EPOCH_LENGTH, the ETH bucket-0 size, and MAX_BATCH_SIZE.",
-    expect: "currentEpoch is a positive number; EPOCH_LENGTH = 3600; ETH bucket 0 = 0.001 ETH equivalent.",
+    desc: "Reads currentEpoch, EPOCH_LENGTH, ETH bucket-0 size, MAX_BATCH_SIZE. No tx, no fee.",
+    expect: "currentEpoch is a positive number; EPOCH_LENGTH = 3600; ETH bucket 0 = 0.001 ETH; MAX_BATCH_SIZE = 25.",
     run: async () => {
       const v = tresor1AddressForChain();
       if (!v) throw new Error(`CyrusTresor1 not deployed on chainId ${chainId}`);
@@ -2172,11 +2172,11 @@ const TRESOR1_TESTS = [
   },
   // ---------- ct-2: regular vault depositETH (Bank8-identical surface) ----------
   {
-    id: "ct-2", name: "Sanity: Bank8 surface still works (regular depositETH)", kind: "write",
+    id: "ct-2", name: "Sanity: regular depositETH still works", kind: "write",
 
     phase: "Step 2 · Regression check", phaseSub: "Bank8 vault surface still works after pool additions.",
-    desc: "Deposits a tiny amount into the regular (non-pool) vault. Same code path as Bank8 — confirms the rename + pool additions didn't break the base contract.",
-    expect: "Tx confirms with status 1. Same dynamic fee as Bank8 (~$0.10).",
+    desc: "Deposits a small amount into the regular vault (not the pool). Confirms the Bank8 surface wasn't broken when the pool layer was added.",
+    expect: "Tx confirms with status 1. ~$0.10 fee charged.",
     inputs: [{ label: "Amount (ETH)", default: "0.0001", parse: (s) => s.trim() }],
     run: async ([amt]) => {
       await ensureSigner();
@@ -2197,11 +2197,11 @@ const TRESOR1_TESTS = [
   },
   // ---------- ct-3: commitToPool happy path ----------
   {
-    id: "ct-3", name: "Pool: commit ETH to anonymity pool (bucket 0 = 0.001 ETH)", kind: "write",
+    id: "ct-3", name: "Pool: commit ETH (bucket 0 = 0.001 ETH)", kind: "write",
 
     phase: "Step 3 · Pool commit + reveal (happy path)", phaseSub: "Commit now, reveal after the epoch boundary.",
-    desc: "Generates a random (secret, userSalt), computes the commitment hash with withdrawTo = your wallet, calls commitToPool(). Saves the secret/salt to the notebook above so you can reveal later.",
-    expect: "Tx confirms. New PoolDeposit event. Notebook shows a new pending commit.",
+    desc: "Generates a random secret + salt, computes the commitment, calls commitToPool. The secret stays in the local notebook so you can reveal later. withdrawTo is baked into the commitment for MEV protection.",
+    expect: "Tx confirms with status 1. Notebook gains a new pending commit. Eligible to reveal next epoch (= next hour boundary).",
     inputs: [
       { label: "withdrawTo (recipient on reveal — self-pay, W1, or W2)", default: "self", parse: (s) => s.trim(), recipient: true },
     ],
@@ -2255,11 +2255,11 @@ const TRESOR1_TESTS = [
   },
   // ---------- ct-4: same-epoch reveal REVERT ----------
   {
-    id: "ct-4", name: "Pool: reveal immediately (expect REVERT — must wait 1 epoch)", kind: "write",
+    id: "ct-4", name: "Pool: reveal too early (expect REVERT)", kind: "write",
 
     phase: "Step 4 · Pool revert checks (expected failures)", phaseSub: "Each test expects the contract to reject the call.",
-    desc: "Tries to reveal the LATEST pending commit RIGHT NOW. Per spec § 4 the contract requires currentEpoch > depositEpoch. Will revert if you haven't crossed an hour boundary since ct-3.",
-    expect: "Revert with 'pool: must wait at least 1 epoch after commit'. If you've waited >1h since ct-3, this WILL succeed — that's fine, run ct-7 instead.",
+    desc: "Tries to reveal the latest pending commit RIGHT NOW. The contract requires currentEpoch > depositEpoch (= you must cross an hour boundary since ct-3).",
+    expect: "Revert with 'pool: must wait at least 1 epoch after commit'. If >1h has passed since ct-3, this will succeed instead — run ct-7 in that case.",
     run: async () => {
       await ensureSigner();
       const v = tresor1AddressForChain();
@@ -2288,10 +2288,10 @@ const TRESOR1_TESTS = [
   },
   // ---------- ct-5: MEV-redirect REVERT ----------
   {
-    id: "ct-5", name: "Pool: tampered withdrawTo (expect REVERT — MEV-safe binding)", kind: "write",
+    id: "ct-5", name: "Pool: tampered withdrawTo (expect REVERT — MEV protection)", kind: "write",
 
     phase: "Step 4 · Pool revert checks (expected failures)", phaseSub: "Each test expects the contract to reject the call.",
-    desc: "Tries to claim the latest pending commit but sends funds to a DIFFERENT address than the one baked into the commitment hash. Per spec § 9 this MUST fail because withdrawTo is in the keccak preimage — changing it changes the commitment, lookup misses.",
+    desc: "Tries to send the reveal funds to a different address than the one bound to the commitment. withdrawTo is part of the commitment hash — changing it produces a different hash, so the contract can't find the commit.",
     expect: "Revert with 'pool: unknown commitment'.",
     run: async () => {
       await ensureSigner();
@@ -2323,11 +2323,11 @@ const TRESOR1_TESTS = [
   },
   // ---------- ct-6: double-spend REVERT (only valid after a successful ct-7) ----------
   {
-    id: "ct-6", name: "Pool: replay an already-spent commit (expect REVERT — double-spend)", kind: "write",
+    id: "ct-6", name: "Pool: replay a spent commit (expect REVERT)", kind: "write",
 
     phase: "Step 4 · Pool revert checks (expected failures)", phaseSub: "Each test expects the contract to reject the call.",
-    desc: "Tries to re-reveal a commit that has ALREADY been revealed (marked spent in the notebook). Only useful after a successful ct-7 — otherwise it'll just hit the same-epoch revert from ct-4.",
-    expect: "Revert with 'pool: commitment already spent'.",
+    desc: "Tries to re-reveal a commit that was already revealed (spent flag set). Useful only after a successful ct-7.",
+    expect: "Revert with 'pool: commitment already spent'. If no spent commits in notebook yet, run ct-3 then ct-7 first.",
     run: async () => {
       await ensureSigner();
       const v = tresor1AddressForChain();
@@ -2354,11 +2354,11 @@ const TRESOR1_TESTS = [
   },
   // ---------- ct-7: reveal happy path ----------
   {
-    id: "ct-7", name: "Pool: reveal LATEST pending commit (happy path)", kind: "write",
+    id: "ct-7", name: "Pool: reveal latest pending commit (happy path)", kind: "write",
 
     phase: "Step 3 · Pool commit + reveal (happy path)", phaseSub: "Commit now, reveal after the epoch boundary.",
-    desc: "Submits revealFromPool for the most-recent pending commit. Requires >= 1 epoch elapsed since the commit (= you're past the next hour boundary). Funds land in withdrawTo. Notebook marks the entry as spent.",
-    expect: "Tx confirms with status 1. withdrawTo balance increases by bucketSize. Notebook shows ✓ revealed.",
+    desc: "Submits revealFromPool for the most-recent pending commit. Requires the next epoch to have started (= 1 hour after ct-3). Funds land in withdrawTo. Notebook marks the entry as spent.",
+    expect: "Tx confirms with status 1. withdrawTo balance increases by the bucket size. Notebook entry flips to ✓ revealed.",
     run: async () => {
       await ensureSigner();
       const v = tresor1AddressForChain();
