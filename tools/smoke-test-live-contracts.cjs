@@ -20,20 +20,20 @@ const { JsonRpcProvider, Contract, getAddress } = require(path.join(__dirname, '
 // differ on HyperEVM (different nonce-alignment).
 const CHAINS = [
   { name: 'Sepolia        ', id: 11155111, rpc: 'https://ethereum-sepolia-rpc.publicnode.com', native: 'sETH',
-    bank8:   '0xd2fc71e2fbf7a267c2f884160f01c82994175958',
-    tresor1: '0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db' },
+    bank8:   '0xb4D636Eceaf469cB7b84bD72387aC61e804A1D42',
+    tresor1: '0x48e8B5d31CE1445c2C64EbD2c775E7f753813E1F' },
   { name: 'BSC Testnet    ', id: 97, rpc: 'https://bsc-testnet-rpc.publicnode.com', native: 'tBNB',
-    bank8:   '0xd2fc71e2fbf7a267c2f884160f01c82994175958',
-    tresor1: '0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db' },
+    bank8:   '0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9',
+    tresor1: '0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219' },
   { name: 'Base Sepolia   ', id: 84532, rpc: 'https://base-sepolia-rpc.publicnode.com', native: 'ETH',
-    bank8:   '0xd2fc71e2fbf7a267c2f884160f01c82994175958',
-    tresor1: '0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db' },
+    bank8:   '0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9',
+    tresor1: '0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219' },
   { name: 'Arbitrum Sepolia', id: 421614, rpc: 'https://sepolia-rollup.arbitrum.io/rpc', native: 'ETH',
-    bank8:   '0xd2fc71e2fbf7a267c2f884160f01c82994175958',
-    tresor1: '0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db' },
+    bank8:   '0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9',
+    tresor1: '0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219' },
   { name: 'HyperEVM Testnet', id: 998, rpc: 'https://rpc.hyperliquid-testnet.xyz/evm', native: 'HYPE',
-    bank8:   '0xf9aab9b4800e3d5fcd4e4faf1f7fcf539cbd06a9',
-    tresor1: '0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db' },
+    bank8:   '0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219',
+    tresor1: '0x57d438eA49CFe54814ccA12E14736c7A059361C8' },
 ];
 
 // Bank8 (CrossChainBank8) view-fn surface.

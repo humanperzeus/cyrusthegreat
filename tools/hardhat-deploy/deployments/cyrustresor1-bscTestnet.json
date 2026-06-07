@@ -2,14 +2,14 @@
   "network": "bscTestnet",
   "chainId": 97,
   "contract": "CyrusTresor1",
-  "address": "0x15fE4Fd173599b248C6B89f5E3caeA60E1c1a1Db",
-  "deployTx": "0x33dc326772b0da3ddcfe45b96db16a5c7bac5aeb90b752760ea78e92d9e33d46",
+  "address": "0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219",
+  "deployTx": "0x061adcfaf3cdf09664b56f29dcb1b5cb2bdeba7e1fc8ee9f6b27553fa443ac8a",
   "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-  "blockNumber": 110653488,
-  "timestamp": "2026-05-31T14:18:53.300Z",
+  "blockNumber": 111994735,
+  "timestamp": "2026-06-07T13:58:19.278Z",
   "constructorArgs": {
     "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-    "salt": "0x2a4ce65967d0748cd1e7f6c0667826bfa227ba9114bd5384b9a742fb73769289",
+    "salt": "0xd9b942ee01b8da99f69beae221e93c702ea8710e8395ad2dc3546831d16bb3df",
     "priceFeed": "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526",
     "poolTokens": [
       "0x0000000000000000000000000000000000000000"

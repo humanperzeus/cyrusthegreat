@@ -2,14 +2,14 @@
   "network": "bscTestnet",
   "chainId": 97,
   "contract": "CrossChainBank8",
-  "address": "0xd2fC71E2fbF7a267c2F884160F01c82994175958",
-  "deployTx": "0x60cecf024bc0bd49379d2d70070ea14d67153896e0fd510371e9244b984d07ce",
+  "address": "0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9",
+  "deployTx": "0x5bd4e0fc771b26d0e345799b78983f18f197dd72d43de5306fd77658304f6871",
   "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-  "blockNumber": 110653457,
-  "timestamp": "2026-05-31T14:18:39.705Z",
+  "blockNumber": 111994724,
+  "timestamp": "2026-06-07T13:58:14.438Z",
   "constructorArgs": {
     "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-    "salt": "0x73040bfa9223783059a5c5776313da8c0ac1ffe07e5b031c25813d37f534a7c3",
+    "salt": "0x3b409f1b6e74472f2d859445b09bef0877458fa4b273780bfd439707672167d2",
     "priceFeed": "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526"
   }
 }

@@ -2,14 +2,14 @@
   "network": "hyperEvmTestnet",
   "chainId": 998,
   "contract": "CyrusTresor1",
-  "address": "0x15fE4Fd173599b248C6B89f5E3caeA60E1c1a1Db",
-  "deployTx": "0x47adf8ebfc68343e5394c88c8676eb8505c2d9780a6451a1bf129083f6781350",
+  "address": "0x57d438eA49CFe54814ccA12E14736c7A059361C8",
+  "deployTx": "0xa979cf6262adc13370a109ba12d4acdf8be24726d25ae16179fcc88e48b6d131",
   "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-  "blockNumber": 54989495,
-  "timestamp": "2026-05-31T16:37:05.663Z",
+  "blockNumber": 55594041,
+  "timestamp": "2026-06-07T14:01:06.384Z",
   "constructorArgs": {
     "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-    "salt": "0x95168cb492877fa61ee9f0b7ffe1a4da521df13ab36f0f1487e4176c3ec88933",
+    "salt": "0xeb35dd15d4fe825c01a6aab7597ace9b740dca9be4785eea827648a65677e828",
     "priceFeed": "0xd2fC71E2fbF7a267c2F884160F01c82994175958",
     "poolTokens": [
       "0x0000000000000000000000000000000000000000"

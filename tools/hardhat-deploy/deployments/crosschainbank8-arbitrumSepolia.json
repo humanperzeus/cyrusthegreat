@@ -2,14 +2,14 @@
   "network": "arbitrumSepolia",
   "chainId": 421614,
   "contract": "CrossChainBank8",
-  "address": "0xd2fC71E2fbF7a267c2F884160F01c82994175958",
-  "deployTx": "0xa311d1413b07c7ab869f0472530156767b69f2fef0508c86680764a4043b137d",
+  "address": "0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9",
+  "deployTx": "0x2fbe01a571f97310135a0dd3d4f08c37c99a6797d57f0c6ee8b95b078a482b6e",
   "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-  "blockNumber": 272490436,
-  "timestamp": "2026-05-31T14:50:29.899Z",
+  "blockNumber": 274775887,
+  "timestamp": "2026-06-07T13:58:47.082Z",
   "constructorArgs": {
     "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-    "salt": "0xabc3206dc55843b71a4d4decc1391a8f51dbc0b7aa81d398278c6de3faf82730",
+    "salt": "0x017e371d5b1f8bf2dffbcf3421fad635c541b6198213b632c2ddeedfe0b85f82",
     "priceFeed": "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165"
   }
 }

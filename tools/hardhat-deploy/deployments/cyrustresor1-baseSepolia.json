@@ -2,14 +2,14 @@
   "network": "baseSepolia",
   "chainId": 84532,
   "contract": "CyrusTresor1",
-  "address": "0x15fE4Fd173599b248C6B89f5E3caeA60E1c1a1Db",
-  "deployTx": "0xa45d5825bfa9d0cec3d059b522e06b9a7d241884a48ab165ef8a8f49bd9d7d23",
+  "address": "0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219",
+  "deployTx": "0x2614a6140a1903685e2a109c588e0bab678837f98330f1b39f2a30ff4d77524b",
   "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-  "blockNumber": 41889421,
-  "timestamp": "2026-05-23T14:38:50.372Z",
+  "blockNumber": 42536216,
+  "timestamp": "2026-06-07T13:58:40.633Z",
   "constructorArgs": {
     "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-    "salt": "0x437f79f7ff678ae2b64b61cf5d1cd1ed3243ea0db1a5eee4d5c9e11db9cbcc9b",
+    "salt": "0xd3f48a69daf79ea82b0724dd1de79684866d8a29acb7ac011c7a4a6f1e227710",
     "priceFeed": "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1",
     "poolTokens": [
       "0x0000000000000000000000000000000000000000"

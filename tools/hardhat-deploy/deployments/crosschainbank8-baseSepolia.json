@@ -2,14 +2,14 @@
   "network": "baseSepolia",
   "chainId": 84532,
   "contract": "CrossChainBank8",
-  "address": "0xd2fC71E2fbF7a267c2F884160F01c82994175958",
-  "deployTx": "0xe17610cf864f062e5994eac4331ab0e1e32cfe64a6d4887e6002ae6fbd599f5c",
+  "address": "0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9",
+  "deployTx": "0x44997231fdfe5199e5d3325674ca72475ddc537ae9f8bd2ff4da1cfc4f2268ef",
   "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-  "blockNumber": 41889414,
-  "timestamp": "2026-05-23T14:38:36.694Z",
+  "blockNumber": 42536213,
+  "timestamp": "2026-06-07T13:58:34.634Z",
   "constructorArgs": {
     "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
-    "salt": "0x60515b1a9b85da5ca5a67305947fa09cef6275638199541bc994c51949bd1723",
+    "salt": "0xdabdffa0469cbf6b45ca1de44845ca60a638357a2916763354be8dcb7eee8969",
     "priceFeed": "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1"
   }
 }
