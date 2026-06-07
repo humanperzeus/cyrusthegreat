@@ -1550,8 +1550,8 @@ const BANK8_TESTS = [
     id: "b8-4", name: "⭐ Multi-token batch deposit (smart picker)", kind: "write",
 
     phase: "Step 4 · Multi-token batches", phaseSub: "Atomic operations across native + ERC-20 tokens in one tx.",
-    desc: "Pick any tokens (native + USD1 + WLFI on Sepolia, or any combination), set amounts, click Run. Auto-handles ERC-20 approvals. Lands in ONE atomic depositMultipleTokens call — fixed 2026-05-31 (pre-fix the contract rejected native in batches; we now allow it and the new safety guard requires msg.value ≥ sum(natives) + fee).",
-    expect: "Tx confirms with status 1 in ONE call. Every checked token's vaulted balance increases below.",
+    desc: "Pick any tokens (native + USD1 + WLFI on Sepolia, or any combination), set amounts, click Run. Auto-handles ERC-20 approvals via MAX_UINT256 — one-time per token; future deposits of the same token skip the approval popup entirely. Lands in ONE atomic depositMultipleTokens call (mixed-batch fix from 2026-05-31).",
+    expect: "Tx confirms with status 1 in ONE call. Every checked token's vaulted balance increases. Approvals shown as 🔓 first time, ✓ already-approved on subsequent runs.",
     setup: async (body) => {
       if (!provider || !account) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
@@ -1581,16 +1581,23 @@ const BANK8_TESTS = [
 
           await ensureBalance(ethValue + ethers.parseEther("0.0001"), "multi-token deposit");
 
-          // Approve each ERC-20 below current allowance (skips native).
+          // Approve each ERC-20 with MAX_UINT256 (one-time per token per vault).
+          // Same policy as the production frontend (commit 272eaa2) — no decimal-
+          // comma typo risk + future deposits skip the approval step entirely
+          // because allowance >= amountWei always holds after a max-approve.
+          // Native is skipped (msg.value covers ETH, no allowance involved).
+          const MAX_UINT256 = (1n << 256n) - 1n;
           let approveLog = "";
           for (const s of sel) {
             if (s.isNative) continue;
             const erc = new ethers.Contract(s.addr, ERC20_ABI, getReadProvider());
             const cur = await erc.allowance(account, v);
             if (cur < s.amountWei) {
-              const a = await erc.connect(signer).approve(v, s.amountWei, { gasLimit: 100000n });
+              const a = await erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
               await a.wait();
-              approveLog += `  Approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+              approveLog += `  🔓 Max-approved ${s.symbol} (one-time): <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+            } else {
+              approveLog += `  ✓ ${s.symbol} already max-approved (allowance ${cur === MAX_UINT256 ? "∞" : cur.toString()})\n`;
             }
           }
 
@@ -1782,8 +1789,8 @@ const BANK8_TESTS = [
     id: "b8-8", name: "Single ERC20 deposit (depositToken)", kind: "write",
 
     phase: "Step 3 · ERC-20 single-token", phaseSub: "Token-side operations (Sepolia: USD1, WLFI).",
-    desc: "Pick ONE token from your wallet, set an amount. Auto-handles approval. Smaller scope than the multi-token batch — confirms the single-token path works on its own.",
-    expect: "Tx confirms; the picked token's vaulted balance increases by the chosen amount.",
+    desc: "Pick ONE token from your wallet, set an amount. Auto-handles approval via MAX_UINT256 (one-time per token; mirrors production frontend). Smaller scope than the multi-token batch — confirms the single-token path works on its own.",
+    expect: "Tx confirms; the picked token's vaulted balance increases. Approval shown as 🔓 first time, ✓ already-approved afterwards.",
     setup: async (body) => {
       if (!provider || !account) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
@@ -1810,14 +1817,19 @@ const BANK8_TESTS = [
           const fee = await c.getCurrentFeeInWei();
           await ensureBalance(fee + ethers.parseEther("0.0001"), "depositToken fee");
 
-          // Approve if needed
+          // Approve if needed — max-approval policy (matches production
+          // commit 272eaa2). One-time per token per vault contract; future
+          // depositToken calls skip this step entirely.
           let approveLog = "";
+          const MAX_UINT256 = (1n << 256n) - 1n;
           const erc = new ethers.Contract(t.addr, ERC20_ABI, getReadProvider());
           const cur = await erc.allowance(account, v);
           if (cur < t.amountWei) {
-            const a = await erc.connect(signer).approve(v, t.amountWei, { gasLimit: 100000n });
+            const a = await erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
             await a.wait();
-            approveLog = `Approved ${t.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+            approveLog = `🔓 Max-approved ${t.symbol} (one-time): <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+          } else {
+            approveLog = `✓ ${t.symbol} already max-approved (allowance ${cur === MAX_UINT256 ? "∞" : cur.toString()})\n`;
           }
 
           const tx = await c.connect(signer).depositToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
