@@ -515,7 +515,7 @@
 
 <!-- ================ BANK 8 ================ -->
 <section id="tab-bank8">
-  <p class="hint verbose-intro">CrossChainBank8 — the upgrade. Sepolia: <code class="mono">0xb83A814097C70DB79568b663662eA07e77D4D87a</code>. Goal: verify everything works, especially the multi-token ETH batch fix.</p>
+  <p class="hint verbose-intro">CrossChainBank8 — the regular vault. Deployed on all 5 testnets — see the "Active Bank8 vault (v1)" row in the address book for the address on the chain your wallet is connected to (auto-updates when you switch). Multi-token ETH batch fix landed 2026-05-31 (mixed native + ERC-20 batches now atomic).</p>
 
   <h2>Address book (known testnet contracts + your wallets)</h2>
   <div class="addrbook" id="addrbook"></div>
@@ -545,7 +545,7 @@
 
 <!-- ================ CYRUS TRESOR 1 ================ -->
 <section id="tab-tresor1" hidden>
-  <p class="hint verbose-intro">CyrusTresor1 — Bank8 regular vault + anonymity pool layer. Deployed on all 3 testnets 2026-05-14; <b>NOT yet live on cyrusthegreat.dev</b> (frontend integration pending). Addresses: Sepolia <code class="mono">0x223E25F961E29AaCc3dB49e5b00B30452D42c65e</code> · BSC Testnet <code class="mono">0xa2D2A04d6eE5887f20bF736E1d9014727d599F39</code> · Base Sepolia <code class="mono">0xc90610ce4DE152349932Af102650b6c9f8C6AD68</code>. Spec: <code>docs/cyrustresor1_spec.md</code>.</p>
+  <p class="hint verbose-intro">CyrusTresor1 — Bank8 regular vault + anonymity pool layer. Deployed on all 5 testnets (Sepolia, BSC, Base, Arbitrum, HyperEVM) — see "Active CyrusTresor1 (v2)" in the address book for the current-chain address. Now live on cyrusthegreat.dev too (v2 mode toggle behind <code>VITE_ENABLE_POOL=true</code>). Multi-token ETH batch fix carried over from Bank8 as of 2026-05-31. Spec: <code>docs/cyrustresor1_spec.md</code>.</p>
 
   <p class="hint verbose-intro">The pool tests use a small client-side <b>commit notebook</b> below — it stores <code>(secret, userSalt, withdrawTo, token, bucketIdx)</code> tuples in localStorage so you can commit now and reveal later (after the 1-hour epoch boundary). Never sent anywhere; copy them out of localStorage if you want a backup.</p>
 
@@ -2059,7 +2059,7 @@ const BANK8_TESTS = [
     id: "b8-12", name: "Collect fees (collectFees, owner-only)", kind: "write",
 
     phase: "Step 5 · Owner-only", phaseSub: "Drain accumulated fees to feeCollector.",
-    desc: "Drains accumulated fees from the contract's feeVault to the feeCollector address (= your dev wallet 0x84064...91E). Only the feeCollector can successfully call this; anyone else gets reverted. Note: there's no public reader for feeVault, so the amount drained is reported via the FeesCollected event in the tx receipt.",
+    desc: "Drains accumulated fees from the contract's feeVault to the feeCollector address (= Wallet 1 0x35Fe…2cc8 since the 2026-05-19 key rotation). Only the feeCollector can successfully call this; anyone else gets reverted. Note: there's no public reader for feeVault, so the amount drained is reported via the FeesCollected event in the tx receipt.",
     expect: "If you're calling AS the feeCollector wallet: tx confirms, FeesCollected event in receipt logs the amount drained, your wallet ETH increases. If from any other wallet: revert.",
     setup: async (body) => {
       if (!provider || !account) {
@@ -2157,9 +2157,9 @@ function tresor1AddressForChain() {
 }
 
 // Resolve the deployed CrossChainBank8 address for the current chain.
-// Note: bank8_hyper_testnet lives at a different address than the other 4
-// EVM chains (0xf9AAB9b4… vs 0xd2fC71E2…) because wallet 1's HyperEVM nonce
-// had advanced by the time Bank8 deployed there.
+// As of the 2026-05-31 redeploy round, Sepolia + HyperEVM have their own
+// addresses (different deploy nonces). BSC + Base + Arbitrum share the
+// same Bank8 address by deploy-nonce coincidence (0xf9AAB9b4…).
 function bank8AddressForChain() {
   return chainId === 11155111 ? ADDR.bank8_sepolia
        : chainId === 97        ? ADDR.bank8_bsc_testnet
