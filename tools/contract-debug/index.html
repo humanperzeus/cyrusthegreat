@@ -71,6 +71,29 @@
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .hint { color: #888; font-size: 12px; }
   a { color: #4af; }
+
+  /* --- Phase headers --- a guided walkthrough of the test order */
+  .phase-header { margin: 22px 0 10px; padding: 8px 12px; background: linear-gradient(90deg, #4af2 0%, transparent 100%); border-radius: 6px; border-left: 4px solid #4af; }
+  .phase-header h3 { margin: 0; font-size: 14px; font-weight: 700; }
+  .phase-header .phase-sub { font-size: 12px; color: #888; margin-top: 2px; }
+
+  /* --- Simple / Detailed mode toggle ---
+     body.simple hides verbose descriptions, expected text, and the activity
+     log section. The mode toggle button at the top flips body.simple on/off
+     and persists to localStorage. */
+  body.simple .card.test .desc,
+  body.simple .card.test .expect-row,
+  body.simple .phase-header .phase-sub,
+  body.simple .verbose-intro,
+  body.simple #activity-log-section { display: none; }
+  body.simple #activity-log-section[data-force-show="1"] { display: block; }
+  /* Compact result in simple mode — collapse multi-line outputs to single line preview */
+  body.simple .card.test .result.ok { max-height: 32px; overflow: hidden; }
+  body.simple .card.test .result.ok::after { content: " (click for details)"; opacity: 0.5; }
+
+  /* Mode toggle button */
+  .mode-toggle { font-size: 12px; padding: 4px 10px; }
+  .mode-toggle.active { background: #4af; color: white; border-color: #4af; }
 </style>
 </head>
 <body>
@@ -82,18 +105,27 @@
   <label><span class="hint">Switch:</span>
     <select id="netSwitch">
       <option value="">— pick —</option>
-      <option value="11155111">Sepolia (11155111)</option>
-      <option value="97">BSC Testnet (97)</option>
-      <option value="84532">Base Sepolia (84532)</option>
-      <option value="1">Ethereum Mainnet</option>
-      <option value="56">BNB Smart Chain</option>
-      <option value="8453">Base Mainnet</option>
+      <optgroup label="Testnets">
+        <option value="11155111">Sepolia (ETH)</option>
+        <option value="97">BSC Testnet</option>
+        <option value="84532">Base Sepolia</option>
+        <option value="421614">Arbitrum Sepolia</option>
+        <option value="998">HyperEVM Testnet</option>
+      </optgroup>
+      <optgroup label="Mainnets">
+        <option value="1">Ethereum Mainnet</option>
+        <option value="56">BNB Smart Chain</option>
+        <option value="8453">Base Mainnet</option>
+        <option value="42161">Arbitrum One</option>
+        <option value="999">HyperEVM Mainnet</option>
+      </optgroup>
     </select>
   </label>
   <div>Account: <span id="acct" class="mono">—</span></div>
   <button id="connect" class="primary">Connect Wallet</button>
   <button id="disconnect" hidden>Disconnect</button>
   <button id="diagWallet" title="Test each wallet RPC method individually to see which one 404s">🔧 Diagnose wallet</button>
+  <button id="modeToggle" class="mode-toggle" title="Toggle between Simple (just pass/fail) and Detailed (descriptions + verbose logs)">📋 Simple mode</button>
 </header>
 
 <main>
@@ -109,17 +141,17 @@
 
 <!-- ================ BANK 5 ================ -->
 <section id="tab-bank5" hidden>
-  <p class="hint">CrossChainBank5 — the contract live at cyrusthegreat.dev. Sepolia: <code class="mono">0x3d6e43cbf157110015edF062173BbeBF78De61B4</code>. Use this tab to confirm KNOWN bugs (multi-token ETH batch fails).</p>
+  <p class="hint verbose-intro">CrossChainBank5 — the contract live at cyrusthegreat.dev. Sepolia: <code class="mono">0x3d6e43cbf157110015edF062173BbeBF78De61B4</code>. Use this tab to confirm KNOWN bugs (multi-token ETH batch fails).</p>
 
   <h2>What to test on Bank5</h2>
-  <p class="hint">Sanity tests (work) + the broken one (multi-token deposit with ETH).</p>
+  <p class="hint verbose-intro">Sanity tests (work) + the broken one (multi-token deposit with ETH).</p>
 
   <div id="bank5-flows"></div>
 </section>
 
 <!-- ================ BANK 8 ================ -->
 <section id="tab-bank8">
-  <p class="hint">CrossChainBank8 — the upgrade. Sepolia: <code class="mono">0xb83A814097C70DB79568b663662eA07e77D4D87a</code>. Goal: verify everything works, especially the multi-token ETH batch fix.</p>
+  <p class="hint verbose-intro">CrossChainBank8 — the upgrade. Sepolia: <code class="mono">0xb83A814097C70DB79568b663662eA07e77D4D87a</code>. Goal: verify everything works, especially the multi-token ETH batch fix.</p>
 
   <h2>Address book (known testnet contracts + your wallets)</h2>
   <div class="addrbook" id="addrbook"></div>
@@ -132,7 +164,7 @@
   </div>
 
   <h2>Wallet 2 vault state (read-only — for transfer testing)</h2>
-  <p class="hint">No wallet switching needed. The contract's <code>getMyVaultedTokens</code> view function is called with <code>from: &lt;Wallet 2&gt;</code> via <code>staticCall</code> — works without Wallet 2 ever connecting. Refreshes automatically after every write tx so you can SEE transfers land here.</p>
+  <p class="hint verbose-intro">No wallet switching needed. The contract's <code>getMyVaultedTokens</code> view function is called with <code>from: &lt;Wallet 2&gt;</code> via <code>staticCall</code> — works without Wallet 2 ever connecting. Refreshes automatically after every write tx so you can SEE transfers land here.</p>
   <div class="row" style="margin-bottom: 8px;">
     <label style="flex: 1; min-width: 280px;"><span class="hint">Wallet 2 address:</span>
       <input id="wallet2Addr" type="text" class="mono" style="width: 100%;" placeholder="0x…" />
@@ -143,15 +175,15 @@
   <div class="state-grid" id="state-w2"></div>
 
   <h2>Test flows — run in order</h2>
-  <p class="hint">Each card = one step. Pre-filled with sane defaults. Click <b>Run</b>; result appears below; vault state auto-refreshes after every write call.</p>
+  <p class="hint verbose-intro">Each card = one step. Pre-filled with sane defaults. Click <b>Run</b>; result appears below; vault state auto-refreshes after every write call.</p>
   <div id="bank8-flows"></div>
 </section>
 
 <!-- ================ CYRUS TRESOR 1 ================ -->
 <section id="tab-tresor1" hidden>
-  <p class="hint">CyrusTresor1 — Bank8 regular vault + anonymity pool layer. Deployed on all 3 testnets 2026-05-14; <b>NOT yet live on cyrusthegreat.dev</b> (frontend integration pending). Addresses: Sepolia <code class="mono">0x223E25F961E29AaCc3dB49e5b00B30452D42c65e</code> · BSC Testnet <code class="mono">0xa2D2A04d6eE5887f20bF736E1d9014727d599F39</code> · Base Sepolia <code class="mono">0xc90610ce4DE152349932Af102650b6c9f8C6AD68</code>. Spec: <code>docs/cyrustresor1_spec.md</code>.</p>
+  <p class="hint verbose-intro">CyrusTresor1 — Bank8 regular vault + anonymity pool layer. Deployed on all 3 testnets 2026-05-14; <b>NOT yet live on cyrusthegreat.dev</b> (frontend integration pending). Addresses: Sepolia <code class="mono">0x223E25F961E29AaCc3dB49e5b00B30452D42c65e</code> · BSC Testnet <code class="mono">0xa2D2A04d6eE5887f20bF736E1d9014727d599F39</code> · Base Sepolia <code class="mono">0xc90610ce4DE152349932Af102650b6c9f8C6AD68</code>. Spec: <code>docs/cyrustresor1_spec.md</code>.</p>
 
-  <p class="hint">The pool tests use a small client-side <b>commit notebook</b> below — it stores <code>(secret, userSalt, withdrawTo, token, bucketIdx)</code> tuples in localStorage so you can commit now and reveal later (after the 1-hour epoch boundary). Never sent anywhere; copy them out of localStorage if you want a backup.</p>
+  <p class="hint verbose-intro">The pool tests use a small client-side <b>commit notebook</b> below — it stores <code>(secret, userSalt, withdrawTo, token, bucketIdx)</code> tuples in localStorage so you can commit now and reveal later (after the 1-hour epoch boundary). Never sent anywhere; copy them out of localStorage if you want a backup.</p>
 
   <h2>Pool commit notebook (this browser only)</h2>
   <div id="tresor1Notebook" style="font-family: ui-monospace, monospace; font-size: 12px; background: #8881; padding: 8px; border-radius: 6px; white-space: pre-wrap; min-height: 40px;">No commits recorded yet.</div>
@@ -162,13 +194,13 @@
   </div>
 
   <h2>Test flows</h2>
-  <p class="hint">Run in order. Pool tests <b>ct-3 → ct-7</b> form a chain: ct-3 commits, ct-4/5/6 are expected reverts, ct-7 is the eventual happy-path reveal (eligible after the epoch boundary).</p>
+  <p class="hint verbose-intro">Run in order. Pool tests <b>ct-3 → ct-7</b> form a chain: ct-3 commits, ct-4/5/6 are expected reverts, ct-7 is the eventual happy-path reveal (eligible after the epoch boundary).</p>
   <div id="tresor1-flows"></div>
 </section>
 
 <!-- ================ PORTAL 11 ================ -->
 <section id="tab-portal11" hidden>
-  <p class="hint">CyrusPortal11 — privacy-extension contract. <b>Not deployed.</b> Once deployed, address goes here and tests below become runnable.</p>
+  <p class="hint verbose-intro">CyrusPortal11 — privacy-extension contract. <b>Not deployed.</b> Once deployed, address goes here and tests below become runnable.</p>
 
   <div class="row" style="margin: 12px 0;">
     <label>Deployed at:
@@ -215,7 +247,7 @@
 <details style="margin-top: 16px;">
   <summary><b>Advanced: raw ABI calls</b> (any function, any arg)</summary>
   <div style="padding: 10px;">
-    <p class="hint">Power-user mode. Loads any ABI and gives auto-generated forms for every function. Use only if the guided flows above don't cover what you want.</p>
+    <p class="hint verbose-intro">Power-user mode. Loads any ABI and gives auto-generated forms for every function. Use only if the guided flows above don't cover what you want.</p>
     <div class="row">
       <label>ABI source:
         <select id="advAbi">
@@ -234,8 +266,11 @@
   </div>
 </details>
 
-<h2 style="margin-top: 32px;">Activity log</h2>
-<ol id="log" style="font-family: ui-monospace, monospace; font-size: 12px; padding-left: 24px;"></ol>
+<section id="activity-log-section">
+  <h2 style="margin-top: 32px;">Activity log</h2>
+  <p class="hint verbose-intro">Every action surfaces here: chain switches, tx hashes, errors. In simple mode this is hidden by default — flip the "Detailed mode" toggle at the top to bring it back, or it auto-shows after any failure.</p>
+  <ol id="log" style="font-family: ui-monospace, monospace; font-size: 12px; padding-left: 24px;"></ol>
+</section>
 
 </main>
 
@@ -1076,6 +1111,8 @@ const BANK5_TESTS = [
 const BANK8_TESTS = [
   {
     id: "b8-1", name: "Sanity: read fee + max constants", kind: "read",
+
+    phase: "Step 1 · Sanity reads (no gas)", phaseSub: "Confirm the contract is reachable and reports a sane fee.",
     desc: "Confirm Bank8 responds. Reads getCurrentFeeInWei, MAX_BATCH_SIZE, MAX_TOKENS_PER_USER.",
     expect: "Fee is small wei. MAX_BATCH_SIZE=25, MAX_TOKENS_PER_USER=200.",
     run: async () => {
@@ -1091,6 +1128,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-2", name: "Read: my vault balance", kind: "read",
+
+    phase: "Step 1 · Sanity reads (no gas)", phaseSub: "Confirm the contract is reachable and reports a sane fee.",
     desc: "Read your current vault contents. Empty if you've never deposited.",
     run: async () => {
       const abi = await fetchAbi("CrossChainBank8");
@@ -1104,6 +1143,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-3", name: "Single ETH deposit", kind: "write",
+
+    phase: "Step 2 · ETH deposit / transfer / withdraw", phaseSub: "Single-ETH happy paths through the regular vault surface.",
     desc: "Deposit a tiny amount + the dynamic fee. Default is 0.0001 ETH so a low-balance wallet can still run it.",
     expect: "Tx confirms; vault state below shows new vaulted ETH.",
     inputs: [{ label: "Amount (ETH)", default: "0.0001", parse: (s) => s.trim() }],
@@ -1127,6 +1168,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-4", name: "⭐ Multi-token batch deposit (smart picker — THE BANK5 BUG-FIX TEST)", kind: "write",
+
+    phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
     desc: "Reads your wallet, lists every known token (ETH, USD1, WLFI on Sepolia), shows balances. Tick the ones you want, set amounts (or click 'max'). Auto-handles ERC20 approvals. The exact call that reverts on Bank5 — Bank8 fixes it via v1.17.17.",
     expect: "Tx confirms with status 1. Every checked token's vaulted balance increases below.",
     setup: async (body) => {
@@ -1177,6 +1220,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-5", name: "Internal transfer ETH to Wallet 2", kind: "write",
+
+    phase: "Step 2 · ETH deposit / transfer / withdraw", phaseSub: "Single-ETH happy paths through the regular vault surface.",
     desc: "Transfer some of your vaulted ETH to the test recipient (Wallet 2). Internal — never leaves the vault. The form below auto-fills with your CURRENT vault ETH balance.",
     expect: "Wallet 2's vault balance increases. Yours decreases by amount + fee (fee paid from your wallet, not vault).",
     setup: async (body) => {
@@ -1229,6 +1274,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-6", name: "Withdraw single ETH back to your wallet", kind: "write",
+
+    phase: "Step 2 · ETH deposit / transfer / withdraw", phaseSub: "Single-ETH happy paths through the regular vault surface.",
     desc: "Drain some vaulted ETH back to your external wallet. Auto-fills with your current vaulted balance.",
     expect: "Wallet ETH increases by amount; vault ETH decreases by amount; you also pay the fee from your wallet.",
     setup: async (body) => {
@@ -1274,6 +1321,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-7", name: "⭐ Multi-token batch withdraw (smart picker)", kind: "write",
+
+    phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
     desc: "Reads your CURRENT VAULT contents (via getMyVaultedTokens). Tick what to pull out and how much. Same fix path as deposit, going the other direction.",
     expect: "Tx confirms; checked balances drop in vault state above.",
     setup: async (body) => {
@@ -1312,6 +1361,8 @@ const BANK8_TESTS = [
   // ---------------------------------------------------------------------------
   {
     id: "b8-8", name: "Single ERC20 deposit (depositToken)", kind: "write",
+
+    phase: "Step 3 · ERC-20 single-token", phaseSub: "Token-side operations (Sepolia: USD1, WLFI).",
     desc: "Pick ONE token from your wallet, set an amount. Auto-handles approval. Smaller scope than the multi-token batch — confirms the single-token path works on its own.",
     expect: "Tx confirms; the picked token's vaulted balance increases by the chosen amount.",
     setup: async (body) => {
@@ -1360,6 +1411,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-9", name: "Single ERC20 withdraw (withdrawToken)", kind: "write",
+
+    phase: "Step 3 · ERC-20 single-token", phaseSub: "Token-side operations (Sepolia: USD1, WLFI).",
     desc: "Pick ONE token from your VAULT (not your wallet), set an amount, withdraw it back to your external wallet.",
     expect: "Tx confirms; vaulted balance for that token decreases by amount; wallet balance for that token increases.",
     setup: async (body) => {
@@ -1399,6 +1452,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-10", name: "Single ERC20 internal transfer to Wallet 2 (transferInternalToken)", kind: "write",
+
+    phase: "Step 3 · ERC-20 single-token", phaseSub: "Token-side operations (Sepolia: USD1, WLFI).",
     desc: "Pick ONE vaulted ERC20 token, set amount, transfer to Wallet 2 internally (stays in vault, just changes ownership).",
     expect: "Tx confirms; your vaulted balance for that token decreases; Wallet 2's vaulted balance for that token increases (visible in the Wallet 2 panel above after auto-refresh).",
     setup: async (body) => {
@@ -1450,6 +1505,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-11", name: "⭐ Multi-token batch internal transfer to Wallet 2 (transferMultipleTokensInternal)", kind: "write",
+
+    phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
     desc: "The batch version of internal transfer. Pick multiple vaulted tokens (ETH + ERC20s OK), all transferred to Wallet 2 in one tx. Same code path as the multi-token deposit/withdraw — confirms the batch flow works for transfers too.",
     expect: "Tx confirms; every checked token's vaulted balance decreases on YOUR side and increases on Wallet 2's side. Both panels above auto-refresh.",
     setup: async (body) => {
@@ -1495,6 +1552,8 @@ const BANK8_TESTS = [
   },
   {
     id: "b8-12", name: "Collect fees (collectFees, owner-only)", kind: "write",
+
+    phase: "Step 5 · Owner-only", phaseSub: "Drain accumulated fees to feeCollector.",
     desc: "Drains accumulated fees from the contract's feeVault to the feeCollector address (= your dev wallet 0x84064...91E). Only the feeCollector can successfully call this; anyone else gets reverted. Note: there's no public reader for feeVault, so the amount drained is reported via the FeesCollected event in the tx receipt.",
     expect: "If you're calling AS the feeCollector wallet: tx confirms, FeesCollected event in receipt logs the amount drained, your wallet ETH increases. If from any other wallet: revert.",
     setup: async (body) => {
@@ -1652,6 +1711,8 @@ const TRESOR1_TESTS = [
   // ---------- ct-1: sanity reads ----------
   {
     id: "ct-1", name: "Sanity: read pool config + epoch state", kind: "read",
+
+    phase: "Step 1 · Sanity reads (no gas)", phaseSub: "Pool config + epoch state — confirm the deployment.",
     desc: "Confirms the deployed contract responds. Reads currentEpoch(), EPOCH_LENGTH, the ETH bucket-0 size, and MAX_BATCH_SIZE.",
     expect: "currentEpoch is a positive number; EPOCH_LENGTH = 3600; ETH bucket 0 = 0.001 ETH equivalent.",
     run: async () => {
@@ -1678,6 +1739,8 @@ const TRESOR1_TESTS = [
   // ---------- ct-2: regular vault depositETH (Bank8-identical surface) ----------
   {
     id: "ct-2", name: "Sanity: Bank8 surface still works (regular depositETH)", kind: "write",
+
+    phase: "Step 2 · Regression check", phaseSub: "Bank8 vault surface still works after pool additions.",
     desc: "Deposits a tiny amount into the regular (non-pool) vault. Same code path as Bank8 — confirms the rename + pool additions didn't break the base contract.",
     expect: "Tx confirms with status 1. Same dynamic fee as Bank8 (~$0.10).",
     inputs: [{ label: "Amount (ETH)", default: "0.0001", parse: (s) => s.trim() }],
@@ -1701,6 +1764,8 @@ const TRESOR1_TESTS = [
   // ---------- ct-3: commitToPool happy path ----------
   {
     id: "ct-3", name: "Pool: commit ETH to anonymity pool (bucket 0 = 0.001 ETH)", kind: "write",
+
+    phase: "Step 3 · Pool commit + reveal (happy path)", phaseSub: "Commit now, reveal after the epoch boundary.",
     desc: "Generates a random (secret, userSalt), computes the commitment hash with withdrawTo = your wallet, calls commitToPool(). Saves the secret/salt to the notebook above so you can reveal later.",
     expect: "Tx confirms. New PoolDeposit event. Notebook shows a new pending commit.",
     inputs: [
@@ -1757,6 +1822,8 @@ const TRESOR1_TESTS = [
   // ---------- ct-4: same-epoch reveal REVERT ----------
   {
     id: "ct-4", name: "Pool: reveal immediately (expect REVERT — must wait 1 epoch)", kind: "write",
+
+    phase: "Step 4 · Pool revert checks (expected failures)", phaseSub: "Each test expects the contract to reject the call.",
     desc: "Tries to reveal the LATEST pending commit RIGHT NOW. Per spec § 4 the contract requires currentEpoch > depositEpoch. Will revert if you haven't crossed an hour boundary since ct-3.",
     expect: "Revert with 'pool: must wait at least 1 epoch after commit'. If you've waited >1h since ct-3, this WILL succeed — that's fine, run ct-7 instead.",
     run: async () => {
@@ -1788,6 +1855,8 @@ const TRESOR1_TESTS = [
   // ---------- ct-5: MEV-redirect REVERT ----------
   {
     id: "ct-5", name: "Pool: tampered withdrawTo (expect REVERT — MEV-safe binding)", kind: "write",
+
+    phase: "Step 4 · Pool revert checks (expected failures)", phaseSub: "Each test expects the contract to reject the call.",
     desc: "Tries to claim the latest pending commit but sends funds to a DIFFERENT address than the one baked into the commitment hash. Per spec § 9 this MUST fail because withdrawTo is in the keccak preimage — changing it changes the commitment, lookup misses.",
     expect: "Revert with 'pool: unknown commitment'.",
     run: async () => {
@@ -1821,6 +1890,8 @@ const TRESOR1_TESTS = [
   // ---------- ct-6: double-spend REVERT (only valid after a successful ct-7) ----------
   {
     id: "ct-6", name: "Pool: replay an already-spent commit (expect REVERT — double-spend)", kind: "write",
+
+    phase: "Step 4 · Pool revert checks (expected failures)", phaseSub: "Each test expects the contract to reject the call.",
     desc: "Tries to re-reveal a commit that has ALREADY been revealed (marked spent in the notebook). Only useful after a successful ct-7 — otherwise it'll just hit the same-epoch revert from ct-4.",
     expect: "Revert with 'pool: commitment already spent'.",
     run: async () => {
@@ -1850,6 +1921,8 @@ const TRESOR1_TESTS = [
   // ---------- ct-7: reveal happy path ----------
   {
     id: "ct-7", name: "Pool: reveal LATEST pending commit (happy path)", kind: "write",
+
+    phase: "Step 3 · Pool commit + reveal (happy path)", phaseSub: "Commit now, reveal after the epoch boundary.",
     desc: "Submits revealFromPool for the most-recent pending commit. Requires >= 1 epoch elapsed since the commit (= you're past the next hour boundary). Funds land in withdrawTo. Notebook marks the entry as spent.",
     expect: "Tx confirms with status 1. withdrawTo balance increases by bucketSize. Notebook shows ✓ revealed.",
     run: async () => {
@@ -1959,21 +2032,83 @@ const TRESOR1_TESTS = [
 ];
 
 // ============================================================
-//  Render flows
+//  Render flows — with phase headers (Step 1, 2, 3...) inserted
+//  between groups of related tests.
 // ============================================================
+function renderWithPhases(tests, container) {
+  container.innerHTML = "";
+  // Stable sort by phase so all "Step 1" cards land contiguous (the source
+  // arrays already roughly group them, but Bank8 has b8-4/7/11 interleaved
+  // with the ETH/ERC-20 single-token phases).
+  const phaseRank = (s) => {
+    if (!s.phase) return 99;
+    const m = s.phase.match(/Step (\d+)/);
+    return m ? parseInt(m[1], 10) : 99;
+  };
+  const sorted = [...tests].sort((a, b) => phaseRank(a) - phaseRank(b));
+  let currentPhase = null;
+  let phaseStepIdx = 0;
+  sorted.forEach((spec) => {
+    if (spec.phase && spec.phase !== currentPhase) {
+      currentPhase = spec.phase;
+      phaseStepIdx = 0;
+      const header = document.createElement("div");
+      header.className = "phase-header";
+      header.innerHTML = `<h3>${spec.phase}</h3>` +
+        (spec.phaseSub ? `<div class="phase-sub">${spec.phaseSub}</div>` : "");
+      container.appendChild(header);
+    }
+    container.appendChild(makeTest(spec, phaseStepIdx++));
+  });
+}
+
 function renderFlows() {
+  // Bank5 + Portal11 are legacy/regression cards — flat (no phase grouping).
   const b5 = $("bank5-flows"); b5.innerHTML = "";
   BANK5_TESTS.forEach((s, i) => b5.appendChild(makeTest(s, i)));
 
-  const b8 = $("bank8-flows"); b8.innerHTML = "";
-  BANK8_TESTS.forEach((s, i) => b8.appendChild(makeTest(s, i)));
-
-  const t1 = $("tresor1-flows"); t1.innerHTML = "";
-  TRESOR1_TESTS.forEach((s, i) => t1.appendChild(makeTest(s, i)));
+  renderWithPhases(BANK8_TESTS, $("bank8-flows"));
+  renderWithPhases(TRESOR1_TESTS, $("tresor1-flows"));
 
   const p = $("portal11-flows"); p.innerHTML = "";
   PORTAL11_TESTS.forEach((s, i) => p.appendChild(makeTest(s, i)));
 }
+
+// ============================================================
+//  Simple ↔ Detailed mode toggle (persisted in localStorage).
+// ============================================================
+const MODE_KEY = "ctg.debug.mode.v1";
+function applyMode(mode) {
+  document.body.classList.toggle("simple", mode === "simple");
+  const btn = document.getElementById("modeToggle");
+  if (btn) {
+    btn.textContent = mode === "simple" ? "📋 Simple mode" : "🔬 Detailed mode";
+    btn.classList.toggle("active", mode === "simple");
+    btn.title = mode === "simple"
+      ? "Currently SIMPLE — long descriptions hidden, activity log hidden. Click to switch to Detailed."
+      : "Currently DETAILED — everything visible. Click to switch to Simple.";
+  }
+  try { localStorage.setItem(MODE_KEY, mode); } catch (_) {}
+}
+(function initMode() {
+  let saved = null;
+  try { saved = localStorage.getItem(MODE_KEY); } catch (_) {}
+  // Default to SIMPLE for new users — quieter first impression.
+  applyMode(saved === "detailed" ? "detailed" : "simple");
+  document.addEventListener("click", (e) => {
+    if (e.target && e.target.id === "modeToggle") {
+      const next = document.body.classList.contains("simple") ? "detailed" : "simple";
+      applyMode(next);
+    }
+  });
+})();
+
+// Auto-unhide activity log on the first failure so the user can see what
+// went wrong even when simple mode hid it.
+window.addEventListener("error", () => {
+  const sec = document.getElementById("activity-log-section");
+  if (sec) sec.setAttribute("data-force-show", "1");
+});
 
 // ============================================================
 //  Tabs
