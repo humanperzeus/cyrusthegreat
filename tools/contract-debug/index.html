@@ -497,21 +497,10 @@
 <div id="diagOut" hidden style="background: #8881; border: 1px solid #888; border-radius: 6px; padding: 12px; margin-bottom: 12px;"></div>
 
 <nav class="tabs" id="tabs">
-  <button data-tab="bank5">CrossChainBank5 (LIVE prod)</button>
   <button data-tab="bank8" class="active">CrossChainBank8 (target)</button>
   <button data-tab="tresor1">CyrusTresor1 (testnet only)</button>
   <button data-tab="portal11">CyrusPortal11 (undeployed)</button>
 </nav>
-
-<!-- ================ BANK 5 ================ -->
-<section id="tab-bank5" hidden>
-  <p class="hint verbose-intro">CrossChainBank5 — the contract live at cyrusthegreat.dev. Sepolia: <code class="mono">0x3d6e43cbf157110015edF062173BbeBF78De61B4</code>. Use this tab to confirm KNOWN bugs (multi-token ETH batch fails).</p>
-
-  <h2>What to test on Bank5</h2>
-  <p class="hint verbose-intro">Sanity tests (work) + the broken one (multi-token deposit with ETH).</p>
-
-  <div id="bank5-flows"></div>
-</section>
 
 <!-- ================ BANK 8 ================ -->
 <section id="tab-bank8">
@@ -616,7 +605,6 @@
       <label>ABI source:
         <select id="advAbi">
           <option value="">— pick —</option>
-          <option value="bank5">CrossChainBank5 ABI</option>
           <option value="bank8">CrossChainBank8 ABI</option>
           <option value="portal11">CyrusPortal11 ABI</option>
         </select>
@@ -676,7 +664,6 @@ const NETWORKS = {
 const ADDR = (() => {
   const raw = {
     // Vault contracts
-    bank5_sepolia:       "0x3d6e43cbf157110015edf062173bbebf78de61b4",
     // Bank8 (CrossChainBank8) — REDEPLOYED 2026-05-23 (Sepolia + Base) + 2026-05-30 (BSC)
     // after the 2026-05-19 key rotation. Same address on all 3 EVM chains because
     // wallet 1 deploys with the same nonce on each — coincidence, not by design.
@@ -1246,9 +1233,7 @@ function refreshAddrBook() {
   const rows = [
     { lbl: "Active Bank8 vault (v1)", val: vault, link: !!vault },
     { lbl: "Active CyrusTresor1 (v2)", val: tresor1, link: !!tresor1 },
-    { lbl: "Mock HYPE/USD price feed", val: ADDR.mock_pricefeed_hyper_testnet, link: isHyperTestnet, note: isHyperTestnet ? "" : "(only used on HyperEVM testnet)" },
-    { lbl: "Bank5 (live prod)",  val: ADDR.bank5_sepolia, link: chainId === 11155111 },
-    { lbl: "Wallet 1 (you)",     val: ADDR.wallet1, link: true },
+    { lbl: "Mock HYPE/USD price feed", val: ADDR.mock_pricefeed_hyper_testnet, link: isHyperTestnet, note: isHyperTestnet ? "" : "(only used on HyperEVM testnet)" },    { lbl: "Wallet 1 (you)",     val: ADDR.wallet1, link: true },
     { lbl: "Wallet 2 (test recv.)", val: ADDR.wallet2, link: true },
     { lbl: "USD1 token (Sepolia)",  val: ADDR.usd1_sepolia, link: chainId === 11155111 },
     { lbl: "WLFI token (Sepolia)",  val: ADDR.wlfi_sepolia, link: chainId === 11155111 },
@@ -1499,62 +1484,6 @@ function makeTest(spec, idx) {
   return card;
 }
 
-// ============================================================
-//  Test definitions — Bank5 (the LIVE one)
-// ============================================================
-const BANK5_TESTS = [
-  {
-    id: "b5-1", name: "Sanity: read fee", kind: "read",
-    desc: "Confirm Bank5 responds to reads. No tx, no fee.",
-    expect: "A small wei value (~$0.10 worth of ETH).",
-    run: async () => {
-      const abi = await fetchAbi("CrossChainBank5");
-      const c = new ethers.Contract(ADDR.bank5_sepolia, abi, getReadProvider());
-      const fee = await c.getCurrentFeeInWei();
-      return { text: `${fee.toString()} wei (≈ ${ethers.formatEther(fee)} ETH)` };
-    },
-  },
-  {
-    id: "b5-2", name: "Single ETH deposit (works)", kind: "write",
-    desc: "Deposit 0.001 ETH + fee. Should succeed.",
-    expect: "Tx confirms with status 1.",
-    inputs: [{ label: "Amount (ETH)", default: "0.001", parse: (s) => s.trim() }],
-    run: async ([amt]) => {
-      await ensureSigner();
-      const abi = await fetchAbi("CrossChainBank5");
-      const c = new ethers.Contract(ADDR.bank5_sepolia, abi, getReadProvider());
-      const fee = await c.getCurrentFeeInWei();
-      const total = ethers.parseEther(amt) + fee;
-      const tx = await c.connect(signer).depositETH({ value: total, gasLimit: 250000n });
-      const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-      const r = await tx.wait();
-      return { html: `Sent: ${link}\nConfirmed in block ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
-    },
-  },
-  {
-    id: "b5-3", name: "⚠️ Multi-token batch with ETH (KNOWN BUG)", kind: "write",
-    desc: "Bank5's depositMultipleTokens rejects ETH in the array. Expected: revert.",
-    expect: "Reverts with empty data (0x). This is the bug Bank8 fixed.",
-    inputs: [
-      { label: "ETH amount", default: "0.001", parse: (s) => s },
-      { label: "USD1 amount", default: "1.0", parse: (s) => s },
-    ],
-    run: async ([ethAmt, usd1Amt]) => {
-      // Note: Bank5 ABI in this tool doesn't expose depositMultipleTokens (Bank5 doesn't have it).
-      // We try to call it anyway by using a manual ABI fragment to demonstrate the failure.
-      await ensureSigner();
-      const fragment = ["function depositMultipleTokens(address[] tokens, uint256[] amounts) payable"];
-      const c = new ethers.Contract(ADDR.bank5_sepolia, fragment, getReadProvider());
-      const tx = await c.connect(signer).depositMultipleTokens(
-        [ADDR.ETH, ADDR.usd1_sepolia],
-        [ethers.parseEther(ethAmt), ethers.parseUnits(usd1Amt, 18)],
-        { value: ethers.parseEther(ethAmt), gasLimit: 800000n }
-      );
-      const r = await tx.wait();
-      return { html: `Unexpected success! Block ${r.blockNumber}` };
-    },
-  },
-];
 
 // ============================================================
 //  Test definitions — Bank8 (the upgrade)
@@ -1620,7 +1549,7 @@ const BANK8_TESTS = [
   {
     id: "b8-4", name: "⭐ Multi-token batch deposit (smart picker)", kind: "write",
 
-    phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
+    phase: "Step 4 · Multi-token batches", phaseSub: "Atomic operations across native + ERC-20 tokens in one tx.",
     desc: "Pick any tokens (native + USD1 + WLFI on Sepolia, or any combination), set amounts, click Run. Auto-handles ERC-20 approvals. Lands in ONE atomic depositMultipleTokens call — fixed 2026-05-31 (pre-fix the contract rejected native in batches; we now allow it and the new safety guard requires msg.value ≥ sum(natives) + fee).",
     expect: "Tx confirms with status 1 in ONE call. Every checked token's vaulted balance increases below.",
     setup: async (body) => {
@@ -1794,7 +1723,7 @@ const BANK8_TESTS = [
   {
     id: "b8-7", name: "⭐ Multi-token batch withdraw (smart picker)", kind: "write",
 
-    phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
+    phase: "Step 4 · Multi-token batches", phaseSub: "Atomic operations across native + ERC-20 tokens in one tx.",
     desc: "Reads your CURRENT VAULT contents (via getMyVaultedTokens). Tick what to pull out and how much. Same fix path as deposit, going the other direction.",
     expect: "Tx confirms; checked balances drop in vault state above.",
     setup: async (body) => {
@@ -1995,7 +1924,7 @@ const BANK8_TESTS = [
   {
     id: "b8-11", name: "⭐ Multi-token batch internal transfer to Wallet 2 (transferMultipleTokensInternal)", kind: "write",
 
-    phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
+    phase: "Step 4 · Multi-token batches", phaseSub: "Atomic operations across native + ERC-20 tokens in one tx.",
     desc: "The batch version of internal transfer. Pick multiple vaulted tokens (ETH + ERC20s OK), all transferred to Wallet 2 in one tx. Same code path as the multi-token deposit/withdraw — confirms the batch flow works for transfers too.",
     expect: "Tx confirms; every checked token's vaulted balance decreases on YOUR side and increases on Wallet 2's side. Both panels above auto-refresh.",
     setup: async (body) => {
@@ -2597,10 +2526,6 @@ function renderWithPhases(tests, container) {
 }
 
 function renderFlows() {
-  // Bank5 + Portal11 are legacy/regression cards — flat (no phase grouping).
-  const b5 = $("bank5-flows"); b5.innerHTML = "";
-  BANK5_TESTS.forEach((s, i) => b5.appendChild(makeTest(s, i)));
-
   renderWithPhases(BANK8_TESTS, $("bank8-flows"));
   renderWithPhases(TRESOR1_TESTS, $("tresor1-flows"));
 
@@ -2651,7 +2576,7 @@ $("tabs").querySelectorAll("button").forEach(btn => {
   btn.onclick = () => {
     $("tabs").querySelectorAll("button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    ["bank5", "bank8", "tresor1", "portal11"].forEach(t => $("tab-" + t).hidden = (t !== btn.dataset.tab));
+    ["bank8", "tresor1", "portal11"].forEach(t => $("tab-" + t).hidden = (t !== btn.dataset.tab));
     if (btn.dataset.tab === "tresor1") tresor1RenderNotebook();
   };
 });
@@ -2672,16 +2597,14 @@ tresor1RenderNotebook();
 // ============================================================
 $("advAbi").onchange = async (e) => {
   const k = e.target.value;
-  if (!k) return;
-  if (k === "bank5")     $("advAddr").value = ADDR.bank5_sepolia;
-  if (k === "bank8")     $("advAddr").value = ADDR.bank8_sepolia;
+  if (!k) return;  if (k === "bank8")     $("advAddr").value = ADDR.bank8_sepolia;
   if (k === "portal11")  $("advAddr").value = PORTAL11_ADDR || "";
 };
 
 $("advLoad").onclick = async () => {
   const k = $("advAbi").value, a = $("advAddr").value.trim();
   if (!k || !ethers.isAddress(a)) return alert("Pick ABI and enter a valid address.");
-  const abiName = { bank5: "CrossChainBank5", bank8: "CrossChainBank8", portal11: "CyrusPortal11" }[k];
+  const abiName = { bank8: "CrossChainBank8", portal11: "CyrusPortal11" }[k];
   const abi = await fetchAbi(abiName);
   const root = $("advFns"); root.innerHTML = "";
   const order = { view: 0, pure: 1, nonpayable: 2, payable: 3 };
