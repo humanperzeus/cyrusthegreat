@@ -1612,8 +1612,8 @@ const BANK8_TESTS = [
     id: "b8-4", name: "⭐ Multi-token batch deposit (smart picker)", kind: "write",
 
     phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
-    desc: "Pick any tokens (ETH, USD1, WLFI on Sepolia), set amounts, click Run. Auto-handles ERC-20 approvals. NOTE: Bank8's depositMultipleTokens rejects native ETH (the contract's _validateMultiTokenInput requires token != address(0) — line 236 of CrossChainBank8.sol). So if you pick native, this test auto-issues a separate depositETH() first, then depositMultipleTokens() for the ERC-20s — two txs, one click.",
-    expect: "Both txs (if applicable) confirm with status 1. Every checked token's vaulted balance increases below.",
+    desc: "Pick any tokens (native + USD1 + WLFI on Sepolia, or any combination), set amounts, click Run. Auto-handles ERC-20 approvals. Lands in ONE atomic depositMultipleTokens call — fixed 2026-05-31 (pre-fix the contract rejected native in batches; we now allow it and the new safety guard requires msg.value ≥ sum(natives) + fee).",
+    expect: "Tx confirms with status 1 in ONE call. Every checked token's vaulted balance increases below.",
     setup: async (body) => {
       if (!provider || !account) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
@@ -1632,73 +1632,51 @@ const BANK8_TESTS = [
           const c = new ethers.Contract(v, abi, getReadProvider());
           const fee = await c.getCurrentFeeInWei();
 
-          // Split selection into native + ERC-20s. Native goes through
-          // depositETH (msg.value = amount + fee); ERC-20s go through
-          // depositMultipleTokens (separate fee).
-          const ethSel = sel.find(s => s.isNative);
-          const ercSel = sel.filter(s => !s.isNative);
+          // Build the arrays + compute msg.value = sum(native amounts) + fee.
+          // Contract validates the same equation; the explicit msg.value is
+          // pulled from the wallet, fee credits feeVault, native amounts
+          // credit vault[user, address(0)].
+          const tokenAddrs = sel.map(s => s.addr);
+          const amounts   = sel.map(s => s.amountWei);
+          const nativeSum = sel.reduce((acc, s) => acc + (s.isNative ? s.amountWei : 0n), 0n);
+          const ethValue  = nativeSum + fee;
 
-          // Total ETH we'll need: ETH amount + fee (if depositing native) + fee (for ERC-20 batch if any)
-          let totalEthNeeded = 0n;
-          if (ethSel) totalEthNeeded += ethSel.amountWei + fee;
-          if (ercSel.length > 0) totalEthNeeded += fee;
-          await ensureBalance(totalEthNeeded + ethers.parseEther("0.0001"), "multi-token deposit");
+          await ensureBalance(ethValue + ethers.parseEther("0.0001"), "multi-token deposit");
 
-          let txLog = "";
-
-          // Step A: native ETH deposit (if applicable) via depositETH
-          if (ethSel) {
-            const ethTx = await c.connect(signer).depositETH({
-              value: ethSel.amountWei + fee,
-              gasLimit: 200000n,
-            });
-            const ethLink = `<a target="_blank" href="${explorerTx(ethTx.hash)}">${ethTx.hash.slice(0, 10)}…</a>`;
-            const ethR = await ethTx.wait();
-            if (ethR.status !== 1) throw new Error(`depositETH reverted, status ${ethR.status}`);
-            txLog += `depositETH ${ethers.formatEther(ethSel.amountWei)} ${NETWORKS[chainId]?.currency || "ETH"}: ${ethLink}\n`;
+          // Approve each ERC-20 below current allowance (skips native).
+          let approveLog = "";
+          for (const s of sel) {
+            if (s.isNative) continue;
+            const erc = new ethers.Contract(s.addr, ERC20_ABI, getReadProvider());
+            const cur = await erc.allowance(account, v);
+            if (cur < s.amountWei) {
+              const a = await erc.connect(signer).approve(v, s.amountWei, { gasLimit: 100000n });
+              await a.wait();
+              approveLog += `  Approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+            }
           }
 
-          // Step B: ERC-20s batch (if applicable)
-          if (ercSel.length > 0) {
-            // Approvals first
-            let approveLog = "";
-            for (const s of ercSel) {
-              const erc = new ethers.Contract(s.addr, ERC20_ABI, getReadProvider());
-              const cur = await erc.allowance(account, v);
-              if (cur < s.amountWei) {
-                const a = await erc.connect(signer).approve(v, s.amountWei, { gasLimit: 100000n });
-                await a.wait();
-                approveLog += `  Approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
-              }
-            }
-            if (approveLog) txLog += approveLog;
-
-            // Pre-flight staticCall to surface revert reasons clearly
-            try {
-              await c.connect(signer).depositMultipleTokens.staticCall(
-                ercSel.map(s => s.addr),
-                ercSel.map(s => s.amountWei),
-                { value: fee },
-              );
-            } catch (e) {
-              const reason = e.shortMessage || e.reason || e.message || String(e);
-              throw new Error(`depositMultipleTokens pre-flight reverted: ${reason}`);
-            }
-
-            const tx = await c.connect(signer).depositMultipleTokens(
-              ercSel.map(s => s.addr),
-              ercSel.map(s => s.amountWei),
-              { value: fee, gasLimit: 800000n },
+          // Pre-flight staticCall — surfaces revert reasons clearly instead
+          // of the generic CALL_EXCEPTION you'd otherwise see.
+          try {
+            await c.connect(signer).depositMultipleTokens.staticCall(
+              tokenAddrs, amounts, { value: ethValue },
             );
-            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`;
-            const r = await tx.wait();
-            if (r.status !== 1) throw new Error(`depositMultipleTokens reverted, status ${r.status}`);
-            const ercSummary = ercSel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-            txLog += `depositMultipleTokens ${ercSummary}: ${link}\n`;
+          } catch (e) {
+            const reason = e.shortMessage || e.reason || e.message || String(e);
+            throw new Error(`Pre-flight reverted: ${reason}`);
           }
 
-          const allSummary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-          return { html: `${txLog}\nAll deposits landed ✓\nTotal: ${allSummary}` };
+          const tx = await c.connect(signer).depositMultipleTokens(
+            tokenAddrs, amounts, { value: ethValue, gasLimit: 800000n },
+          );
+          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+          const r = await tx.wait();
+          if (r.status !== 1) throw new Error(`depositMultipleTokens reverted, status ${r.status}`);
+          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+          return {
+            html: `${approveLog}Deposited (ONE tx): ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓`,
+          };
         },
       };
     },
@@ -1831,11 +1809,29 @@ const BANK8_TESTS = [
           const c = new ethers.Contract(v, abi, getReadProvider());
           const fee = await c.getCurrentFeeInWei();
           await ensureBalance(fee + ethers.parseEther("0.0001"), "multi-token withdraw fee");
-          const tx = await c.connect(signer).withdrawMultipleTokens(sel.map(s => s.addr), sel.map(s => s.amountWei), { value: fee, gasLimit: 800000n });
+
+          const tokenAddrs = sel.map(s => s.addr);
+          const amounts   = sel.map(s => s.amountWei);
+
+          // Pre-flight staticCall to surface revert reasons clearly (otherwise
+          // ethers reports a generic CALL_EXCEPTION with no hint).
+          try {
+            await c.connect(signer).withdrawMultipleTokens.staticCall(
+              tokenAddrs, amounts, { value: fee },
+            );
+          } catch (e) {
+            const reason = e.shortMessage || e.reason || e.message || String(e);
+            throw new Error(`Pre-flight reverted: ${reason}`);
+          }
+
+          const tx = await c.connect(signer).withdrawMultipleTokens(
+            tokenAddrs, amounts, { value: fee, gasLimit: 800000n },
+          );
           const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
           const r = await tx.wait();
+          if (r.status !== 1) throw new Error(`withdrawMultipleTokens reverted, status ${r.status}`);
           const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-          return { html: `Withdrew: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+          return { html: `Withdrew: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
         },
       };
     },
@@ -2025,11 +2021,27 @@ const BANK8_TESTS = [
           const c = new ethers.Contract(v, abi, getReadProvider());
           const fee = await c.getCurrentFeeInWei();
           await ensureBalance(fee + ethers.parseEther("0.0001"), "transferMultipleTokensInternal fee");
-          const tx = await c.connect(signer).transferMultipleTokensInternal(sel.map(s => s.addr), to, sel.map(s => s.amountWei), { value: fee, gasLimit: 800000n });
+          const tokenAddrs = sel.map(s => s.addr);
+          const amounts   = sel.map(s => s.amountWei);
+
+          // Pre-flight staticCall to surface revert reasons clearly.
+          try {
+            await c.connect(signer).transferMultipleTokensInternal.staticCall(
+              tokenAddrs, to, amounts, { value: fee },
+            );
+          } catch (e) {
+            const reason = e.shortMessage || e.reason || e.message || String(e);
+            throw new Error(`Pre-flight reverted: ${reason}`);
+          }
+
+          const tx = await c.connect(signer).transferMultipleTokensInternal(
+            tokenAddrs, to, amounts, { value: fee, gasLimit: 800000n },
+          );
           const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
           const r = await tx.wait();
+          if (r.status !== 1) throw new Error(`transferMultipleTokensInternal reverted, status ${r.status}`);
           const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-          return { html: `Batch-transferred: ${summary} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+          return { html: `Batch-transferred: ${summary} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
         },
       };
     },
