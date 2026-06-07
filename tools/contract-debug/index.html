@@ -5,95 +5,445 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Cyrus Vault Debug</title>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: dark light; --ok:#1a8a4f; --warn:#c8551a; --err:#c33; --muted:#8888; }
+  /* ============================================================
+     WLFI-inspired dark + gold aesthetic.
+     Color tokens, typography, rounded cards, pill buttons,
+     gold accent on primary CTAs + active steps + section borders.
+     ============================================================ */
+  :root {
+    color-scheme: dark;
+
+    /* Backgrounds */
+    --bg-base: #0a0a0c;
+    --bg-card: #16151a;
+    --bg-card-2: #1c1b21;
+    --bg-inset: rgba(0, 0, 0, 0.35);
+
+    /* Borders */
+    --border:        rgba(255, 220, 130, 0.08);
+    --border-strong: rgba(255, 220, 130, 0.18);
+
+    /* Accent — WLFI gold */
+    --gold:        #F0B400;
+    --gold-bright: #FFC83D;
+    --gold-deep:   #C99000;
+
+    /* Status */
+    --ok:   #10b981;
+    --warn: #f59e0b;
+    --err:  #ef4444;
+    --info: #60a5fa;
+
+    /* Text */
+    --text:        #f5f5f5;
+    --text-muted:  #9ca3af;
+    --text-dim:    #6b7280;
+  }
+
   * { box-sizing: border-box; }
-  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 0; }
-  header { padding: 12px 20px; background: #8881; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #8884; position: sticky; top: 0; z-index: 10; backdrop-filter: blur(6px); }
-  header h1 { margin: 0; font-size: 16px; font-weight: 700; }
-  main { max-width: 1100px; margin: 0 auto; padding: 16px 20px 80px; }
-  h2 { margin: 24px 0 8px; font-size: 17px; }
-  h3 { margin: 8px 0 4px; font-size: 14px; }
-  button { font: inherit; padding: 7px 14px; border: 1px solid #888; background: transparent; border-radius: 5px; cursor: pointer; color: inherit; transition: background 0.1s; }
-  button:hover:not([disabled]) { background: #8882; }
-  button[disabled] { opacity: 0.5; cursor: not-allowed; }
-  button.primary { background: #4af; color: white; border-color: #4af; }
-  button.primary:hover:not([disabled]) { background: #28d; }
-  button.danger { background: #c33; color: white; border-color: #c33; }
-  input, textarea, select { font: inherit; padding: 5px 9px; border: 1px solid #888; border-radius: 5px; background: transparent; color: inherit; box-sizing: border-box; }
+
+  body {
+    font: 14px/1.55 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    letter-spacing: -0.005em;
+    margin: 0;
+    padding: 0;
+    background: var(--bg-base);
+    color: var(--text);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(240, 180, 0, 0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(240, 180, 0, 0.04) 0%, transparent 60%);
+    min-height: 100vh;
+  }
+
+  /* ─── Sticky header ─── */
+  header {
+    padding: 14px 24px;
+    background: rgba(12, 11, 16, 0.85);
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--gold-bright) 0%, var(--gold) 60%, var(--gold-deep) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 24px 80px; }
+
+  h2 {
+    margin: 28px 0 12px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  h3 { margin: 8px 0 4px; font-size: 14px; font-weight: 600; }
+
+  /* ─── Buttons (pill shape per WLFI) ─── */
+  button {
+    font: inherit;
+    font-weight: 500;
+    padding: 8px 16px;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--text);
+    transition: all 0.15s ease;
+  }
+  button:hover:not([disabled]) {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+  button[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+  button.primary {
+    background: linear-gradient(135deg, var(--gold-bright) 0%, var(--gold) 100%);
+    color: #0a0a0c;
+    font-weight: 700;
+    border-color: var(--gold);
+    padding: 10px 24px;
+    box-shadow: 0 2px 14px rgba(240, 180, 0, 0.28);
+  }
+  button.primary:hover:not([disabled]) {
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
+    box-shadow: 0 4px 20px rgba(240, 180, 0, 0.45);
+    transform: translateY(-1px);
+  }
+  button.danger {
+    background: var(--err);
+    color: white;
+    border-color: var(--err);
+  }
+
+  input, textarea, select {
+    font: inherit;
+    padding: 8px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text);
+    box-sizing: border-box;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(240, 180, 0, 0.12);
+  }
   textarea { font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; }
-  code, .mono { font-family: ui-monospace, "SF Mono", monospace; }
+  code, .mono { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.93em; }
 
-  /* Pills */
-  .pill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
-  .pill.ok { background: #1a8a4f33; color: var(--ok); }
-  .pill.warn { background: #c8551a33; color: var(--warn); }
-  .pill.err { background: #c3333; color: var(--err); }
-  .pill.muted { background: #8883; color: var(--muted); }
+  /* ─── Pills ─── */
+  .pill {
+    padding: 3px 11px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    display: inline-block;
+  }
+  .pill.ok    { background: rgba(16, 185, 129, 0.14); color: var(--ok); }
+  .pill.warn  { background: rgba(245, 158, 11, 0.14); color: var(--warn); }
+  .pill.err   { background: rgba(239, 68, 68, 0.16);  color: var(--err); }
+  .pill.muted { background: rgba(255, 255, 255, 0.05); color: var(--text-dim); }
 
-  /* Tabs */
-  nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid #8884; margin: 16px 0; }
-  nav.tabs button { border-radius: 5px 5px 0 0; border-bottom: none; padding: 8px 16px; }
-  nav.tabs button.active { background: #4af; color: white; border-color: #4af; }
+  /* ─── Tabs (elevated pill row, matches WLFI WLFI/USD switch) ─── */
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin: 24px 0;
+    padding: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    width: fit-content;
+  }
+  nav.tabs button {
+    border: none;
+    padding: 8px 18px;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active {
+    background: linear-gradient(135deg, var(--gold-bright) 0%, var(--gold) 100%);
+    color: #0a0a0c;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(240, 180, 0, 0.25);
+  }
 
-  /* Cards */
-  .card { border: 1px solid #8884; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
-  .card.test { border-left: 3px solid #888; }
+  /* ─── Cards (WLFI rounded panel) ─── */
+  .card {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  }
+  .card.test { border-left: 3px solid rgba(255, 255, 255, 0.08); transition: border-color 0.2s; }
   .card.test.done { border-left-color: var(--ok); }
   .card.test.fail { border-left-color: var(--err); }
   .card.test.running { border-left-color: var(--warn); }
-  .card.test header { background: none; padding: 0; border: none; backdrop-filter: none; position: static; display: flex; align-items: center; gap: 8px; }
-  .card.test .desc { color: #8888; font-size: 13px; margin: 4px 0 8px; }
-  .card.test .params { font-size: 12px; margin: 6px 0; padding: 6px 10px; background: #8881; border-radius: 4px; font-family: ui-monospace, monospace; }
-  .card.test .controls { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .card.test header {
+    background: none;
+    padding: 0;
+    border: none;
+    backdrop-filter: none;
+    position: static;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card.test .desc { color: var(--text-muted); font-size: 13px; margin: 6px 0 10px; }
+  .card.test .params {
+    font-size: 12px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: var(--bg-inset);
+    border-radius: 8px;
+    font-family: ui-monospace, monospace;
+  }
+  .card.test .controls {
+    margin: 12px 0 0;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
   .card.test .controls input { font-family: ui-monospace, monospace; font-size: 12px; }
-  .card.test .result { margin-top: 10px; padding: 8px 12px; background: #8881; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
-  .card.test .result.ok { background: #1a8a4f22; border-left: 3px solid var(--ok); }
-  .card.test .result.err { background: #c3322; border-left: 3px solid var(--err); }
-  .step-num { display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; background: #8884; border-radius: 50%; font-weight: 700; font-size: 12px; }
-  .card.test.done .step-num { background: var(--ok); color: white; }
-  .card.test.fail .step-num { background: var(--err); color: white; }
+  .card.test .result {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: var(--bg-inset);
+    border-radius: 10px;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .card.test .result.ok {
+    background: rgba(16, 185, 129, 0.08);
+    border-left: 3px solid var(--ok);
+  }
+  .card.test .result.err {
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid var(--err);
+  }
 
-  /* Address book */
-  .addrbook { background: #8881; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
-  .addrbook table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  .addrbook td { padding: 4px 8px; }
-  .addrbook .lbl { color: #888; width: 130px; }
-  .addrbook .copy { cursor: pointer; padding: 2px 6px; font-size: 11px; }
+  /* Step number circle — mimics the WLFI Step 1/2/3 dot indicator */
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .card.test.done .step-num {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: white;
+  }
+  .card.test.fail .step-num {
+    background: var(--err);
+    border-color: var(--err);
+    color: white;
+  }
+  .card.test.running .step-num {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #0a0a0c;
+  }
 
-  /* Vault state */
-  .state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
-  .state-grid .stat { padding: 8px 12px; background: #8881; border-radius: 6px; }
-  .state-grid .stat .lbl { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-  .state-grid .stat .val { font-family: ui-monospace, monospace; font-size: 13px; margin-top: 2px; }
+  /* ─── Address book (WLFI "Contract details" panel) ─── */
+  .addrbook {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 16px;
+    margin-bottom: 18px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  }
+  .addrbook table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .addrbook td { padding: 9px 4px; border-bottom: 1px solid var(--border); }
+  .addrbook tr:last-child td { border-bottom: none; }
+  .addrbook .lbl {
+    color: var(--text-muted);
+    width: 200px;
+    font-weight: 500;
+  }
+  .addrbook .copy {
+    cursor: pointer;
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  /* ─── Vault state grid (WLFI stat-card layout) ─── */
+  .state-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .state-grid .stat {
+    padding: 14px 16px;
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .state-grid .stat .lbl {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    font-weight: 500;
+  }
+  .state-grid .stat .val {
+    font-family: ui-monospace, monospace;
+    font-size: 14px;
+    margin-top: 4px;
+    color: var(--text);
+  }
 
   details summary { cursor: pointer; user-select: none; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .hint { color: #888; font-size: 12px; }
-  a { color: #4af; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .hint { color: var(--text-muted); font-size: 13px; }
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 
-  /* --- Phase headers --- a guided walkthrough of the test order */
-  .phase-header { margin: 22px 0 10px; padding: 8px 12px; background: linear-gradient(90deg, #4af2 0%, transparent 100%); border-radius: 6px; border-left: 4px solid #4af; }
-  .phase-header h3 { margin: 0; font-size: 14px; font-weight: 700; }
-  .phase-header .phase-sub { font-size: 12px; color: #888; margin-top: 2px; }
+  /* ─── Phase headers — the WLFI step indicator look ─── */
+  .phase-header {
+    margin: 32px 0 14px;
+    padding: 16px 22px;
+    background: linear-gradient(135deg, rgba(240, 180, 0, 0.08) 0%, rgba(240, 180, 0, 0.015) 100%);
+    border: 1px solid rgba(240, 180, 0, 0.18);
+    border-radius: 14px;
+    border-left: 4px solid var(--gold);
+  }
+  .phase-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gold-bright);
+    letter-spacing: -0.005em;
+  }
+  .phase-header .phase-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
 
-  /* --- Simple / Detailed mode toggle ---
-     body.simple hides verbose descriptions, expected text, and the activity
-     log section. The mode toggle button at the top flips body.simple on/off
-     and persists to localStorage. */
+  /* ─── Simple ↔ Detailed mode ─── */
   body.simple .card.test .desc,
   body.simple .card.test .expect-row,
   body.simple .phase-header .phase-sub,
   body.simple .verbose-intro,
   body.simple #activity-log-section { display: none; }
   body.simple #activity-log-section[data-force-show="1"] { display: block; }
-  /* Compact result in simple mode — collapse multi-line outputs to single line preview */
   body.simple .card.test .result.ok { max-height: 32px; overflow: hidden; }
   body.simple .card.test .result.ok::after { content: " (click for details)"; opacity: 0.5; }
 
-  /* Mode toggle button */
-  .mode-toggle { font-size: 12px; padding: 4px 10px; }
-  .mode-toggle.active { background: #4af; color: white; border-color: #4af; }
+  .mode-toggle {
+    font-size: 12px;
+    padding: 6px 14px;
+  }
+  .mode-toggle.active {
+    background: rgba(240, 180, 0, 0.1);
+    border-color: rgba(240, 180, 0, 0.35);
+    color: var(--gold-bright);
+  }
+
+  /* ─── Subtle scrollbar styling ─── */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg-base); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 5px;
+    border: 2px solid var(--bg-base);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(240, 180, 0, 0.3); }
+
+  /* ─── Stepper bar (sticky, shows all phases at a glance) ─── */
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 14px 20px;
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin: 18px 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .stepper .step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .stepper .step .dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--text);
+  }
+  .stepper .step.active { color: var(--gold-bright); font-weight: 700; }
+  .stepper .step.active .dot {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #0a0a0c;
+    box-shadow: 0 0 0 4px rgba(240, 180, 0, 0.12);
+  }
+  .stepper .step.done .dot {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: white;
+  }
+  .stepper .conn {
+    flex: 1;
+    height: 1.5px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 12px;
+    min-width: 24px;
+  }
+  .stepper .step.done + .conn { background: var(--ok); }
 </style>
 </head>
 <body>
@@ -2037,15 +2387,43 @@ const TRESOR1_TESTS = [
 // ============================================================
 function renderWithPhases(tests, container) {
   container.innerHTML = "";
-  // Stable sort by phase so all "Step 1" cards land contiguous (the source
-  // arrays already roughly group them, but Bank8 has b8-4/7/11 interleaved
-  // with the ETH/ERC-20 single-token phases).
   const phaseRank = (s) => {
     if (!s.phase) return 99;
     const m = s.phase.match(/Step (\d+)/);
     return m ? parseInt(m[1], 10) : 99;
   };
   const sorted = [...tests].sort((a, b) => phaseRank(a) - phaseRank(b));
+
+  // ─── Build the top-of-section stepper bar (PDF 1's connected-dots look) ───
+  const uniquePhases = [];
+  const seen = new Set();
+  sorted.forEach(s => {
+    if (s.phase && !seen.has(s.phase)) {
+      seen.add(s.phase);
+      // "Step 2 · ETH deposit / transfer / withdraw" → short label "ETH deposit / transfer / withdraw"
+      const m = s.phase.match(/^Step (\d+)\s*·\s*(.+)$/);
+      uniquePhases.push({ num: m ? m[1] : "?", label: m ? m[2] : s.phase, full: s.phase });
+    }
+  });
+  if (uniquePhases.length > 0) {
+    const stepper = document.createElement("div");
+    stepper.className = "stepper";
+    stepper.innerHTML = uniquePhases.map((p, i) => {
+      const dot = `<div class="step" data-phase="${p.full.replace(/"/g, '&quot;')}"><div class="dot">${p.num}</div><span>${p.label}</span></div>`;
+      const conn = i < uniquePhases.length - 1 ? `<div class="conn"></div>` : "";
+      return dot + conn;
+    }).join("");
+    container.appendChild(stepper);
+    // Clicking a step jumps to that phase's header.
+    stepper.addEventListener("click", (e) => {
+      const stepEl = e.target.closest(".step");
+      if (!stepEl) return;
+      const phase = stepEl.dataset.phase;
+      const header = container.querySelector(`.phase-header[data-phase="${phase.replace(/"/g, '\\"')}"]`);
+      if (header) header.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   let currentPhase = null;
   let phaseStepIdx = 0;
   sorted.forEach((spec) => {
@@ -2054,6 +2432,7 @@ function renderWithPhases(tests, container) {
       phaseStepIdx = 0;
       const header = document.createElement("div");
       header.className = "phase-header";
+      header.dataset.phase = spec.phase;
       header.innerHTML = `<h3>${spec.phase}</h3>` +
         (spec.phaseSub ? `<div class="phase-sub">${spec.phaseSub}</div>` : "");
       container.appendChild(header);
