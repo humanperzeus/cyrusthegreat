@@ -378,6 +378,20 @@
     color: var(--gold-bright);
   }
 
+  /* Recipient picker buttons (Wallet 1 / Wallet 2 quick-fill) */
+  .recip-pick {
+    font-size: 11px;
+    padding: 4px 12px;
+    font-weight: 600;
+    color: var(--gold-bright);
+    border-color: rgba(240, 180, 0, 0.3);
+    background: rgba(240, 180, 0, 0.06);
+  }
+  .recip-pick:hover {
+    background: rgba(240, 180, 0, 0.18);
+    border-color: var(--gold);
+  }
+
   /* ─── Subtle scrollbar styling ─── */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: var(--bg-base); }
@@ -666,25 +680,25 @@ const ADDR = (() => {
     // Bank8 (CrossChainBank8) — REDEPLOYED 2026-05-23 (Sepolia + Base) + 2026-05-30 (BSC)
     // after the 2026-05-19 key rotation. Same address on all 3 EVM chains because
     // wallet 1 deploys with the same nonce on each — coincidence, not by design.
-    bank8_sepolia:       "0xb4d636eceaf469cb7b84bd72387ac61e804a1d42",
-    bank8_bsc_testnet:   "0xf9aab9b4800e3d5fcd4e4faf1f7fcf539cbd06a9",
-    bank8_base_testnet:  "0xf9aab9b4800e3d5fcd4e4faf1f7fcf539cbd06a9",
+    bank8_sepolia:       "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
+    bank8_bsc_testnet:   "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
+    bank8_base_testnet:  "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
     // CyrusTresor1 — REDEPLOYED with the same chain-parity pattern.
-    tresor1_sepolia:      "0x48e8b5d31ce1445c2c64ebd2c775e7f753813e1f",
-    tresor1_bsc_testnet:  "0x6f8286f4e08ff59fa2152b6b702ee9d8916a7219",
-    tresor1_base_testnet: "0x6f8286f4e08ff59fa2152b6b702ee9d8916a7219",
+    tresor1_sepolia:      "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
+    tresor1_bsc_testnet:  "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
+    tresor1_base_testnet: "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
     // Arbitrum Sepolia — deployed 2026-05-30, addresses match the other
     // 3 EVM chains (4-chain parity from same nonce on each).
-    bank8_arb_testnet:    "0xf9aab9b4800e3d5fcd4e4faf1f7fcf539cbd06a9",
-    tresor1_arb_testnet:  "0x6f8286f4e08ff59fa2152b6b702ee9d8916a7219",
+    bank8_arb_testnet:    "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
+    tresor1_arb_testnet:  "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
     // HyperEVM Testnet — deployed 2026-05-30 via big blocks (required for
     // ~4M-gas contracts on HyperEVM's small-block default).
     // priceFeed_hyper_testnet = MockV3Aggregator (HYPE = $40, testnet only).
     // Bank8 at a different address than the other 4 EVM chains because
     // wallet 1's HyperEVM nonce had already advanced by the time Bank8 deployed.
     mock_pricefeed_hyper_testnet: "0xd2fc71e2fbf7a267c2f884160f01c82994175958",
-    tresor1_hyper_testnet:        "0x57d438ea49cfe54814cca12e14736c7a059361c8",
-    bank8_hyper_testnet:          "0x6f8286f4e08ff59fa2152b6b702ee9d8916a7219",
+    tresor1_hyper_testnet:        "0x15fe4fd173599b248c6b89f5e3caea60e1c1a1db",
+    bank8_hyper_testnet:          "0xf9aab9b4800e3d5fcd4e4faf1f7fcf539cbd06a9",
     // Test wallets (Sepolia, dev only). Rotated 2026-05-19 — previous wallet 1
     // (0x84064947…) and wallet 2 (0xa5f83D48…) were treated as leaked and drained.
     wallet1:             "0x35fe77e4e8b4af616f2b540ea143b6e27e512cc8",
@@ -832,6 +846,31 @@ function formatErr(e) {
   visit(e);
   return lines.join("\n") || String(e);
 }
+// Default recipient for internal-transfer tests: returns the wallet that
+// is NOT currently connected. So if you're connected as Wallet 1, the
+// transfer recipient prefills to Wallet 2, and vice versa. If you're not
+// connected to either known wallet, defaults to Wallet 2 (legacy behaviour).
+function defaultRecipient() {
+  if (!account) return ADDR.wallet2;
+  const a = account.toLowerCase();
+  if (a === ADDR.wallet1.toLowerCase()) return ADDR.wallet2;
+  if (a === ADDR.wallet2.toLowerCase()) return ADDR.wallet1;
+  return ADDR.wallet2;
+}
+
+// HTML snippet for a recipient picker — two pills (W1/W2) that fill the
+// adjacent input. The input is initialised to defaultRecipient(). Wire
+// up via the delegated click handler at the bottom of the file.
+function recipientPickerHtml(inputDataKey = "to") {
+  return `
+    <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: stretch;">
+      <input data-k="${inputDataKey}" type="text" class="mono" value="${defaultRecipient()}" style="flex: 1; min-width: 220px;" />
+      <button type="button" class="recip-pick" data-recip="wallet1" title="Send to Wallet 1 (you, deployer + fee collector)">→ W1</button>
+      <button type="button" class="recip-pick" data-recip="wallet2" title="Send to Wallet 2 (test counterparty)">→ W2</button>
+    </div>
+  `;
+}
+
 // Ensures signer exists AND its address matches the wallet's currently
 // active account. If they diverge (user switched accounts after connecting
 // and the accountsChanged event was missed), we refresh the signer in
@@ -1320,7 +1359,7 @@ async function refreshWallet2State() {
   if (!inp) return;
   const v = inp.value.trim();
   if (!v) {
-    inp.value = ADDR.wallet2;
+    inp.value = defaultRecipient(); // the wallet that isn't currently connected
   }
   const addr = inp.value.trim();
   if (!ethers.isAddress(addr)) {
@@ -1669,7 +1708,7 @@ const BANK8_TESTS = [
         <div class="hint" style="margin-bottom: 8px;">Your vaulted ${cur}: <b class="mono">${ethers.formatEther(vaultEth)}</b> — default below is half of that.</div>
         <label class="row" style="margin: 4px 0;">
           <span style="width: 130px;" class="hint">Recipient:</span>
-          <input data-k="to" type="text" class="mono" value="${ADDR.wallet2}" style="flex: 1; min-width: 200px;" />
+          ${recipientPickerHtml("to")}
         </label>
         <label class="row" style="margin: 4px 0;">
           <span style="width: 130px;" class="hint">Amount (${cur}):</span>
@@ -1894,7 +1933,7 @@ const BANK8_TESTS = [
       }
       const allVaulted = await fetchVaultedTokens(v);
       const vaulted = allVaulted.filter(t => !t.isNative);
-      const recipientDefault = ADDR.wallet2;
+      const recipientDefault = defaultRecipient();
       body.innerHTML = `
         <label class="row" style="margin: 4px 0;">
           <span style="width: 130px;" class="hint">Recipient:</span>
@@ -1949,7 +1988,7 @@ const BANK8_TESTS = [
       body.innerHTML = `
         <label class="row" style="margin: 4px 0;">
           <span style="width: 130px;" class="hint">Recipient:</span>
-          <input data-k="to" type="text" class="mono" value="${ADDR.wallet2}" style="flex: 1; min-width: 200px;" />
+          ${recipientPickerHtml("to")}
         </label>
         <div data-k="picker"></div>
       `;
@@ -2822,10 +2861,28 @@ $("apiClear").onclick = () => {
   });
 })();
 
-// Wallet 2 panel wiring
-$("wallet2Addr").value = ADDR.wallet2; // pre-fill with the test recipient
+// "Other wallet" panel wiring — defaults to whichever known wallet is NOT
+// currently connected, so when you connect as Wallet 1 the panel auto-fills
+// with Wallet 2's address and vice versa.
+$("wallet2Addr").value = defaultRecipient();
 $("refreshWallet2").onclick = refreshWallet2State;
 $("wallet2Addr").addEventListener("change", refreshWallet2State);
+
+// Recipient picker delegated click handler — any button with class
+// "recip-pick" + a data-recip="wallet1" / "wallet2" attribute fills the
+// adjacent input[data-k=to] inside the same .row.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".recip-pick");
+  if (!btn) return;
+  const which = btn.dataset.recip;
+  const addr = which === "wallet1" ? ADDR.wallet1 : ADDR.wallet2;
+  const row = btn.closest(".row");
+  const input = row?.querySelector('input[data-k="to"]');
+  if (input) {
+    input.value = addr;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+});
 
 renderFlows();
 refreshAddrBook();
