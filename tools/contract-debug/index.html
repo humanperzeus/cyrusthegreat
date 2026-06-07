@@ -1550,11 +1550,11 @@ const BANK8_TESTS = [
     },
   },
   {
-    id: "b8-4", name: "⭐ Multi-token batch deposit (smart picker — THE BANK5 BUG-FIX TEST)", kind: "write",
+    id: "b8-4", name: "⭐ Multi-token batch deposit (smart picker)", kind: "write",
 
     phase: "Step 4 · Multi-token batches", phaseSub: "The Bank5 bug fix — atomic multi-token operations.",
-    desc: "Reads your wallet, lists every known token (ETH, USD1, WLFI on Sepolia), shows balances. Tick the ones you want, set amounts (or click 'max'). Auto-handles ERC20 approvals. The exact call that reverts on Bank5 — Bank8 fixes it via v1.17.17.",
-    expect: "Tx confirms with status 1. Every checked token's vaulted balance increases below.",
+    desc: "Pick any tokens (ETH, USD1, WLFI on Sepolia), set amounts, click Run. Auto-handles ERC-20 approvals. NOTE: Bank8's depositMultipleTokens rejects native ETH (the contract's _validateMultiTokenInput requires token != address(0) — line 236 of CrossChainBank8.sol). So if you pick native, this test auto-issues a separate depositETH() first, then depositMultipleTokens() for the ERC-20s — two txs, one click.",
+    expect: "Both txs (if applicable) confirm with status 1. Every checked token's vaulted balance increases below.",
     setup: async (body) => {
       if (!provider || !account) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
@@ -1572,31 +1572,74 @@ const BANK8_TESTS = [
           const abi = await fetchAbi("CrossChainBank8");
           const c = new ethers.Contract(v, abi, getReadProvider());
           const fee = await c.getCurrentFeeInWei();
-          const tokenAddrs = sel.map(s => s.addr);
-          const amounts   = sel.map(s => s.amountWei);
-          const ethSel    = sel.find(s => s.isNative);
-          const ethValue  = (ethSel ? ethSel.amountWei : 0n) + fee;
-          await ensureBalance(ethValue + ethers.parseEther("0.0001"), "multi-token deposit");
 
-          // Approvals for each ERC20 below current allowance
-          let approveLog = "";
-          for (const s of sel) {
-            if (s.isNative) continue;
-            const erc = new ethers.Contract(s.addr, ERC20_ABI, getReadProvider());
-            const cur = await erc.allowance(account, v);
-            if (cur < s.amountWei) {
-              const a = await erc.connect(signer).approve(v, s.amountWei, { gasLimit: 100000n });
-              await a.wait();
-              approveLog += `Approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
-            }
+          // Split selection into native + ERC-20s. Native goes through
+          // depositETH (msg.value = amount + fee); ERC-20s go through
+          // depositMultipleTokens (separate fee).
+          const ethSel = sel.find(s => s.isNative);
+          const ercSel = sel.filter(s => !s.isNative);
+
+          // Total ETH we'll need: ETH amount + fee (if depositing native) + fee (for ERC-20 batch if any)
+          let totalEthNeeded = 0n;
+          if (ethSel) totalEthNeeded += ethSel.amountWei + fee;
+          if (ercSel.length > 0) totalEthNeeded += fee;
+          await ensureBalance(totalEthNeeded + ethers.parseEther("0.0001"), "multi-token deposit");
+
+          let txLog = "";
+
+          // Step A: native ETH deposit (if applicable) via depositETH
+          if (ethSel) {
+            const ethTx = await c.connect(signer).depositETH({
+              value: ethSel.amountWei + fee,
+              gasLimit: 200000n,
+            });
+            const ethLink = `<a target="_blank" href="${explorerTx(ethTx.hash)}">${ethTx.hash.slice(0, 10)}…</a>`;
+            const ethR = await ethTx.wait();
+            if (ethR.status !== 1) throw new Error(`depositETH reverted, status ${ethR.status}`);
+            txLog += `depositETH ${ethers.formatEther(ethSel.amountWei)} ${NETWORKS[chainId]?.currency || "ETH"}: ${ethLink}\n`;
           }
 
-          const tx = await c.connect(signer).depositMultipleTokens(tokenAddrs, amounts, { value: ethValue, gasLimit: 800000n });
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-          const verdict = r.status === 1 ? "OK ✓ (Bank5 bug confirmed fixed!)" : "FAILED";
-          return { html: `${approveLog}Deposited: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ${verdict}` };
+          // Step B: ERC-20s batch (if applicable)
+          if (ercSel.length > 0) {
+            // Approvals first
+            let approveLog = "";
+            for (const s of ercSel) {
+              const erc = new ethers.Contract(s.addr, ERC20_ABI, getReadProvider());
+              const cur = await erc.allowance(account, v);
+              if (cur < s.amountWei) {
+                const a = await erc.connect(signer).approve(v, s.amountWei, { gasLimit: 100000n });
+                await a.wait();
+                approveLog += `  Approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+              }
+            }
+            if (approveLog) txLog += approveLog;
+
+            // Pre-flight staticCall to surface revert reasons clearly
+            try {
+              await c.connect(signer).depositMultipleTokens.staticCall(
+                ercSel.map(s => s.addr),
+                ercSel.map(s => s.amountWei),
+                { value: fee },
+              );
+            } catch (e) {
+              const reason = e.shortMessage || e.reason || e.message || String(e);
+              throw new Error(`depositMultipleTokens pre-flight reverted: ${reason}`);
+            }
+
+            const tx = await c.connect(signer).depositMultipleTokens(
+              ercSel.map(s => s.addr),
+              ercSel.map(s => s.amountWei),
+              { value: fee, gasLimit: 800000n },
+            );
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) throw new Error(`depositMultipleTokens reverted, status ${r.status}`);
+            const ercSummary = ercSel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+            txLog += `depositMultipleTokens ${ercSummary}: ${link}\n`;
+          }
+
+          const allSummary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+          return { html: `${txLog}\nAll deposits landed ✓\nTotal: ${allSummary}` };
         },
       };
     },
