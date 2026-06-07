@@ -128,7 +128,7 @@ export function MultiTokenDepositModal({
       token,
       amount: "",
       isValid: false,
-      approvalType: 'exact' // Default to exact approval for security
+      approvalType: 'unlimited' // 2026-06-07: max approval is the unified default; the UI no longer exposes 'exact'
     };
 
     setDeposits(prev => [...prev, newDeposit]);
@@ -284,46 +284,15 @@ export function MultiTokenDepositModal({
                       </Button>
                     </div>
 
-                    {/* Approval Type Selection - Skip for ETH */}
+                    {/* Approval info — unified to MAX_UINT256 ("approve once")
+                        per 2026-06-07 policy. Choice removed because the
+                        decimal-comma-typo risk on "exact" outweighs the
+                        theoretical safety upside. ETH path stays exempt
+                        (no approve needed at all). */}
                     {deposit.token.address !== '0x0000000000000000000000000000000000000000' ? (
                       <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="text-sm font-medium text-gray-700 mb-2">Approval Type:</div>
-                        <div className="flex gap-4">
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`approval-${index}`}
-                              value="exact"
-                              checked={deposit.approvalType === 'exact'}
-                              onChange={(e) => {
-                                setDeposits(prev => prev.map((d, i) =>
-                                  i === index ? { ...d, approvalType: e.target.value as 'exact' | 'unlimited' } : d
-                                ));
-                              }}
-                              className="text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm">Exact amount only</span>
-                          </label>
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`approval-${index}`}
-                              value="unlimited"
-                              checked={deposit.approvalType === 'unlimited'}
-                              onChange={(e) => {
-                                setDeposits(prev => prev.map((d, i) =>
-                                  i === index ? { ...d, approvalType: e.target.value as 'exact' | 'unlimited' } : d
-                                ));
-                              }}
-                              className="text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm">Unlimited approval</span>
-                          </label>
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {deposit.approvalType === 'exact'
-                            ? `Will approve exactly ${deposit.amount} ${deposit.token.symbol}`
-                            : `Will approve unlimited ${deposit.token.symbol} (recommended for frequent use)`}
+                        <div className="text-xs text-gray-600">
+                          🔓 Will approve <b>unlimited {deposit.token.symbol}</b> — one-time signature; future deposits of {deposit.token.symbol} on this vault skip the approval step entirely. (Standard pattern used by Uniswap, Aave, etc.)
                         </div>
                       </div>
                     ) : (

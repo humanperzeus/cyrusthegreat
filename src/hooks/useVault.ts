@@ -1981,8 +1981,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         return; // ❌ Block transaction - user saves gas
       }
 
-      // Step 3: First approve the token
-      const approved = await approveTokenWagmi(tokenAddress, amountWei);
+      // Step 3: First approve the token. Per the unified policy (2026-06-07)
+      // we always max-approve (MAX_UINT256) — eliminates the decimal-comma-typo
+      // risk and means the user never has to approve this token again on this
+      // vault contract for any future deposit, regardless of amount.
+      const approved = await approveTokenWagmi(tokenAddress, 2n ** 256n - 1n);
       if (!approved) {
         setIsLoading(false);
         return;
@@ -2363,11 +2366,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           if (BigInt(currentAllowance as string) < requiredAmount) {
             console.log(`  🔄 Approving ${tokenAddress}...`);
 
-            // Determine approval amount based on user's choice (deposit.approvalType)
-            // CRITICAL FIX: Add precision buffer for exact approvals to prevent leftover dust
+            // Approval amount policy (2026-06-07 onwards):
+            //
+            // DEFAULT = unlimited (MAX_UINT256). All UI paths pass approvalType
+            // 'unlimited' now — we removed the radio button to eliminate the
+            // decimal-comma-typo risk (a user accidentally approving 100 USD1
+            // instead of 1.00 USD1 leaves a 99x over-approval; for the inverse
+            // they get under-allowance + tx revert and have to redo).
+            //
+            // The 'exact' branch is kept as a defensive fallback for any
+            // programmatic caller — IF that path is ever reached, we now add a
+            // +10% buffer (was 0.01%) so price/decimal jitter never causes the
+            // downstream deposit to fail allowance.
             const approvalAmount = deposit.approvalType === 'exact'
-              ? requiredAmount + (requiredAmount / 10000n)  // Add 0.01% buffer for exact
-              : 2n ** 256n - 1n; // Unlimited approval
+              ? requiredAmount + (requiredAmount / 10n)        // +10% buffer
+              : 2n ** 256n - 1n;                                // Unlimited (MAX_UINT256)
 
             // Approve token using writeContract
             const approvalHash = await writeContract(config, {
@@ -2764,10 +2777,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     try {
       debugLog(`🔐 Executing approval + auto-deposit for ${tokenSymbol}...`);
       
-      // Step 1: Send approval transaction with precision buffer
-      // CRITICAL FIX: Approve slightly more to account for precision differences
-      const approvalAmount = amount + (amount / 10000n); // Add 0.01% buffer
-      debugLog(`🔐 Approval amount with buffer:`, approvalAmount.toString());
+      // Step 1: Send unlimited approval per the unified policy (2026-06-07).
+      // We no longer try to approve "exact amount + buffer" — the decimal-comma
+      // typo risk + the need to re-approve every deposit isn't worth the
+      // theoretical safety improvement. User approves once per token; future
+      // deposits skip the approval step entirely (currentAllowance >= amountWei).
+      const approvalAmount = 2n ** 256n - 1n; // MAX_UINT256 — one-time, then never again
+      debugLog(`🔐 Approval amount (max):`, approvalAmount.toString());
       
       await writeVaultContract({
         address: tokenAddress as `0x${string}`,
