@@ -1380,12 +1380,32 @@ function makeTest(spec, idx) {
 
   // Standard tests use spec.inputs/spec.run.
   // Setup-style tests (spec.setup) build their own body and return {run}.
-  const standardInputsHtml = !spec.setup ? (spec.inputs || []).map((inp, i) => `
-    <label class="row" style="margin: 4px 0;">
-      <span style="width: 130px;" class="hint">${inp.label}:</span>
-      <input data-input-idx="${i}" type="text" value="${inp.default || ""}" placeholder="${inp.placeholder || ""}" style="flex: 1; min-width: 200px;" />
-    </label>
-  `).join("") : "";
+  // If an input has `recipient: true`, append the Wallet 1 / Wallet 2 quick-pick
+  // pills next to it (same UX as the dedicated b8-5 / b8-10 / b8-11 transfers).
+  const standardInputsHtml = !spec.setup ? (spec.inputs || []).map((inp, i) => {
+    if (inp.recipient) {
+      // Resolve "self" sentinel + similar tokens at render time.
+      const resolvedDefault = (inp.default === "self" && account)
+        ? account
+        : (inp.default || defaultRecipient());
+      return `
+        <label class="row" style="margin: 4px 0; align-items: flex-start;">
+          <span style="width: 130px; padding-top: 8px;" class="hint">${inp.label}:</span>
+          <div class="row" style="gap: 6px; flex: 1; flex-wrap: wrap; align-items: stretch;">
+            <input data-input-idx="${i}" data-k="to" type="text" class="mono" value="${resolvedDefault}" placeholder="${inp.placeholder || ""}" style="flex: 1; min-width: 220px;" />
+            <button type="button" class="recip-pick" data-recip="wallet1" title="Wallet 1 (you, deployer + fee collector)">→ W1</button>
+            <button type="button" class="recip-pick" data-recip="wallet2" title="Wallet 2 (test counterparty)">→ W2</button>
+          </div>
+        </label>
+      `;
+    }
+    return `
+      <label class="row" style="margin: 4px 0;">
+        <span style="width: 130px;" class="hint">${inp.label}:</span>
+        <input data-input-idx="${i}" type="text" value="${inp.default || ""}" placeholder="${inp.placeholder || ""}" style="flex: 1; min-width: 200px;" />
+      </label>
+    `;
+  }).join("") : "";
 
   card.innerHTML = `
     <header>
@@ -1933,11 +1953,10 @@ const BANK8_TESTS = [
       }
       const allVaulted = await fetchVaultedTokens(v);
       const vaulted = allVaulted.filter(t => !t.isNative);
-      const recipientDefault = defaultRecipient();
       body.innerHTML = `
         <label class="row" style="margin: 4px 0;">
           <span style="width: 130px;" class="hint">Recipient:</span>
-          <input data-k="to" type="text" class="mono" value="${recipientDefault}" style="flex: 1; min-width: 200px;" />
+          ${recipientPickerHtml("to")}
         </label>
         <div data-k="picker"></div>
       `;
@@ -2234,7 +2253,7 @@ const TRESOR1_TESTS = [
     desc: "Generates a random (secret, userSalt), computes the commitment hash with withdrawTo = your wallet, calls commitToPool(). Saves the secret/salt to the notebook above so you can reveal later.",
     expect: "Tx confirms. New PoolDeposit event. Notebook shows a new pending commit.",
     inputs: [
-      { label: "withdrawTo (recipient on reveal — can be your wallet for self-pay, or Wallet 2 for teleport demo)", default: "self", parse: (s) => s.trim() },
+      { label: "withdrawTo (recipient on reveal — self-pay, W1, or W2)", default: "self", parse: (s) => s.trim(), recipient: true },
     ],
     run: async ([wt]) => {
       await ensureSigner();
