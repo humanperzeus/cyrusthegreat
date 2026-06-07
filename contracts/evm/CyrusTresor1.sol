@@ -295,9 +295,10 @@ contract CyrusTresor1 is ReentrancyGuard {
         require(tokens.length > 0 && tokens.length <= MAX_BATCH_SIZE, "Invalid token count");
         require(tokens.length == amounts.length, "Array length mismatch");
 
+        // address(0) is valid (native ETH). See identical comment in
+        // CrossChainBank8.sol — copy-pasted bug, copy-pasted fix.
         for (uint256 i = 0; i < amounts.length; i++) {
             require(amounts[i] > 0, "Zero amount not allowed");
-            require(tokens[i] != address(0), "Invalid token address");
         }
 
         emit BatchOperation(msg.sender, tokens.length);
@@ -501,7 +502,21 @@ contract CyrusTresor1 is ReentrancyGuard {
         _validateMultiTokenInput(tokens, amounts);
         _checkAndUpdateRateLimit();
 
+        // Fee charged ONCE total via _chargeFeeFromWallet. Native amounts in
+        // the batch must come from the REMAINDER of msg.value above the fee.
         _chargeFeeFromWallet();
+
+        // Sum native amounts up front so we can verify msg.value covers
+        // (sum + fee) before crediting any vault entries. See identical
+        // comment + safety rationale in CrossChainBank8.sol.
+        uint256 nativeSum = 0;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i] == address(0)) nativeSum += amounts[i];
+        }
+        require(
+            msg.value >= nativeSum + _getDynamicFeeInWei(),
+            "Insufficient msg.value for native + fee"
+        );
 
         // Count new tokens for this transaction
         uint256 newTokensInTx = 0;
@@ -512,15 +527,12 @@ contract CyrusTresor1 is ReentrancyGuard {
             uint256 amount = amounts[i];
 
             if (token == address(0)) {
-                // Native ETH deposit
-                uint256 fee = _getDynamicFeeInWei();
-                require(msg.value >= fee, "Insufficient fee sent");
-                require(amount > fee, "Amount must exceed fee");
-
+                // Native ETH deposit. Fee already charged above; do NOT charge
+                // again (pre-2026-05-31 bug: `feeVault += fee` inside this
+                // branch double-charged for every native entry in the batch).
                 unchecked {
                     vault[_key(msg.sender, address(0))] += amount;
                 }
-                feeVault[_key(feeCollector, address(0))] += fee;
 
                 if (_tokenIdx[msg.sender][address(0)] == 0) {
                     newTokensInTx++;

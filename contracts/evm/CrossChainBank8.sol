@@ -231,9 +231,12 @@ contract CrossChainBank8 is ReentrancyGuard {
         require(tokens.length > 0 && tokens.length <= MAX_BATCH_SIZE, "Invalid token count");
         require(tokens.length == amounts.length, "Array length mismatch");
 
+        // address(0) is INTENTIONALLY valid here — it denotes native ETH in
+        // the batch. Pre-2026-05-31 this require rejected address(0), making
+        // depositMultipleTokens ERC-20-only and contradicting both its name
+        // and the if/else branch for native inside the function body.
         for (uint256 i = 0; i < amounts.length; i++) {
             require(amounts[i] > 0, "Zero amount not allowed");
-            require(tokens[i] != address(0), "Invalid token address");
         }
 
         emit BatchOperation(msg.sender, tokens.length);
@@ -437,7 +440,22 @@ contract CrossChainBank8 is ReentrancyGuard {
         _validateMultiTokenInput(tokens, amounts);
         _checkAndUpdateRateLimit();
 
+        // Fee charged ONCE total via _chargeFeeFromWallet. Native amounts in
+        // the batch must come from the REMAINDER of msg.value above the fee.
         _chargeFeeFromWallet();
+
+        // Sum the native amounts up front so we can verify msg.value covers
+        // (sum + fee) before crediting any vault entries. Without this guard
+        // a caller could claim to deposit ETH they didn't send and drain
+        // contract-held ETH at withdrawal time (other users' funds).
+        uint256 nativeSum = 0;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i] == address(0)) nativeSum += amounts[i];
+        }
+        require(
+            msg.value >= nativeSum + _getDynamicFeeInWei(),
+            "Insufficient msg.value for native + fee"
+        );
 
         // Count new tokens for this transaction
         uint256 newTokensInTx = 0;
@@ -448,15 +466,13 @@ contract CrossChainBank8 is ReentrancyGuard {
             uint256 amount = amounts[i];
 
             if (token == address(0)) {
-                // Native ETH deposit
-                uint256 fee = _getDynamicFeeInWei();
-                require(msg.value >= fee, "Insufficient fee sent");
-                require(amount > fee, "Amount must exceed fee");
-
+                // Native ETH deposit. Fee was charged ONCE above via
+                // _chargeFeeFromWallet; do NOT charge again here (pre-2026-05-31
+                // bug: `feeVault += fee` inside this branch double-charged for
+                // every native entry in the batch).
                 unchecked {
                     vault[_key(msg.sender, address(0))] += amount;
                 }
-                feeVault[_key(feeCollector, address(0))] += fee;
 
                 if (_tokenIdx[msg.sender][address(0)] == 0) {
                     newTokensInTx++;

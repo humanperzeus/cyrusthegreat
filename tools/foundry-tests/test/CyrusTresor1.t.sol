@@ -448,4 +448,127 @@ contract CyrusTresor1Test is Test {
         assertEq(address(vault).balance, amount + fee);
     }
 
+    // --------------------------------------------------------------------
+    //  Multi-token batch ops — regression tests for the 2026-05-31
+    //  native-in-batch fix. These would have caught the original bug.
+    // --------------------------------------------------------------------
+    function test_depositMultipleTokens_mixedBatch_nativePlusERC20() public {
+        // The headline case: native ETH + ERC-20 in one tx. Pre-fix this
+        // reverted with "Invalid token address"; post-fix it lands cleanly.
+        uint256 fee = _currentFee();
+        uint256 ethAmount = 0.005 ether;
+        uint256 tokenAmount = 50 ether;
+
+        vm.prank(ALICE);
+        token.approve(address(vault), tokenAmount);
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(0);
+        tokens[1] = address(token);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = ethAmount;
+        amounts[1] = tokenAmount;
+
+        uint256 vaultEthBefore = address(vault).balance;
+        uint256 vaultTokensBefore = token.balanceOf(address(vault));
+        uint256 aliceEthBefore = ALICE.balance;
+
+        vm.prank(ALICE);
+        vault.depositMultipleTokens{value: ethAmount + fee}(tokens, amounts);
+
+        assertEq(address(vault).balance, vaultEthBefore + ethAmount + fee, "contract eth wrong");
+        assertEq(token.balanceOf(address(vault)), vaultTokensBefore + tokenAmount, "contract erc20 wrong");
+        assertEq(aliceEthBefore - ALICE.balance, ethAmount + fee, "alice double-charged");
+    }
+
+    function test_depositMultipleTokens_pureNativeBatch_works() public {
+        // Edge case: array contains ONLY native ETH (1 element). Pre-fix
+        // this also failed because the validator rejected address(0).
+        uint256 fee = _currentFee();
+        uint256 ethAmount = 0.01 ether;
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(0);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = ethAmount;
+
+        vm.prank(ALICE);
+        vault.depositMultipleTokens{value: ethAmount + fee}(tokens, amounts);
+
+        assertEq(address(vault).balance, ethAmount + fee, "contract eth wrong");
+    }
+
+    function test_depositMultipleTokens_revertsOnInsufficientMsgValue() public {
+        // The new safety guard: msg.value must cover (sum(natives) + fee).
+        // Without this, an attacker could claim to deposit ETH they didn't
+        // send and drain contract-held ETH at withdrawal time.
+        uint256 fee = _currentFee();
+        uint256 ethAmount = 0.01 ether;
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(0);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = ethAmount;
+
+        vm.prank(ALICE);
+        vm.expectRevert("Insufficient msg.value for native + fee");
+        vault.depositMultipleTokens{value: fee}(tokens, amounts);
+    }
+
+    function test_withdrawMultipleTokens_mixedBatch_nativePlusERC20() public {
+        // Deposit mixed, then withdraw the exact same set in one batch.
+        uint256 fee = _currentFee();
+        uint256 ethAmount = 0.005 ether;
+        uint256 tokenAmount = 50 ether;
+
+        vm.startPrank(ALICE);
+        token.approve(address(vault), tokenAmount);
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(0);
+        tokens[1] = address(token);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = ethAmount;
+        amounts[1] = tokenAmount;
+        vault.depositMultipleTokens{value: ethAmount + fee}(tokens, amounts);
+
+        uint256 aliceEthAfterDeposit = ALICE.balance;
+        uint256 aliceTokensAfterDeposit = token.balanceOf(ALICE);
+
+        vault.withdrawMultipleTokens{value: fee}(tokens, amounts);
+        vm.stopPrank();
+
+        assertEq(ALICE.balance, aliceEthAfterDeposit + ethAmount - fee, "alice eth after withdraw");
+        assertEq(token.balanceOf(ALICE), aliceTokensAfterDeposit + tokenAmount, "alice erc20 after withdraw");
+    }
+
+    function test_transferMultipleTokensInternal_mixedBatch_nativePlusERC20() public {
+        // Same mixed shape for internal transfers — vault[ALICE] decreases
+        // and vault[BOB] increases for both tokens; no funds leave contract.
+        uint256 fee = _currentFee();
+        uint256 ethAmount = 0.003 ether;
+        uint256 tokenAmount = 25 ether;
+
+        vm.startPrank(ALICE);
+        token.approve(address(vault), tokenAmount);
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(0);
+        tokens[1] = address(token);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = ethAmount;
+        amounts[1] = tokenAmount;
+        vault.depositMultipleTokens{value: ethAmount + fee}(tokens, amounts);
+
+        uint256 contractEthBefore = address(vault).balance;
+        uint256 contractTokensBefore = token.balanceOf(address(vault));
+
+        vault.transferMultipleTokensInternal{value: fee}(tokens, BOB, amounts);
+        vm.stopPrank();
+
+        // Vault ETH only increased by the transfer fee (no other movement)
+        assertEq(address(vault).balance, contractEthBefore + fee, "contract eth changed unexpectedly");
+        // ERC-20 stays in contract (just internal ownership remap)
+        assertEq(token.balanceOf(address(vault)), contractTokensBefore, "erc20 left contract");
+    }
 }
