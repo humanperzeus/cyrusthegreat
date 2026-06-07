@@ -1085,9 +1085,18 @@ function renderTokenPicker(host, tokens, opts = {}) {
     const amt = tr.querySelector(".amt");
     const max = tr.querySelector(".setMax");
     max.onclick = () => {
-      // For native ETH, hold back ~0.0005 for gas and fee
+      // The 0.0005 native buffer ONLY applies when the balance comes from
+      // the wallet (deposits): the user needs to keep some native to pay
+      // the fee + gas of the tx itself. For VAULT-source pickers
+      // (withdraw / transfer-internal) the gas is paid from the user's
+      // separate wallet ETH, NOT from the vault entry — so max = full
+      // balance. Pre-2026-06-07 this always subtracted the buffer, which
+      // made max click yield 0.0 when vault native balance was ≤ 0.0005.
+      const isWalletSource = opts.balanceLabel === "Wallet balance";
       let usable = t.balance;
-      if (t.isNative) usable = t.balance > 500000000000000n ? t.balance - 500000000000000n : 0n;
+      if (t.isNative && isWalletSource) {
+        usable = t.balance > 500000000000000n ? t.balance - 500000000000000n : 0n;
+      }
       amt.value = ethers.formatUnits(usable, t.decimals);
       cb.checked = true;
     };
