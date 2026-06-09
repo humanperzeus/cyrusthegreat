@@ -2205,25 +2205,42 @@ const BANK8_TESTS = [
           const tokenAddrs = sel.map(s => s.addr);
           const amounts   = sel.map(s => s.amountWei);
 
-          // Pre-flight staticCall to surface revert reasons clearly (otherwise
-          // ethers reports a generic CALL_EXCEPTION with no hint).
+          // Withdraw is a single-tx flow (no per-token approvals needed —
+          // you already own what's vaulted). One-step progress modal with
+          // detail-line updates as the tx progresses through staticCall →
+          // submit → mined.
+          const pf = createProgressFlow(["withdrawMultipleTokens"], "Multi-token batch withdraw");
+
+          pf.update(0, "running", "Pre-flight check (staticCall)…");
           try {
             await c.connect(signer).withdrawMultipleTokens.staticCall(
               tokenAddrs, amounts, { value: fee },
             );
           } catch (e) {
             const reason = e.shortMessage || e.reason || e.message || String(e);
+            pf.update(0, "failed", `Pre-flight reverted: ${reason}`);
             throw new Error(`Pre-flight reverted: ${reason}`);
           }
 
-          const tx = await c.connect(signer).withdrawMultipleTokens(
-            tokenAddrs, amounts, { value: fee, gasLimit: 800000n },
-          );
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          if (r.status !== 1) throw new Error(`withdrawMultipleTokens reverted, status ${r.status}`);
-          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-          return { html: `Withdrew: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
+          try {
+            pf.update(0, "running", "Submitting withdraw — open wallet to sign…");
+            const tx = await c.connect(signer).withdrawMultipleTokens(
+              tokenAddrs, amounts, { value: fee, gasLimit: 800000n },
+            );
+            pf.update(0, "running", `Tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(0, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`withdrawMultipleTokens reverted, status ${r.status}`);
+            }
+            pf.update(0, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+            return { html: `Withdrew: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
+          } catch (e) {
+            pf.update(0, "failed", `Withdraw failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },
@@ -2452,24 +2469,42 @@ const BANK8_TESTS = [
           const tokenAddrs = sel.map(s => s.addr);
           const amounts   = sel.map(s => s.amountWei);
 
-          // Pre-flight staticCall to surface revert reasons clearly.
+          // Internal batch transfer is a single-tx flow — no per-token
+          // approvals needed because tokens are already in the vault.
+          // One-step progress modal with detail-line updates through
+          // staticCall → submit → mined.
+          const pf = createProgressFlow(["transferMultipleTokensInternal"], "Multi-token batch internal transfer");
+
+          pf.update(0, "running", "Pre-flight check (staticCall)…");
           try {
             await c.connect(signer).transferMultipleTokensInternal.staticCall(
               tokenAddrs, to, amounts, { value: fee },
             );
           } catch (e) {
             const reason = e.shortMessage || e.reason || e.message || String(e);
+            pf.update(0, "failed", `Pre-flight reverted: ${reason}`);
             throw new Error(`Pre-flight reverted: ${reason}`);
           }
 
-          const tx = await c.connect(signer).transferMultipleTokensInternal(
-            tokenAddrs, to, amounts, { value: fee, gasLimit: 800000n },
-          );
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          if (r.status !== 1) throw new Error(`transferMultipleTokensInternal reverted, status ${r.status}`);
-          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-          return { html: `Batch-transferred: ${summary} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
+          try {
+            pf.update(0, "running", `Submitting transfer to ${fmtAddr(to)} — open wallet to sign…`);
+            const tx = await c.connect(signer).transferMultipleTokensInternal(
+              tokenAddrs, to, amounts, { value: fee, gasLimit: 800000n },
+            );
+            pf.update(0, "running", `Tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(0, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`transferMultipleTokensInternal reverted, status ${r.status}`);
+            }
+            pf.update(0, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+            return { html: `Batch-transferred: ${summary} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
+          } catch (e) {
+            pf.update(0, "failed", `Transfer failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },
