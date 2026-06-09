@@ -512,6 +512,66 @@
     word-break: break-all;
   }
   .progress-flow .step-detail a { color: var(--gold); }
+
+  /* ─── Progress modal overlay — floating WLFI card with backdrop.
+     Built dynamically by createProgressFlow(); not used by any markup
+     authored in this file. Backdrop blurs the page, modal animates in,
+     and the Close button appears only when the flow reaches a terminal
+     state (all-done or failed). ─── */
+  .pf-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 7, 12, 0.78);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.22s ease;
+    padding: 16px;
+  }
+  .pf-overlay.open { opacity: 1; }
+  .pf-overlay .pf-modal {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
+    border: 1px solid var(--border-strong);
+    border-radius: 18px;
+    padding: 30px 34px 26px;
+    max-width: 640px;
+    width: 100%;
+    box-shadow:
+      0 24px 70px rgba(0, 0, 0, 0.65),
+      0 0 0 1px rgba(240, 180, 0, 0.14),
+      0 0 60px rgba(240, 180, 0, 0.05);
+    transform: translateY(10px) scale(0.97);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+  }
+  .pf-overlay.open .pf-modal {
+    transform: translateY(0) scale(1);
+  }
+  /* Inside the modal, neutralize the inline-card styling of .progress-flow
+     so the modal itself provides the panel chrome. */
+  .pf-overlay .pf-modal .progress-flow {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+  .pf-overlay .pf-modal .progress-flow .progress-title {
+    font-size: 15px;
+    margin-bottom: 18px;
+    padding-right: 80px; /* leave room for the absolute Close button */
+  }
+  .pf-overlay .pf-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
@@ -922,27 +982,72 @@ function recipientPickerHtml(inputDataKey = "to") {
 //   "done"    — step succeeded (green check)
 //   "failed"  — step reverted / errored (red X)
 //
+// Renders as a FLOATING MODAL OVERLAY (backdrop + centered card) — not
+// inline into a test row. Body scroll is locked while open. The Close
+// button only appears once the flow reaches a terminal state (final step
+// done OR any step failed); the backdrop is click-to-dismiss only after
+// that. Mid-flow clicks/keys can't close it.
+//
 // Usage in a test card's run() handler:
-//   const host = body.querySelector("[data-progress]");
-//   const pf = createProgressFlow(host, ["Approve USD1", "Approve WLFI", "depositMultipleTokens"], "Multi-token batch deposit");
+//   const pf = createProgressFlow(["Approve USD1", "Approve WLFI", "depositMultipleTokens"], "Multi-token batch deposit");
 //   pf.update(0, "running");
 //   await tx0.wait();
 //   pf.update(0, "done");
 //   pf.update(1, "running");
 //   ...
-function createProgressFlow(host, stepLabels, title) {
-  host.innerHTML = `
-    <div class="progress-flow">
-      <div class="progress-title">${title || "Progress"}<span class="sub" data-pf-sub></span></div>
-      <div class="stepper" data-pf-stepper></div>
-      <div class="step-detail" data-pf-detail></div>
+//   // pf.close() to dismiss programmatically (e.g. after a final summary
+//   // is written to the result area).
+function createProgressFlow(stepLabels, title) {
+  const overlay = document.createElement("div");
+  overlay.className = "pf-overlay";
+  overlay.innerHTML = `
+    <div class="pf-modal" role="dialog" aria-modal="true" aria-label="${title || "Progress"}">
+      <button class="pf-close" data-pf-close style="display:none">Close</button>
+      <div class="progress-flow">
+        <div class="progress-title">${title || "Progress"}<span class="sub" data-pf-sub></span></div>
+        <div class="stepper" data-pf-stepper></div>
+        <div class="step-detail" data-pf-detail></div>
+      </div>
     </div>
   `;
-  const stepperEl = host.querySelector("[data-pf-stepper]");
-  const subEl     = host.querySelector("[data-pf-sub]");
-  const detailEl  = host.querySelector("[data-pf-detail]");
+  document.body.appendChild(overlay);
 
-  // Initial render — all pending
+  // Lock body scroll while the modal is open — preserve whatever value
+  // was there so we can restore it on close.
+  const prevBodyOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+
+  // Trigger the fade-in on the next frame so the transition fires.
+  requestAnimationFrame(() => overlay.classList.add("open"));
+
+  const stepperEl = overlay.querySelector("[data-pf-stepper]");
+  const subEl     = overlay.querySelector("[data-pf-sub]");
+  const detailEl  = overlay.querySelector("[data-pf-detail]");
+  const closeBtn  = overlay.querySelector("[data-pf-close]");
+  let destroyed = false;
+
+  function destroy() {
+    if (destroyed) return;
+    destroyed = true;
+    overlay.classList.remove("open");
+    // Wait for the exit transition before removing from the DOM so we
+    // don't get a hard flicker.
+    setTimeout(() => {
+      overlay.remove();
+      document.body.style.overflow = prevBodyOverflow;
+    }, 220);
+  }
+
+  closeBtn.addEventListener("click", destroy);
+  // Backdrop click closes only when the Close button is visible (i.e.
+  // the flow is terminal). Mid-flow backdrop clicks are intentionally
+  // ignored so the user can't accidentally dismiss while a tx is pending.
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay && closeBtn.style.display !== "none") {
+      destroy();
+    }
+  });
+
   function render(currentIdx, status) {
     stepperEl.innerHTML = stepLabels.map((lbl, i) => {
       let cls = "";
@@ -968,14 +1073,16 @@ function createProgressFlow(host, stepLabels, title) {
         subEl.textContent = `step ${currentIdx + 1} of ${stepLabels.length} — ${stepLabels[currentIdx]}`;
       } else if (status === "done" && currentIdx >= stepLabels.length - 1) {
         subEl.textContent = `${stepLabels.length}/${stepLabels.length} complete ✓`;
+        closeBtn.style.display = "inline-block";
       } else if (status === "failed") {
         subEl.textContent = `step ${currentIdx + 1} failed — ${stepLabels[currentIdx]}`;
+        closeBtn.style.display = "inline-block";
       }
       if (detail !== undefined) detailEl.innerHTML = detail;
     },
-    clear() {
-      host.innerHTML = "";
-    },
+    close: destroy,
+    // Legacy name kept so any caller that used pf.clear() still works.
+    clear: destroy,
   };
 }
 
@@ -1679,13 +1786,12 @@ const BANK8_TESTS = [
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
       const tokens = await fetchWalletTokens();
-      // Render token picker + a dedicated progress host below it.
+      // Render the token picker. Progress feedback during run() is shown
+      // by createProgressFlow() as a floating overlay modal — no inline
+      // host element needed in the test row.
       const pickerHost = document.createElement("div");
-      const progressHost = document.createElement("div");
-      progressHost.setAttribute("data-progress", "");
       body.innerHTML = "";
       body.appendChild(pickerHost);
-      body.appendChild(progressHost);
       const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No known tokens for this chain. Add to KNOWN_TOKENS in source." });
       return {
         run: async () => {
@@ -1723,7 +1829,7 @@ const BANK8_TESTS = [
             ...ercToApprove.map(s => `Approve ${s.symbol}`),
             "depositMultipleTokens",
           ];
-          const pf = createProgressFlow(progressHost, stepLabels, "Multi-token batch deposit");
+          const pf = createProgressFlow(stepLabels, "Multi-token batch deposit");
 
           // Approve loop
           let approveLog = "";
@@ -1959,11 +2065,10 @@ const BANK8_TESTS = [
         return { run: async () => { throw new Error("No ERC20s available"); } };
       }
       const pickerHost = document.createElement("div");
-      const progressHost = document.createElement("div");
-      progressHost.setAttribute("data-progress", "");
       body.innerHTML = "";
       body.appendChild(pickerHost);
-      body.appendChild(progressHost);
+      // Progress feedback during run() is rendered by createProgressFlow()
+      // as a floating overlay modal — no inline host element needed.
       const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No ERC20 tokens found." });
       return {
         run: async () => {
@@ -1987,7 +2092,7 @@ const BANK8_TESTS = [
           const stepLabels = needsApprove
             ? [`Approve ${t.symbol}`, `depositToken (${t.symbol})`]
             : [`depositToken (${t.symbol})`];
-          const pf = createProgressFlow(progressHost, stepLabels, `Single ERC-20 deposit · ${t.symbol}`);
+          const pf = createProgressFlow(stepLabels, `Single ERC-20 deposit · ${t.symbol}`);
 
           let approveLog = "";
           if (needsApprove) {
