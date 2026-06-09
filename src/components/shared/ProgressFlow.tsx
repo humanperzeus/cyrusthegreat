@@ -237,7 +237,19 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
           transition: opacity 0.22s ease, background 0.22s ease, backdrop-filter 0.22s ease;
           padding: 16px;
           animation: pfFadeIn 0.22s ease forwards;
+          /* CRITICAL: override body's pointer-events: none. Radix Dialog's
+             modal scroll lock (react-remove-scroll) sets pointer-events:
+             none on document.body to deactivate everything behind it.
+             CSS pointer-events doesn't formally inherit, but the effect
+             does propagate through hit-testing: a descendant of an
+             element with pe: none is effectively non-interactable until
+             an ancestor re-enables it with pe: auto. Without this line,
+             every button in our overlay (Hide, Close, etc.) is dead. */
+          pointer-events: auto;
         }
+        /* Modal card stays interactive in both expanded and minimized
+           modes (the chip needs to be clickable to re-expand). */
+        .pf-modal { pointer-events: auto; }
         @keyframes pfFadeIn {
           to { opacity: 1; }
         }
