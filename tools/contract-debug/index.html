@@ -514,10 +514,12 @@
   .progress-flow .step-detail a { color: var(--gold); }
 
   /* ─── Progress modal overlay — floating WLFI card with backdrop.
-     Built dynamically by createProgressFlow(); not used by any markup
-     authored in this file. Backdrop blurs the page, modal animates in,
-     and the Close button appears only when the flow reaches a terminal
-     state (all-done or failed). ─── */
+     Built dynamically by createProgressFlow(). Two states:
+       (1) Expanded — backdrop dimmed, centered card, page is non-interactive.
+       (2) Minimized — backdrop gone, modal shrinks to a corner chip in the
+           bottom-right with live status text; the page becomes fully
+           interactive so the user can keep working while a long tx pends.
+     Hide and Close buttons are always present (no waiting for terminal). ─── */
   .pf-overlay {
     position: fixed;
     inset: 0;
@@ -529,7 +531,7 @@
     justify-content: center;
     z-index: 1000;
     opacity: 0;
-    transition: opacity 0.22s ease;
+    transition: opacity 0.22s ease, background 0.22s ease, backdrop-filter 0.22s ease;
     padding: 16px;
   }
   .pf-overlay.open { opacity: 1; }
@@ -545,7 +547,11 @@
       0 0 0 1px rgba(240, 180, 0, 0.14),
       0 0 60px rgba(240, 180, 0, 0.05);
     transform: translateY(10px) scale(0.97);
-    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    transition:
+      transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      padding 0.22s ease,
+      border-radius 0.22s ease,
+      max-width 0.22s ease;
     position: relative;
   }
   .pf-overlay.open .pf-modal {
@@ -562,16 +568,101 @@
   .pf-overlay .pf-modal .progress-flow .progress-title {
     font-size: 15px;
     margin-bottom: 18px;
-    padding-right: 80px; /* leave room for the absolute Close button */
+    padding-right: 130px; /* leave room for Hide + Close buttons */
   }
-  .pf-overlay .pf-close {
+
+  /* Header buttons row — always visible. */
+  .pf-overlay .pf-controls {
     position: absolute;
     top: 14px;
     right: 14px;
-    padding: 6px 16px;
+    display: flex;
+    gap: 8px;
+  }
+  .pf-overlay .pf-controls button {
+    padding: 6px 14px;
     font-size: 12px;
     font-weight: 600;
   }
+
+  /* Mini-mode (chip) body — hidden in expanded mode. */
+  .pf-mini { display: none; align-items: center; gap: 10px; }
+  .pf-mini-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--gold);
+    color: #0a0a0c;
+    font-weight: 800;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    animation: stepPulse 1.2s infinite ease-in-out;
+  }
+  .pf-mini-icon.done   { background: var(--ok);  color: white; animation: none; }
+  .pf-mini-icon.failed { background: var(--err); color: white; animation: none; }
+  .pf-mini-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+  .pf-mini-label {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+  .pf-mini-sub {
+    color: var(--text-muted);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+
+  /* ─── Minimized state ─── */
+  .pf-overlay.minimized {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    inset: auto 16px 16px auto;          /* anchor to bottom-right corner */
+    width: auto;
+    height: auto;
+    padding: 0;
+    pointer-events: none;                /* page is interactive again */
+    display: block;
+  }
+  .pf-overlay.minimized .pf-modal {
+    pointer-events: auto;                /* the chip itself is still clickable */
+    padding: 10px 14px 10px 14px;
+    border-radius: 999px;
+    max-width: 340px;
+    width: auto;
+    cursor: pointer;
+    transform: none;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(240, 180, 0, 0.28);
+    display: flex;
+    align-items: center;
+  }
+  .pf-overlay.minimized .pf-modal:hover {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(240, 180, 0, 0.48);
+  }
+  .pf-overlay.minimized .progress-flow,
+  .pf-overlay.minimized .pf-controls .pf-hide {
+    display: none;
+  }
+  /* Keep Close visible in minimized mode, but compact it. */
+  .pf-overlay.minimized .pf-controls {
+    position: static;
+    margin-left: 12px;
+  }
+  .pf-overlay.minimized .pf-controls button {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  .pf-overlay.minimized .pf-mini { display: flex; }
 </style>
 </head>
 <body>
@@ -983,10 +1074,16 @@ function recipientPickerHtml(inputDataKey = "to") {
 //   "failed"  — step reverted / errored (red X)
 //
 // Renders as a FLOATING MODAL OVERLAY (backdrop + centered card) — not
-// inline into a test row. Body scroll is locked while open. The Close
-// button only appears once the flow reaches a terminal state (final step
-// done OR any step failed); the backdrop is click-to-dismiss only after
-// that. Mid-flow clicks/keys can't close it.
+// inline into a test row. Two states:
+//   • Expanded — backdrop dimmed, page non-interactive, full step indicator.
+//   • Minimized — backdrop removed, modal shrinks to a small chip in the
+//     bottom-right with live status text; the page is fully interactive
+//     so the user can keep working while a long-pending tx waits.
+//
+// Hide and Close are ALWAYS available (no waiting for terminal state):
+//   • Hide  — collapses to the corner chip; click chip body to re-expand.
+//   • Close — destroys the modal entirely (the underlying tx is NOT
+//             cancelled; the wallet's pending tx still resolves on-chain).
 //
 // Usage in a test card's run() handler:
 //   const pf = createProgressFlow(["Approve USD1", "Approve WLFI", "depositMultipleTokens"], "Multi-token batch deposit");
@@ -995,36 +1092,58 @@ function recipientPickerHtml(inputDataKey = "to") {
 //   pf.update(0, "done");
 //   pf.update(1, "running");
 //   ...
-//   // pf.close() to dismiss programmatically (e.g. after a final summary
-//   // is written to the result area).
+//   // pf.close() to dismiss programmatically.
 function createProgressFlow(stepLabels, title) {
   const overlay = document.createElement("div");
   overlay.className = "pf-overlay";
+  // Modal layout:
+  //   • .pf-controls — Hide + Close buttons (always visible in expanded
+  //     mode; in minimized mode Hide is hidden, Close stays).
+  //   • .progress-flow — the full step indicator (hidden in minimized).
+  //   • .pf-mini — the compact chip body (hidden in expanded).
   overlay.innerHTML = `
     <div class="pf-modal" role="dialog" aria-modal="true" aria-label="${title || "Progress"}">
-      <button class="pf-close" data-pf-close style="display:none">Close</button>
+      <div class="pf-mini" data-pf-mini>
+        <div class="pf-mini-icon" data-pf-mini-icon></div>
+        <div class="pf-mini-text">
+          <div class="pf-mini-label" data-pf-mini-label></div>
+          <div class="pf-mini-sub" data-pf-mini-sub>tap to expand</div>
+        </div>
+      </div>
       <div class="progress-flow">
         <div class="progress-title">${title || "Progress"}<span class="sub" data-pf-sub></span></div>
         <div class="stepper" data-pf-stepper></div>
         <div class="step-detail" data-pf-detail></div>
       </div>
+      <div class="pf-controls">
+        <button class="pf-hide"  data-pf-hide>Hide</button>
+        <button class="pf-close" data-pf-close>Close</button>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  // Lock body scroll while the modal is open — preserve whatever value
-  // was there so we can restore it on close.
+  // Lock body scroll while expanded — preserve whatever value was there
+  // so we can restore it correctly across expand/minimize/close.
   const prevBodyOverflow = document.body.style.overflow;
   document.body.style.overflow = "hidden";
 
   // Trigger the fade-in on the next frame so the transition fires.
   requestAnimationFrame(() => overlay.classList.add("open"));
 
-  const stepperEl = overlay.querySelector("[data-pf-stepper]");
-  const subEl     = overlay.querySelector("[data-pf-sub]");
-  const detailEl  = overlay.querySelector("[data-pf-detail]");
-  const closeBtn  = overlay.querySelector("[data-pf-close]");
+  const modalEl     = overlay.querySelector(".pf-modal");
+  const stepperEl   = overlay.querySelector("[data-pf-stepper]");
+  const subEl       = overlay.querySelector("[data-pf-sub]");
+  const detailEl    = overlay.querySelector("[data-pf-detail]");
+  const closeBtn    = overlay.querySelector("[data-pf-close]");
+  const hideBtn     = overlay.querySelector("[data-pf-hide]");
+  const miniIconEl  = overlay.querySelector("[data-pf-mini-icon]");
+  const miniLabelEl = overlay.querySelector("[data-pf-mini-label]");
+  const miniSubEl   = overlay.querySelector("[data-pf-mini-sub]");
+
   let destroyed = false;
+  let lastIdx = -1, lastStatus = "pending"; // tracked so we can refresh the
+                                            // mini chip from current state.
 
   function destroy() {
     if (destroyed) return;
@@ -1038,14 +1157,37 @@ function createProgressFlow(stepLabels, title) {
     }, 220);
   }
 
-  closeBtn.addEventListener("click", destroy);
-  // Backdrop click closes only when the Close button is visible (i.e.
-  // the flow is terminal). Mid-flow backdrop clicks are intentionally
-  // ignored so the user can't accidentally dismiss while a tx is pending.
+  function minimize() {
+    overlay.classList.add("minimized");
+    // Page is interactive again — unlock body scroll.
+    document.body.style.overflow = prevBodyOverflow;
+    refreshMini();
+  }
+  function expand() {
+    overlay.classList.remove("minimized");
+    // Re-lock body scroll while we're back in expanded modal mode.
+    document.body.style.overflow = "hidden";
+  }
+
+  // ─── Wire up the controls ───
+  // stopPropagation on the buttons so a click on Close/Hide doesn't bubble
+  // up to the modal-click handler (which would re-expand).
+  closeBtn.addEventListener("click", (e) => { e.stopPropagation(); destroy(); });
+  hideBtn.addEventListener("click",  (e) => { e.stopPropagation(); minimize(); });
+
+  // Click handling:
+  //   • Click the backdrop in expanded mode → no-op (intentional; user must
+  //     use Close to dismiss; this guards against accidental dismissal
+  //     while a tx is pending).
+  //   • Click the chip body in minimized mode → re-expand.
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay && closeBtn.style.display !== "none") {
-      destroy();
+    if (overlay.classList.contains("minimized")) {
+      // Anywhere on the chip (not the Close button — handled above) expands.
+      if (modalEl.contains(e.target)) {
+        expand();
+      }
     }
+    // Expanded mode: backdrop click does nothing intentionally.
   });
 
   function render(currentIdx, status) {
@@ -1064,25 +1206,69 @@ function createProgressFlow(stepLabels, title) {
     }).join("");
   }
 
+  // Keep the corner-chip text in sync with the current step.
+  function refreshMini() {
+    const idx = lastIdx;
+    const st  = lastStatus;
+    const total = stepLabels.length;
+    // Pre-start sentinel
+    if (idx < 0) {
+      miniIconEl.className = "pf-mini-icon";
+      miniIconEl.textContent = "1";
+      miniLabelEl.textContent = title || "Progress";
+      miniSubEl.textContent   = `step 1 of ${total} — ${stepLabels[0]}`;
+      return;
+    }
+    // Terminal: all done
+    if (st === "done" && idx >= total - 1) {
+      miniIconEl.className = "pf-mini-icon done";
+      miniIconEl.textContent = "✓";
+      miniLabelEl.textContent = title || "Complete";
+      miniSubEl.textContent   = `${total}/${total} complete · tap to view`;
+      return;
+    }
+    // Terminal: failed
+    if (st === "failed") {
+      miniIconEl.className = "pf-mini-icon failed";
+      miniIconEl.textContent = "✗";
+      miniLabelEl.textContent = title || "Failed";
+      miniSubEl.textContent   = `step ${idx + 1} failed · tap to view`;
+      return;
+    }
+    // In flight (running OR step-done-but-not-last)
+    const displayIdx = st === "done" ? idx + 1 : idx;
+    miniIconEl.className = "pf-mini-icon";
+    miniIconEl.textContent = String(displayIdx + 1);
+    miniLabelEl.textContent = title || "Progress";
+    miniSubEl.textContent   = `step ${displayIdx + 1} of ${total} — ${stepLabels[displayIdx] || stepLabels[total - 1]}`;
+  }
+
   render(-1, "pending"); // Start with nothing done
+  refreshMini();
 
   return {
     update(currentIdx, status, detail) {
+      lastIdx = currentIdx;
+      lastStatus = status;
       render(currentIdx, status);
       if (status === "running") {
         subEl.textContent = `step ${currentIdx + 1} of ${stepLabels.length} — ${stepLabels[currentIdx]}`;
       } else if (status === "done" && currentIdx >= stepLabels.length - 1) {
         subEl.textContent = `${stepLabels.length}/${stepLabels.length} complete ✓`;
-        closeBtn.style.display = "inline-block";
       } else if (status === "failed") {
         subEl.textContent = `step ${currentIdx + 1} failed — ${stepLabels[currentIdx]}`;
-        closeBtn.style.display = "inline-block";
       }
       if (detail !== undefined) detailEl.innerHTML = detail;
+      // Keep the mini chip in sync in case the user has hidden the modal
+      // while the flow advances in the background.
+      refreshMini();
     },
     close: destroy,
     // Legacy name kept so any caller that used pf.clear() still works.
     clear: destroy,
+    // Programmatic minimize/expand if a caller ever wants it.
+    minimize,
+    expand,
   };
 }
 
