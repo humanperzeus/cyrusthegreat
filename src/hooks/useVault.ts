@@ -2191,13 +2191,22 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       return;
     }
 
+    // EMIT FIRST — render the progress modal IMMEDIATELY so the user
+    // sees feedback before any RPC reads start. On slow connections,
+    // fetching balances/allowances/fee can take 2-5 seconds, and
+    // without this the modal wouldn't appear until after that work
+    // completes. We push a single "Preparing…" step now; the real
+    // step list is computed and emitted below once allowances are
+    // checked, replacing this placeholder.
+    onProgress?.([{ label: 'Preparing deposit…', status: 'running', detail: `Checking balances and allowances for ${deposits.length} token${deposits.length === 1 ? '' : 's'}…` }]);
+
     try {
       // CRITICAL FIX: Separate ETH and ERC20 deposits for proper handling
       const ethDeposits = deposits.filter(d => {
         const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
         return tokenAddress === '0x0000000000000000000000000000000000000000';
       });
-      
+
       const tokenDeposits = deposits.filter(d => {
         const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
         return tokenAddress !== '0x0000000000000000000000000000000000000000';
