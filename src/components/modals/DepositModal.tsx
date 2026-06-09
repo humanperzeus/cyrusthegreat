@@ -400,9 +400,18 @@ export function DepositModal({
         <MultiTokenDepositModal
           isOpen={showMultiTokenModal}
           onClose={() => {
+            // Cancel/back-out: only close the multi-token sub-modal,
+            // keep the outer DepositModal open so the user can pick
+            // single-asset mode if they want.
             setShowMultiTokenModal(false);
-            // Auto-refresh balances when multi-token modal closes
-            // Note: The parent modal will also refresh when it closes
+          }}
+          onCommitted={() => {
+            // Submit path: close BOTH this sub-modal AND the wrapping
+            // DepositModal so the global ProgressFlow (App-level) is
+            // the only floating layer and the page becomes
+            // interactive again as the tx pends.
+            setShowMultiTokenModal(false);
+            onOpenChange(false);
           }}
           availableTokens={availableTokens}
           onDeposit={handleMultiTokenDeposit}

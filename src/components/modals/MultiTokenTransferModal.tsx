@@ -13,7 +13,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, ArrowRight, User } from "lucide-react";
 import { formatTokenBalance, convertToWei } from "@/lib/utils";
-import { ProgressFlow, ProgressStep } from "@/components/shared/ProgressFlow";
+import type { ProgressStep } from "@/components/shared/ProgressFlow";
+import { useProgress } from "@/contexts/ProgressContext";
 
 interface Token {
   address: string;
@@ -34,8 +35,10 @@ interface MultiTokenTransferModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableTokens: Token[];
-  // onTransfer accepts an optional onProgress callback used by useVault
-  // to push live step updates into this modal's floating ProgressFlow.
+  // Called when the transfer is submitted — parent closes both this
+  // modal and its wrapping TransferModal so the global ProgressFlow
+  // is the only thing floating.
+  onCommitted?: () => void;
   onTransfer: (
     transfers: { token: string; amount: string }[],
     to: string,
@@ -53,6 +56,7 @@ export function MultiTokenTransferModal({
   isOpen,
   onClose,
   availableTokens,
+  onCommitted,
   onTransfer,
   isLoading = false,
   rateLimitStatus
@@ -61,10 +65,8 @@ export function MultiTokenTransferModal({
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [isValidating, setIsValidating] = useState(false);
-  // Live step state for the floating ProgressFlow modal — empty means
-  // not rendered. useVault.transferMultipleTokensWagmi pushes updates
-  // via the onProgress callback wired into handleTransfer.
-  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
+  // Progress state now lives in ProgressContext (App-level).
+  const { setProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -194,24 +196,25 @@ export function MultiTokenTransferModal({
       return;
     }
 
-    setIsValidating(true);
-    setProgressSteps([]);
-    try {
-      const transferData = transfers.map(t => ({
-        token: t.token.address,
-        amount: t.amount,
-      }));
+    const transferData = transfers.map(t => ({
+      token: t.token.address,
+      amount: t.amount,
+    }));
 
-      // Forward onProgress so useVault.transferMultipleTokensWagmi can
-      // drive the floating ProgressFlow modal live.
-      await onTransfer(transferData, recipientAddress, (steps) => {
-        setProgressSteps(steps);
-      });
-      setIsValidating(false);
-    } catch (error) {
+    // Seed the global progress modal BEFORE closing this dialog.
+    setProgress(
+      [{ label: 'Preparing transfer…', status: 'running', detail: `Submitting ${transferData.length} token${transferData.length === 1 ? '' : 's'} → ${recipientAddress.slice(0, 6)}…${recipientAddress.slice(-4)}…` }],
+      'Multi-token batch internal transfer'
+    );
+
+    onCommitted?.();
+
+    // Background — don't block the modal close on the wallet round-trip.
+    onTransfer(transferData, recipientAddress, (steps) => {
+      setProgress(steps);
+    }).catch((error) => {
       console.error("Transfer failed:", error);
-      setIsValidating(false);
-    }
+    });
   };
 
   // Include native (address 0x0) — CrossChainBank8.transferMultipleTokensInternal
@@ -392,16 +395,9 @@ export function MultiTokenTransferModal({
             </div>
           )}
 
-          {/* Floating ProgressFlow overlay — rendered via portal into
-              document.body when there's at least one step. Owns its own
-              Hide/Close buttons; Close clears the steps and unmounts. */}
-          {progressSteps.length > 0 && (
-            <ProgressFlow
-              title="Multi-token batch internal transfer"
-              steps={progressSteps}
-              onClose={() => setProgressSteps([])}
-            />
-          )}
+          {/* ProgressFlow is rendered globally by ProgressProvider in
+              App.tsx — not inside this modal — so the floating chip
+              survives this dialog closing. */}
 
           {/* Action Buttons */}
           <div className="flex justify-between space-x-3 pt-4 border-t">

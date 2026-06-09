@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { ProgressFlow, ProgressStep } from "@/components/shared/ProgressFlow";
+import { useProgress } from "@/contexts/ProgressContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,10 +36,12 @@ interface MultiTokenDepositModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableTokens: Token[];
-  // Extended 2026-06-08 with an optional onProgress channel — when provided,
-  // useVault.depositMultipleTokensWagmi reports a WLFI-style step progression
-  // (one step per fresh ERC-20 approve + one for the final deposit). The
-  // modal renders ProgressFlow live as the steps advance.
+  // Called the moment the user clicks Deposit and the operation is
+  // about to be submitted. The parent uses this to close BOTH this
+  // modal and any wrapping Deposit dialog so the global ProgressFlow
+  // (rendered by ProgressProvider at App level) is the only thing
+  // floating after that — the page becomes interactive again.
+  onCommitted?: () => void;
   onDeposit: (
     deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[],
     onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
@@ -56,6 +58,7 @@ export function MultiTokenDepositModal({
   isOpen,
   onClose,
   availableTokens,
+  onCommitted,
   onDeposit,
   isLoading = false,
   rateLimitStatus
@@ -64,9 +67,9 @@ export function MultiTokenDepositModal({
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isValidating, setIsValidating] = useState(false);
 
-  // WLFI-style step indicator state, driven by depositMultipleTokensWagmi's
-  // onProgress callback. Empty array = no flow in progress (component hides).
-  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
+  // Progress state now lives in ProgressContext (App-level) so the
+  // floating ProgressFlow / chip outlives this modal closing.
+  const { setProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -181,29 +184,38 @@ export function MultiTokenDepositModal({
       return;
     }
 
-    setIsValidating(true);
-    try {
-      const depositData = deposits.map(d => ({
-        token: d.token.address,
-        amount: d.amount,
-        approvalType: d.approvalType
-      }));
+    const depositData = deposits.map(d => ({
+      token: d.token.address,
+      amount: d.amount,
+      approvalType: d.approvalType
+    }));
 
-      // Reset previous progress (if any) and start fresh.
-      setProgressSteps([]);
-      // Await so we re-enable the form button after the full flow lands
-      // (approvals + deposit submission). The user can manually close the
-      // modal when satisfied (X / overlay click) — we no longer auto-close.
-      // The previous 2s hardcoded timeout closed before approval popups
-      // could appear, which broke the UX entirely.
-      await onDeposit(depositData, (steps) => {
-        setProgressSteps(steps);
-      });
-      setIsValidating(false);
-    } catch (error) {
+    // Seed the global progress modal with a placeholder step BEFORE
+    // closing this dialog. Doing it in this order means the user never
+    // sees a frame without feedback — the floating ProgressFlow
+    // appears just as this modal closes.
+    setProgress(
+      [{ label: 'Preparing deposit…', status: 'running', detail: `Submitting ${depositData.length} token${depositData.length === 1 ? '' : 's'}…` }],
+      'Multi-token batch deposit'
+    );
+
+    // Notify the parent (DepositModal) that we've committed — it
+    // closes both this dialog and itself, freeing the page so the
+    // user can keep working while the tx pends.
+    onCommitted?.();
+
+    // Now run the actual operation; subsequent updates land in the
+    // global ProgressFlow. We do NOT await its completion here —
+    // letting it run in the background means the modal closing isn't
+    // blocked on the wallet round-trip.
+    onDeposit(depositData, (steps) => {
+      setProgress(steps);
+    }).catch((error) => {
+      // useVault already calls setProgress(failed) on errors via the
+      // onProgress emit chain, so the user sees a red ✗ in the chip
+      // / modal. Logging here is just for the console.
       console.error("Deposit failed:", error);
-      setIsValidating(false);
-    }
+    });
   };
 
   // CRITICAL FIX: Include ETH/native tokens but handle them separately
@@ -369,19 +381,11 @@ export function MultiTokenDepositModal({
             </div>
           )}
 
-          {/* Progress Flow — renders as a floating overlay modal via portal
-              once the user clicks Deposit and the first step starts. Steps
-              are pushed live by useVault.depositMultipleTokensWagmi's
-              onProgress callback (one per fresh ERC-20 approve + the final
-              deposit). The ProgressFlow itself owns its Close/Hide buttons;
-              clicking Close clears the steps array and unmounts. */}
-          {progressSteps.length > 0 && (
-            <ProgressFlow
-              title="Multi-token batch deposit"
-              steps={progressSteps}
-              onClose={() => setProgressSteps([])}
-            />
-          )}
+          {/* ProgressFlow is rendered globally by ProgressProvider in
+              App.tsx — no longer mounted inside this modal. This keeps
+              the floating overlay / chip alive after this dialog and
+              its parent close on commit, so the user can keep working
+              while the tx pends. */}
 
           {/* Action Buttons */}
           <div className="flex justify-between space-x-3 pt-4 border-t">

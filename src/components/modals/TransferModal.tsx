@@ -320,9 +320,14 @@ export function TransferModal({
         <MultiTokenTransferModal
           isOpen={showMultiTokenModal}
           onClose={() => {
+            // Cancel: only close the sub-modal, keep TransferModal open.
             setShowMultiTokenModal(false);
-            // Auto-refresh balances when multi-token modal closes
-            // Note: The parent modal will also refresh when it closes
+          }}
+          onCommitted={() => {
+            // Submit: close both layers so the App-level ProgressFlow
+            // is the only floating UI and the page is interactive.
+            setShowMultiTokenModal(false);
+            onOpenChange(false);
           }}
           availableTokens={vaultTokens}
           onTransfer={handleMultiTokenTransfer}
