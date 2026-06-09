@@ -75,21 +75,43 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
   const prevOverflowRef = useRef<string>("");
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  // ─── Stop pointerdown/mousedown bubbling to the document ───
-  // The ProgressFlow renders via createPortal to document.body, which puts
-  // its DOM tree OUTSIDE the parent Radix <Dialog>'s DialogContent
-  // subtree. Radix's DismissableLayer listens on document for pointerdown
-  // and fires onPointerDownOutside if the event target is not a
-  // descendant of DialogContent — which our overlay never is. The result:
-  // every click in our overlay (including Hide/Close) was being read as
-  // "click outside the parent dialog", closing the parent dialog before
-  // our own onClick handlers could run.
+  // ─── Stop pointer/mouse bubbling to document at NATIVE level ───
+  // The ProgressFlow renders via createPortal to document.body, OUTSIDE
+  // the parent Radix <Dialog>'s DialogContent subtree. Radix's
+  // DismissableLayer registers NATIVE event listeners on document for
+  // pointerdown and fires onPointerDownOutside when the event target
+  // isn't inside DialogContent — which our overlay never is. Result:
+  // every click in our overlay (Hide, Close, anywhere) was being read
+  // as "click outside the parent dialog", closing the parent dialog
+  // before our own button handlers could run.
   //
-  // Fix: catch pointerdown/mousedown at the overlay div in React's bubble
-  // phase and stop propagation. Document-level listeners never see the
-  // event, so DismissableLayer leaves the parent dialog alone. The click
-  // event still fires normally on the button so onClick still runs.
-  const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
+  // The fix has to be a NATIVE listener, not a React synthetic one.
+  // React synthetic stopPropagation on a portal child does NOT reliably
+  // stop the native event from continuing to bubble up to document —
+  // because the React root container (which is React's event delegation
+  // point) isn't in the bubble path for portal children (the portal
+  // lives in body alongside, not inside, the React root). So Radix's
+  // document-level listener sees the event regardless.
+  //
+  // Attaching listeners with addEventListener directly on the overlay
+  // ref means the listener runs during the native bubble phase right
+  // at the overlay element, BEFORE the event reaches body and document.
+  // Native stopPropagation here genuinely stops it.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const stopNative = (e: Event) => e.stopPropagation();
+    overlay.addEventListener("pointerdown", stopNative);
+    overlay.addEventListener("mousedown",   stopNative);
+    overlay.addEventListener("pointerup",   stopNative);
+    overlay.addEventListener("mouseup",     stopNative);
+    return () => {
+      overlay.removeEventListener("pointerdown", stopNative);
+      overlay.removeEventListener("mousedown",   stopNative);
+      overlay.removeEventListener("pointerup",   stopNative);
+      overlay.removeEventListener("mouseup",     stopNative);
+    };
+  }, []);
 
   // Lock/unlock body scroll based on expanded state.
   useEffect(() => {
@@ -199,8 +221,6 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
       ref={overlayRef}
       className={`pf-overlay open ${minimized ? "minimized" : ""} ${className ?? ""}`}
       onClick={handleOverlayClick}
-      onPointerDown={stopBubble}
-      onMouseDown={stopBubble}
     >
       <style>{`
         .pf-overlay {
