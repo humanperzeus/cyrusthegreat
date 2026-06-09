@@ -82,6 +82,10 @@ const Index = () => {
     isConfirmed, // Add transaction confirmation state
     walletTokens,
     vaultTokens,
+    // Pre-built native-token entries for the multi-token pickers
+    // (CrossChainBank8 accepts native alongside ERC-20s atomically).
+    walletNativeToken,
+    vaultNativeToken,
     isLoadingWalletTokens,
     isLoadingVaultTokens,
     isLoadingTokens, // Keep for backward compatibility
@@ -106,6 +110,17 @@ const Index = () => {
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
+
+  // Token lists for the multi-token modals — prepend the chain's native
+  // currency so it's pickable alongside ERC-20s. walletTokens/vaultTokens
+  // skip native because the single-asset UI shows it separately at the
+  // top of the page; the multi-token flow needs it back.
+  const walletTokensWithNative = walletNativeToken
+    ? [walletNativeToken, ...walletTokens]
+    : walletTokens;
+  const vaultTokensWithNative = vaultNativeToken
+    ? [vaultNativeToken, ...vaultTokens]
+    : vaultTokens;
 
   // Multi-token functionality state
   const [rateLimitStatus, setRateLimitStatus] = useState<{
@@ -325,8 +340,9 @@ const Index = () => {
         tokenBalance={tokenDepositInfo?.balance}
         // Chain-aware props — narrowed for v1 modals
         activeChain={v1SafeChain}
-        // Multi-token functionality
-        availableTokens={walletTokens}
+        // Multi-token functionality — pass the with-native list so the
+        // multi-token deposit picker shows ETH/BNB/HYPE/etc. as a choice.
+        availableTokens={walletTokensWithNative}
         rateLimitStatus={rateLimitStatus}
       />
 
@@ -352,8 +368,10 @@ const Index = () => {
         tokenDecimals={tokenWithdrawInfo?.decimals}
         // Chain-aware props — narrowed for v1 modals
         activeChain={v1SafeChain}
-        // Multi-token functionality
-        vaultTokens={vaultTokens}
+        // Multi-token functionality — pass the with-native list so the
+        // multi-token withdraw picker shows vaulted native (ETH/BNB/…)
+        // as a choice.
+        vaultTokens={vaultTokensWithNative}
         rateLimitStatus={rateLimitStatus}
       />
 
@@ -378,9 +396,10 @@ const Index = () => {
         tokenDecimals={tokenTransferInfo?.decimals}
         // Chain-aware props — narrowed for v1 modals
         activeChain={v1SafeChain}
-        // Multi-token functionality
+        // Multi-token functionality — with-native list so the multi-token
+        // transfer picker shows vaulted native (ETH/BNB/…) as a choice.
         onMultiTokenTransfer={transferMultipleTokensWagmi}
-        vaultTokens={vaultTokens}
+        vaultTokens={vaultTokensWithNative}
         rateLimitStatus={rateLimitStatus}
       />
     </>

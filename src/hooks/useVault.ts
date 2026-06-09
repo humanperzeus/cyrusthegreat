@@ -899,6 +899,33 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   // TEMPORARY TEST: Compare our function with formatEther to see the difference
       const vaultBalanceFormatted = vaultBalanceData ? formatTokenBalance(vaultBalanceData.toString(), 18) : '0';
   const vaultBalanceFormattedOld = vaultBalanceData ? formatEther(vaultBalanceData as bigint) : '0.000000000000000000';
+
+  // Native (chain-currency) token entries for the multi-token pickers.
+  // walletTokens / vaultTokens deliberately skip address 0x0 because the
+  // single-asset UI shows the native balance separately at the top. But
+  // CrossChainBank8.depositMultipleTokens / withdrawMultipleTokens /
+  // transferMultipleTokensInternal all accept native alongside ERC-20s
+  // in one atomic tx, and the multi-token modals need a way to pick it.
+  // We expose pre-built entries here so Index.tsx can splice them into
+  // the lists it passes down without touching the single-asset path.
+  const walletNativeToken = walletBalance
+    ? {
+        address: '0x0000000000000000000000000000000000000000',
+        symbol: getCurrentChainConfig().nativeCurrency.symbol,
+        balance: walletBalance.value.toString(),
+        decimals: walletBalance.decimals,
+        isNative: true,
+      }
+    : null;
+  const vaultNativeToken = vaultBalanceData != null
+    ? {
+        address: '0x0000000000000000000000000000000000000000',
+        symbol: getCurrentChainConfig().nativeCurrency.symbol,
+        balance: (vaultBalanceData as bigint).toString(),
+        decimals: 18,
+        isNative: true,
+      }
+    : null;
   
   // Debug logging to see the final formatted result
   if (process.env.NODE_ENV === 'development') {
@@ -4365,6 +4392,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     isConnected,
     walletBalance: walletBalanceFormatted,
     vaultBalance: vaultBalanceFormatted,
+    // Pre-built native-token entries for the multi-token pickers.
+    // null when the underlying balance isn't loaded yet.
+    walletNativeToken,
+    vaultNativeToken,
     currentFee: currentFeeFormatted,
     isLoading: isTransactionLoading,
       isSimulating, // Add simulation state for UI

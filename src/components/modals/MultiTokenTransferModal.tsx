@@ -214,11 +214,10 @@ export function MultiTokenTransferModal({
     }
   };
 
-  // Filter out ETH/native tokens and already selected tokens
+  // Include native (address 0x0) — CrossChainBank8.transferMultipleTokensInternal
+  // accepts native alongside ERC-20s atomically. Only filter out tokens
+  // the user has already added to this batch.
   const availableTokensForSelection = availableTokens.filter(token =>
-    // Exclude ETH/native token (0x0 address)
-    token.address !== '0x0000000000000000000000000000000000000000' &&
-    // Exclude already selected tokens
     !transfers.some(t => t.token.address === token.address)
   );
 
