@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { ProgressFlow, ProgressStep } from "@/components/shared/ProgressFlow";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +36,14 @@ interface MultiTokenDepositModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableTokens: Token[];
-  onDeposit: (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => Promise<void>;
+  // Extended 2026-06-08 with an optional onProgress channel — when provided,
+  // useVault.depositMultipleTokensWagmi reports a WLFI-style step progression
+  // (one step per fresh ERC-20 approve + one for the final deposit). The
+  // modal renders ProgressFlow live as the steps advance.
+  onDeposit: (
+    deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => Promise<void>;
   isLoading?: boolean;
   rateLimitStatus?: {
     remaining: number;
@@ -55,6 +63,10 @@ export function MultiTokenDepositModal({
   const [deposits, setDeposits] = useState<DepositEntry[]>([]);
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isValidating, setIsValidating] = useState(false);
+
+  // WLFI-style step indicator state, driven by depositMultipleTokensWagmi's
+  // onProgress callback. Empty array = no flow in progress (component hides).
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -164,7 +176,7 @@ export function MultiTokenDepositModal({
     return deposits.length > 0 && deposits.every(d => d.isValid && d.amount);
   };
 
-  const handleDeposit = () => {
+  const handleDeposit = async () => {
     if (!isFormValid()) {
       return;
     }
@@ -177,12 +189,17 @@ export function MultiTokenDepositModal({
         approvalType: d.approvalType
       }));
 
-      onDeposit(depositData);
-      // Don't close modal immediately - let wagmi hooks handle transaction state
-      setTimeout(() => {
-        onClose();
-        setIsValidating(false);
-      }, 2000);
+      // Reset previous progress (if any) and start fresh.
+      setProgressSteps([]);
+      // Await so we re-enable the form button after the full flow lands
+      // (approvals + deposit submission). The user can manually close the
+      // modal when satisfied (X / overlay click) — we no longer auto-close.
+      // The previous 2s hardcoded timeout closed before approval popups
+      // could appear, which broke the UX entirely.
+      await onDeposit(depositData, (steps) => {
+        setProgressSteps(steps);
+      });
+      setIsValidating(false);
     } catch (error) {
       console.error("Deposit failed:", error);
       setIsValidating(false);
@@ -352,16 +369,27 @@ export function MultiTokenDepositModal({
             </div>
           )}
 
+          {/* Progress Flow — appears once the user clicks Deposit and the
+              first step starts. Steps are pushed live by useVault.depositMultipleTokensWagmi's
+              onProgress callback (one per fresh ERC-20 approve + one for the
+              final deposit). Hidden when the array is empty. */}
+          {progressSteps.length > 0 && (
+            <ProgressFlow
+              title="Multi-token batch deposit"
+              steps={progressSteps}
+            />
+          )}
+
           {/* Action Buttons */}
           <div className="flex justify-between space-x-3 pt-4 border-t">
             <Button variant="outline" onClick={onClose} disabled={isLoading || isValidating}>
-              Cancel
+              {progressSteps.some(s => s.status === 'done') && progressSteps.every(s => s.status === 'done' || s.status === 'failed') ? "Close" : "Cancel"}
             </Button>
             <Button
               onClick={handleDeposit}
               disabled={!isFormValid() || isLoading || isValidating || (rateLimitStatus?.remaining === 0)}
             >
-              {isValidating ? "Validating..." : isLoading ? "Depositing..." : `Deposit ${deposits.length} Tokens`}
+              {isValidating ? "Signing…" : isLoading ? "Depositing..." : `Deposit ${deposits.length} Tokens`}
             </Button>
           </div>
         </div>

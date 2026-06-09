@@ -211,10 +211,14 @@ const Index = () => {
   };
 
   // Handle multi-token deposit from modal
-  const handleMultiTokenDepositFromModal = async (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => {
+  const handleMultiTokenDepositFromModal = async (
+    deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
     console.log('handleMultiTokenDepositFromModal called with:', deposits);
-    // Call the multi-token deposit function (Wagmi-based)
-    await depositMultipleTokensWagmi(deposits);
+    // Forward onProgress so useVault.depositMultipleTokensWagmi can drive
+    // the MultiTokenDepositModal's <ProgressFlow> step indicator live.
+    await depositMultipleTokensWagmi(deposits, onProgress);
   };
 
   // Handle token withdraw click

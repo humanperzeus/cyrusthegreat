@@ -450,6 +450,24 @@
     border-color: var(--ok);
     color: white;
   }
+  /* Live progress states for in-flight multi-step ops (b8-4 / b8-8) */
+  .stepper .step.running { color: var(--gold-bright); font-weight: 700; }
+  .stepper .step.running .dot {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #0a0a0c;
+    animation: stepPulse 1.2s infinite ease-in-out;
+  }
+  .stepper .step.failed { color: var(--err); font-weight: 700; }
+  .stepper .step.failed .dot {
+    background: var(--err);
+    border-color: var(--err);
+    color: white;
+  }
+  @keyframes stepPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240, 180, 0, 0.45); }
+    50%      { box-shadow: 0 0 0 10px rgba(240, 180, 0, 0); }
+  }
   .stepper .conn {
     flex: 1;
     height: 1.5px;
@@ -458,6 +476,42 @@
     min-width: 24px;
   }
   .stepper .step.done + .conn { background: var(--ok); }
+
+  /* Inline progress flow inside a test card's result area. Slightly more
+     compact than the section-level stepper at the top of each tab. */
+  .progress-flow {
+    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-top: 12px;
+  }
+  .progress-flow .progress-title {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+  .progress-flow .progress-title .sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .progress-flow .stepper {
+    margin: 0;
+    border: none;
+    background: transparent;
+    padding: 4px 0;
+  }
+  .progress-flow .step-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    font-family: ui-monospace, monospace;
+    word-break: break-all;
+  }
+  .progress-flow .step-detail a { color: var(--gold); }
 </style>
 </head>
 <body>
@@ -856,6 +910,73 @@ function recipientPickerHtml(inputDataKey = "to") {
       <button type="button" class="recip-pick" data-recip="wallet2" title="Send to Wallet 2 (test counterparty)">→ W2</button>
     </div>
   `;
+}
+
+// ============================================================
+//  Progress flow — WLFI-style multi-step indicator for multi-tx ops
+// ============================================================
+// Returns a controller with .update(idx, status, detail?) so callers can
+// drive the indicator from a sequence of async steps. Status values:
+//   "pending" — not started (default for indices >= currentIdx + 1)
+//   "running" — current step in flight (pulses gold)
+//   "done"    — step succeeded (green check)
+//   "failed"  — step reverted / errored (red X)
+//
+// Usage in a test card's run() handler:
+//   const host = body.querySelector("[data-progress]");
+//   const pf = createProgressFlow(host, ["Approve USD1", "Approve WLFI", "depositMultipleTokens"], "Multi-token batch deposit");
+//   pf.update(0, "running");
+//   await tx0.wait();
+//   pf.update(0, "done");
+//   pf.update(1, "running");
+//   ...
+function createProgressFlow(host, stepLabels, title) {
+  host.innerHTML = `
+    <div class="progress-flow">
+      <div class="progress-title">${title || "Progress"}<span class="sub" data-pf-sub></span></div>
+      <div class="stepper" data-pf-stepper></div>
+      <div class="step-detail" data-pf-detail></div>
+    </div>
+  `;
+  const stepperEl = host.querySelector("[data-pf-stepper]");
+  const subEl     = host.querySelector("[data-pf-sub]");
+  const detailEl  = host.querySelector("[data-pf-detail]");
+
+  // Initial render — all pending
+  function render(currentIdx, status) {
+    stepperEl.innerHTML = stepLabels.map((lbl, i) => {
+      let cls = "";
+      let digit = String(i + 1);
+      if (i < currentIdx) { cls = "done"; digit = "✓"; }
+      else if (i === currentIdx) {
+        if (status === "done")        { cls = "done"; digit = "✓"; }
+        else if (status === "failed") { cls = "failed"; digit = "✗"; }
+        else                          { cls = "running"; }
+      }
+      const dot  = `<div class="step ${cls}"><div class="dot">${digit}</div><span>${lbl}</span></div>`;
+      const conn = (i === stepLabels.length - 1) ? "" : `<div class="conn"></div>`;
+      return dot + conn;
+    }).join("");
+  }
+
+  render(-1, "pending"); // Start with nothing done
+
+  return {
+    update(currentIdx, status, detail) {
+      render(currentIdx, status);
+      if (status === "running") {
+        subEl.textContent = `step ${currentIdx + 1} of ${stepLabels.length} — ${stepLabels[currentIdx]}`;
+      } else if (status === "done" && currentIdx >= stepLabels.length - 1) {
+        subEl.textContent = `${stepLabels.length}/${stepLabels.length} complete ✓`;
+      } else if (status === "failed") {
+        subEl.textContent = `step ${currentIdx + 1} failed — ${stepLabels[currentIdx]}`;
+      }
+      if (detail !== undefined) detailEl.innerHTML = detail;
+    },
+    clear() {
+      host.innerHTML = "";
+    },
+  };
 }
 
 // Ensures signer exists AND its address matches the wallet's currently
@@ -1558,7 +1679,14 @@ const BANK8_TESTS = [
         return { run: async () => { throw new Error("Wallet not connected"); } };
       }
       const tokens = await fetchWalletTokens();
-      const picker = renderTokenPicker(body, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No known tokens for this chain. Add to KNOWN_TOKENS in source." });
+      // Render token picker + a dedicated progress host below it.
+      const pickerHost = document.createElement("div");
+      const progressHost = document.createElement("div");
+      progressHost.setAttribute("data-progress", "");
+      body.innerHTML = "";
+      body.appendChild(pickerHost);
+      body.appendChild(progressHost);
+      const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No known tokens for this chain. Add to KNOWN_TOKENS in source." });
       return {
         run: async () => {
           await ensureSigner();
@@ -1570,10 +1698,6 @@ const BANK8_TESTS = [
           const c = new ethers.Contract(v, abi, getReadProvider());
           const fee = await c.getCurrentFeeInWei();
 
-          // Build the arrays + compute msg.value = sum(native amounts) + fee.
-          // Contract validates the same equation; the explicit msg.value is
-          // pulled from the wallet, fee credits feeVault, native amounts
-          // credit vault[user, address(0)].
           const tokenAddrs = sel.map(s => s.addr);
           const amounts   = sel.map(s => s.amountWei);
           const nativeSum = sel.reduce((acc, s) => acc + (s.isNative ? s.amountWei : 0n), 0n);
@@ -1581,47 +1705,78 @@ const BANK8_TESTS = [
 
           await ensureBalance(ethValue + ethers.parseEther("0.0001"), "multi-token deposit");
 
-          // Approve each ERC-20 with MAX_UINT256 (one-time per token per vault).
-          // Same policy as the production frontend (commit 272eaa2) — no decimal-
-          // comma typo risk + future deposits skip the approval step entirely
-          // because allowance >= amountWei always holds after a max-approve.
-          // Native is skipped (msg.value covers ETH, no allowance involved).
+          // First pass: figure out which ERC-20s actually need a fresh approve
+          // (allowance < amountWei). Those become steps; already-approved tokens
+          // are skipped silently (not shown as separate steps to keep the
+          // indicator scoped to actual signatures).
           const MAX_UINT256 = (1n << 256n) - 1n;
-          let approveLog = "";
+          const ercToApprove = [];
           for (const s of sel) {
             if (s.isNative) continue;
             const erc = new ethers.Contract(s.addr, ERC20_ABI, getReadProvider());
             const cur = await erc.allowance(account, v);
-            if (cur < s.amountWei) {
-              const a = await erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
+            if (cur < s.amountWei) ercToApprove.push({ ...s, erc });
+          }
+
+          // Build the step labels: one per fresh approve, plus the final deposit.
+          const stepLabels = [
+            ...ercToApprove.map(s => `Approve ${s.symbol}`),
+            "depositMultipleTokens",
+          ];
+          const pf = createProgressFlow(progressHost, stepLabels, "Multi-token batch deposit");
+
+          // Approve loop
+          let approveLog = "";
+          for (let i = 0; i < ercToApprove.length; i++) {
+            const s = ercToApprove[i];
+            pf.update(i, "running", `Approving ${s.symbol} for ${fmtAddr(v)}…`);
+            try {
+              const a = await s.erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
+              pf.update(i, "running", `Approve tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
               await a.wait();
-              approveLog += `  🔓 Max-approved ${s.symbol} (one-time): <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
-            } else {
-              approveLog += `  ✓ ${s.symbol} already max-approved (allowance ${cur === MAX_UINT256 ? "∞" : cur.toString()})\n`;
+              pf.update(i, "done", `🔓 Max-approved ${s.symbol} (one-time): <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
+              approveLog += `  🔓 Max-approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+            } catch (e) {
+              pf.update(i, "failed", `Approve ${s.symbol} failed: ${e.shortMessage || e.message}`);
+              throw e;
             }
           }
 
-          // Pre-flight staticCall — surfaces revert reasons clearly instead
-          // of the generic CALL_EXCEPTION you'd otherwise see.
+          // Final deposit step
+          const depositIdx = ercToApprove.length;
+          pf.update(depositIdx, "running", `Building tx (msg.value = ${ethers.formatEther(ethValue)} native = sum(natives) + fee)…`);
+
+          // Pre-flight staticCall — surface revert reasons clearly.
           try {
             await c.connect(signer).depositMultipleTokens.staticCall(
               tokenAddrs, amounts, { value: ethValue },
             );
           } catch (e) {
             const reason = e.shortMessage || e.reason || e.message || String(e);
+            pf.update(depositIdx, "failed", `Pre-flight reverted: ${reason}`);
             throw new Error(`Pre-flight reverted: ${reason}`);
           }
 
-          const tx = await c.connect(signer).depositMultipleTokens(
-            tokenAddrs, amounts, { value: ethValue, gasLimit: 800000n },
-          );
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          if (r.status !== 1) throw new Error(`depositMultipleTokens reverted, status ${r.status}`);
-          const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
-          return {
-            html: `${approveLog}Deposited (ONE tx): ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓`,
-          };
+          try {
+            const tx = await c.connect(signer).depositMultipleTokens(
+              tokenAddrs, amounts, { value: ethValue, gasLimit: 800000n },
+            );
+            pf.update(depositIdx, "running", `Tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(depositIdx, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`depositMultipleTokens reverted, status ${r.status}`);
+            }
+            pf.update(depositIdx, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
+            return {
+              html: `${approveLog}Deposited (ONE tx): ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓`,
+            };
+          } catch (e) {
+            pf.update(depositIdx, "failed", `Deposit failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },
@@ -1803,7 +1958,13 @@ const BANK8_TESTS = [
         body.innerHTML = `<div class="hint" style="padding: 8px;">No known ERC20 tokens for this chain. (depositToken does not accept native ETH — use Test 3 for ETH deposits.)</div>`;
         return { run: async () => { throw new Error("No ERC20s available"); } };
       }
-      const picker = renderTokenPicker(body, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No ERC20 tokens found." });
+      const pickerHost = document.createElement("div");
+      const progressHost = document.createElement("div");
+      progressHost.setAttribute("data-progress", "");
+      body.innerHTML = "";
+      body.appendChild(pickerHost);
+      body.appendChild(progressHost);
+      const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No ERC20 tokens found." });
       return {
         run: async () => {
           await ensureSigner();
@@ -1817,25 +1978,51 @@ const BANK8_TESTS = [
           const fee = await c.getCurrentFeeInWei();
           await ensureBalance(fee + ethers.parseEther("0.0001"), "depositToken fee");
 
-          // Approve if needed — max-approval policy (matches production
-          // commit 272eaa2). One-time per token per vault contract; future
-          // depositToken calls skip this step entirely.
-          let approveLog = "";
           const MAX_UINT256 = (1n << 256n) - 1n;
           const erc = new ethers.Contract(t.addr, ERC20_ABI, getReadProvider());
           const cur = await erc.allowance(account, v);
-          if (cur < t.amountWei) {
-            const a = await erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
-            await a.wait();
-            approveLog = `🔓 Max-approved ${t.symbol} (one-time): <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+          const needsApprove = cur < t.amountWei;
+
+          // If the token is already approved, the flow is single-step.
+          const stepLabels = needsApprove
+            ? [`Approve ${t.symbol}`, `depositToken (${t.symbol})`]
+            : [`depositToken (${t.symbol})`];
+          const pf = createProgressFlow(progressHost, stepLabels, `Single ERC-20 deposit · ${t.symbol}`);
+
+          let approveLog = "";
+          if (needsApprove) {
+            pf.update(0, "running", `Approving ${t.symbol} (MAX_UINT256) for ${fmtAddr(v)}…`);
+            try {
+              const a = await erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
+              pf.update(0, "running", `Approve tx submitted: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
+              await a.wait();
+              pf.update(0, "done", `🔓 Max-approved ${t.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
+              approveLog = `🔓 Max-approved ${t.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+            } catch (e) {
+              pf.update(0, "failed", `Approve failed: ${e.shortMessage || e.message}`);
+              throw e;
+            }
           } else {
             approveLog = `✓ ${t.symbol} already max-approved (allowance ${cur === MAX_UINT256 ? "∞" : cur.toString()})\n`;
           }
 
-          const tx = await c.connect(signer).depositToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          return { html: `${approveLog}Deposited: ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+          const depositIdx = needsApprove ? 1 : 0;
+          pf.update(depositIdx, "running", `Submitting depositToken(${t.symbol}, ${ethers.formatUnits(t.amountWei, t.decimals)})…`);
+          try {
+            const tx = await c.connect(signer).depositToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
+            pf.update(depositIdx, "running", `Tx submitted: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(depositIdx, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`depositToken reverted, status ${r.status}`);
+            }
+            pf.update(depositIdx, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            return { html: `${approveLog}Deposited: ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol}\nTx: ${link}\nBlock ${r.blockNumber}, status ok ✓` };
+          } catch (e) {
+            pf.update(depositIdx, "failed", `Deposit failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },

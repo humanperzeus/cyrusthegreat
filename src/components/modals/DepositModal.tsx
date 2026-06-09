@@ -17,7 +17,10 @@ interface DepositModalProps {
   onOpenChange: (open: boolean) => void;
   onDeposit: (amount: string) => void;
   onTokenDeposit?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
-  onMultiTokenDeposit?: (deposits: { token: string; amount: string }[]) => Promise<void>;
+  onMultiTokenDeposit?: (
+    deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => Promise<void>;
   isLoading: boolean;
   isSimulating?: boolean;
   walletBalance: string;
@@ -99,9 +102,14 @@ export function DepositModal({
     }
   }, [amount]);
 
-  const handleMultiTokenDeposit = async (deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[]) => {
+  const handleMultiTokenDeposit = async (
+    deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
     if (onMultiTokenDeposit) {
-      await onMultiTokenDeposit(deposits);
+      // Forward the progress callback through to Index.tsx → useVault so
+      // MultiTokenDepositModal's <ProgressFlow> receives live step updates.
+      await onMultiTokenDeposit(deposits, onProgress);
     }
   };
 

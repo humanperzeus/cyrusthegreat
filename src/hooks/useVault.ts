@@ -2145,7 +2145,17 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
   };
 
-  const depositMultipleTokensWagmi = async (deposits: { token: string; amount: string }[]) => {
+  // Optional `onProgress` callback: when provided, the function reports a
+  // WLFI-style step progression for the multi-token deposit flow. The shape
+  // mirrors src/components/shared/ProgressFlow.tsx's ProgressStep[] —
+  // {label, status, detail?}. The caller (MultiTokenDepositModal) renders
+  // the ProgressFlow component using each setSteps snapshot.
+  type _PSStatus = 'pending' | 'running' | 'done' | 'failed';
+  type _PS = { label: string; status: _PSStatus; detail?: string };
+  const depositMultipleTokensWagmi = async (
+    deposits: { token: string; amount: string }[],
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     console.log('depositMultipleTokens called with:', deposits);
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
@@ -2334,6 +2344,44 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         return tokenAddress !== '0x0000000000000000000000000000000000000000';
       });
 
+      // === ProgressFlow scaffolding (2026-06-08) ===
+      // Build the steps array UPFRONT so the modal can show the full flow
+      // before any tx fires. Approval steps are added only for tokens that
+      // need a fresh approve (allowance < required); already-approved tokens
+      // are noted but don't get their own step (no signature involved).
+      // The final step is always the multi-token deposit itself.
+      const _progressSteps: _PS[] = [];
+      const _ercNeedingApprove: { address: string; symbol: string }[] = [];
+
+      for (const deposit of approvalTokenDeposits) {
+        const tokenAddress = typeof deposit.token === 'string' ? deposit.token : deposit.token.address;
+        const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
+        const decimals = tokenInfo?.decimals || 18;
+        const requiredAmount = convertToWei(deposit.amount, decimals);
+        try {
+          const cur = await readContract(config, {
+            address: tokenAddress as `0x${string}`,
+            abi: [{ inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], name: 'allowance', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' }],
+            functionName: 'allowance',
+            args: [address, getActiveContractAddress()],
+          });
+          if (BigInt(cur as string) < requiredAmount) {
+            const symbol = tokenInfo?.symbol || tokenAddress.slice(0, 6) + '…';
+            _ercNeedingApprove.push({ address: tokenAddress, symbol });
+            _progressSteps.push({ label: `Approve ${symbol}`, status: 'pending' });
+          }
+        } catch (_e) {
+          // If we can't pre-check, assume it needs an approve — better safe than sorry.
+          const symbol = tokenInfo?.symbol || tokenAddress.slice(0, 6) + '…';
+          _ercNeedingApprove.push({ address: tokenAddress, symbol });
+          _progressSteps.push({ label: `Approve ${symbol}`, status: 'pending' });
+        }
+      }
+      _progressSteps.push({ label: 'Deposit multiple tokens', status: 'pending' });
+      onProgress?.(_progressSteps.map(s => ({ ...s })));
+
+      let _approveIdx = 0;
+
       for (const deposit of approvalTokenDeposits) {
         const tokenAddress = typeof deposit.token === 'string' ? deposit.token : deposit.token.address;
 
@@ -2365,6 +2413,15 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
 
           if (BigInt(currentAllowance as string) < requiredAmount) {
             console.log(`  🔄 Approving ${tokenAddress}...`);
+            // Progress emit: start of this approve step
+            if (_approveIdx < _ercNeedingApprove.length) {
+              _progressSteps[_approveIdx] = {
+                ..._progressSteps[_approveIdx],
+                status: 'running',
+                detail: `Approving ${_ercNeedingApprove[_approveIdx].symbol} (MAX_UINT256) — open wallet to sign…`,
+              };
+              onProgress?.(_progressSteps.map(s => ({ ...s })));
+            }
 
             // Approval amount policy (2026-06-07 onwards):
             //
@@ -2404,10 +2461,29 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
             console.log(`  ⏳ Waiting for approval confirmation...`);
             await waitForTransactionReceipt(config, { hash: approvalHash });
             console.log(`  ✅ ${tokenAddress} approval confirmed`);
+            // Progress emit: this approve step is done
+            if (_approveIdx < _ercNeedingApprove.length) {
+              _progressSteps[_approveIdx] = {
+                ..._progressSteps[_approveIdx],
+                status: 'done',
+                detail: `Approved — tx ${String(approvalHash).slice(0, 10)}…`,
+              };
+              onProgress?.(_progressSteps.map(s => ({ ...s })));
+              _approveIdx++;
+            }
           } else {
             console.log(`  ✅ ${tokenAddress} already approved`);
           }
         } catch (error: any) {
+          // Progress emit: this approve step failed
+          if (_approveIdx < _ercNeedingApprove.length) {
+            _progressSteps[_approveIdx] = {
+              ..._progressSteps[_approveIdx],
+              status: 'failed',
+              detail: error?.shortMessage || error?.message || 'Approve failed',
+            };
+            onProgress?.(_progressSteps.map(s => ({ ...s })));
+          }
           // Handle user rejection gracefully
           if (error.message?.includes('User rejected') ||
               error.message?.includes('User denied') ||
@@ -2441,16 +2517,44 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       console.log('ETH deposit included:', ethDeposits.length > 0);
       console.log('Token deposits count:', approvalTokenDeposits.length);
 
-      // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
-      await writeVaultContract({
-        address: getActiveContractAddress() as `0x${string}`,
-        abi: VAULT_ABI,
-        functionName: 'depositMultipleTokens',
-        args: [tokens, amounts],
-        chain: getTargetChain(),
-        account: address,
-        value: totalEthValue,
-      });
+      // Progress emit: final deposit step is running
+      const _depositIdx = _progressSteps.length - 1;
+      _progressSteps[_depositIdx] = {
+        ..._progressSteps[_depositIdx],
+        status: 'running',
+        detail: `Submitting depositMultipleTokens — open wallet to sign…`,
+      };
+      onProgress?.(_progressSteps.map(s => ({ ...s })));
+
+      try {
+        // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
+        await writeVaultContract({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'depositMultipleTokens',
+          args: [tokens, amounts],
+          chain: getTargetChain(),
+          account: address,
+          value: totalEthValue,
+        });
+        // writeVaultContract returns void here — wagmi's hook tracks the tx
+        // state separately. We mark the step done so the indicator goes
+        // green; the actual confirmation toast comes from the existing flow.
+        _progressSteps[_depositIdx] = {
+          ..._progressSteps[_depositIdx],
+          status: 'done',
+          detail: `Submitted — wallet confirmed the tx. Watch your vault balance.`,
+        };
+        onProgress?.(_progressSteps.map(s => ({ ...s })));
+      } catch (e: any) {
+        _progressSteps[_depositIdx] = {
+          ..._progressSteps[_depositIdx],
+          status: 'failed',
+          detail: e?.shortMessage || e?.message || 'Deposit failed',
+        };
+        onProgress?.(_progressSteps.map(s => ({ ...s })));
+        throw e;
+      }
 
       console.log('✅ Multi-token deposit transaction submitted via Wagmi hook');
 
