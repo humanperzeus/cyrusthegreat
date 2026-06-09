@@ -65,8 +65,9 @@ export function MultiTokenTransferModal({
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [isValidating, setIsValidating] = useState(false);
-  // Progress state now lives in ProgressContext (App-level).
-  const { setProgress } = useProgress();
+  // Progress sessions live in ProgressContext at App level. Each
+  // submit opens its own session with a unique id.
+  const { startProgress, updateProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -201,17 +202,15 @@ export function MultiTokenTransferModal({
       amount: t.amount,
     }));
 
-    // Seed the global progress modal BEFORE closing this dialog.
-    setProgress(
+    const sessionId = startProgress(
+      'Multi-token batch internal transfer',
       [{ label: 'Preparing transfer…', status: 'running', detail: `Submitting ${transferData.length} token${transferData.length === 1 ? '' : 's'} → ${recipientAddress.slice(0, 6)}…${recipientAddress.slice(-4)}…` }],
-      'Multi-token batch internal transfer'
     );
 
     onCommitted?.();
 
-    // Background — don't block the modal close on the wallet round-trip.
     onTransfer(transferData, recipientAddress, (steps) => {
-      setProgress(steps);
+      updateProgress(sessionId, steps);
     }).catch((error) => {
       console.error("Transfer failed:", error);
     });

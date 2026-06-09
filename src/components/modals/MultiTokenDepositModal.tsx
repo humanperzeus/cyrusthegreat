@@ -67,9 +67,11 @@ export function MultiTokenDepositModal({
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isValidating, setIsValidating] = useState(false);
 
-  // Progress state now lives in ProgressContext (App-level) so the
-  // floating ProgressFlow / chip outlives this modal closing.
-  const { setProgress } = useProgress();
+  // Progress sessions are owned by ProgressContext at App level. We
+  // start a new session per submit (unique id), then push step updates
+  // through updateProgress. The session outlives this modal closing
+  // and stacks alongside any other in-flight sessions.
+  const { startProgress, updateProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -190,13 +192,14 @@ export function MultiTokenDepositModal({
       approvalType: d.approvalType
     }));
 
-    // Seed the global progress modal with a placeholder step BEFORE
-    // closing this dialog. Doing it in this order means the user never
-    // sees a frame without feedback — the floating ProgressFlow
-    // appears just as this modal closes.
-    setProgress(
+    // Start a NEW progress session for this submit. startProgress
+    // returns the session id; we use it to scope all subsequent
+    // updateProgress calls so concurrent submits don't trample each
+    // other. The seed step gives the user immediate feedback BEFORE
+    // the parent dialog closes.
+    const sessionId = startProgress(
+      'Multi-token batch deposit',
       [{ label: 'Preparing deposit…', status: 'running', detail: `Submitting ${depositData.length} token${depositData.length === 1 ? '' : 's'}…` }],
-      'Multi-token batch deposit'
     );
 
     // Notify the parent (DepositModal) that we've committed — it
@@ -204,16 +207,16 @@ export function MultiTokenDepositModal({
     // user can keep working while the tx pends.
     onCommitted?.();
 
-    // Now run the actual operation; subsequent updates land in the
-    // global ProgressFlow. We do NOT await its completion here —
-    // letting it run in the background means the modal closing isn't
-    // blocked on the wallet round-trip.
+    // Run the operation in the background; useVault.depositMultiple…
+    // pushes step updates into this session via its onProgress
+    // callback. We don't await — the modal already closed, and the
+    // wallet round-trip is owned by the session, not by this handler.
     onDeposit(depositData, (steps) => {
-      setProgress(steps);
+      updateProgress(sessionId, steps);
     }).catch((error) => {
-      // useVault already calls setProgress(failed) on errors via the
-      // onProgress emit chain, so the user sees a red ✗ in the chip
-      // / modal. Logging here is just for the console.
+      // useVault already pushes a failed-status step on errors via the
+      // onProgress emit chain, so the user sees a red ✗ in the chip /
+      // modal. Logging here is just for the console trail.
       console.error("Deposit failed:", error);
     });
   };

@@ -41,7 +41,7 @@
  *   ...
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 export type ProgressStepStatus = "pending" | "running" | "done" | "failed";
@@ -58,9 +58,24 @@ export interface ProgressStep {
 interface ProgressFlowProps {
   title?: string;
   steps: ProgressStep[];
-  // Called when the user clicks Close. Parent is expected to unmount the
-  // ProgressFlow in response (e.g. by clearing the steps array). If
-  // omitted, Close is a no-op.
+  // CONTROLLED display state. The parent (typically ProgressProvider)
+  // owns whether this instance shows as the centered modal (`expanded:
+  // true`) or as a corner chip (`expanded: false`). Internal toggling
+  // is gone — that's what lets multiple sessions coexist with at most
+  // one expanded at a time.
+  expanded: boolean;
+  // Stacking position when this instance is a chip. Index 0 sits at
+  // the corner; higher indices stack upward in 8px-padded rows. Has
+  // no effect when expanded.
+  chipIndex?: number;
+  // Click on the chip body → request expansion. Parent decides whether
+  // to honor (which usually means minimizing whatever was expanded
+  // before).
+  onExpand?: () => void;
+  // Click on Hide → request minimization to corner chip.
+  onMinimize?: () => void;
+  // Click on Close → dismiss the session entirely (the underlying tx
+  // is NOT cancelled; it just stops being tracked in this UI).
   onClose?: () => void;
   className?: string;
 }
@@ -68,12 +83,18 @@ interface ProgressFlowProps {
 export const ProgressFlow: React.FC<ProgressFlowProps> = ({
   title,
   steps,
+  expanded,
+  chipIndex = 0,
+  onExpand,
+  onMinimize,
   onClose,
   className,
 }) => {
-  const [minimized, setMinimized] = useState(false);
-  const prevOverflowRef = useRef<string>("");
   const overlayRef = useRef<HTMLDivElement>(null);
+  // `minimized` is derived directly from the controlled `expanded` prop
+  // — there is no longer any internal toggle state. This keeps the
+  // multi-session display rules (at most one expanded) coherent.
+  const minimized = !expanded;
 
   // ─── Stop pointer/mouse bubbling to document at NATIVE level ───
   // The ProgressFlow renders via createPortal to document.body, OUTSIDE
@@ -113,18 +134,9 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
     };
   }, []);
 
-  // Lock/unlock body scroll based on expanded state.
-  useEffect(() => {
-    if (minimized) {
-      document.body.style.overflow = prevOverflowRef.current;
-    } else {
-      prevOverflowRef.current = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      document.body.style.overflow = prevOverflowRef.current;
-    };
-  }, [minimized]);
+  // Body scroll lock is now owned by ProgressProvider — it locks once
+  // when ANY session is expanded, unlocks when all are collapsed.
+  // Per-instance lock here would race with sibling ProgressFlows.
 
   // Derived state — figure out which step is "currently active" for the
   // chip label and the title subtitle.
@@ -181,7 +193,9 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
     onClose?.();
   };
 
-  const handleHide = () => setMinimized(true);
+  const handleHide = () => {
+    onMinimize?.();
+  };
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     // In minimized mode, a click on the chip body re-expands. In
@@ -192,7 +206,7 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
     // Only re-expand if the click came on the chip body (the .pf-modal),
     // not on the Close button (which has its own stopPropagation).
     if (target.closest(".pf-modal") && !target.closest("button")) {
-      setMinimized(false);
+      onExpand?.();
     }
   };
 
@@ -220,6 +234,13 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
     <div
       ref={overlayRef}
       className={`pf-overlay open ${minimized ? "minimized" : ""} ${className ?? ""}`}
+      // Stack chips vertically in the bottom-right corner. Index 0
+      // sits ~16px from the edge; each higher index stacks ~60px
+      // (chip height ~48px + 12px gap) upward. Only applies in
+      // minimized mode — the inline `bottom` overrides the .pf-overlay.minimized
+      // rule's `inset: auto 16px 16px auto` shorthand for the
+      // bottom value, leaving the other three edges alone.
+      style={minimized && chipIndex > 0 ? { bottom: `${16 + chipIndex * 60}px` } : undefined}
       onClick={handleOverlayClick}
     >
       <style>{`

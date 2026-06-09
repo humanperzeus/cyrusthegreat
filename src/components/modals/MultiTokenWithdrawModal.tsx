@@ -63,8 +63,10 @@ export function MultiTokenWithdrawModal({
   const [withdrawals, setWithdrawals] = useState<WithdrawEntry[]>([]);
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isValidating, setIsValidating] = useState(false);
-  // Progress state now lives in ProgressContext (App-level).
-  const { setProgress } = useProgress();
+  // Progress sessions live in ProgressContext at App level. Each
+  // submit opens its own session with a unique id so concurrent
+  // withdraws / deposits / transfers can coexist as chips.
+  const { startProgress, updateProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -184,18 +186,15 @@ export function MultiTokenWithdrawModal({
       amount: d.amount,
     }));
 
-    // Seed the global progress modal BEFORE closing this dialog so
-    // the user never sees a frame without feedback.
-    setProgress(
+    const sessionId = startProgress(
+      'Multi-token batch withdraw',
       [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${withdrawalData.length} token${withdrawalData.length === 1 ? '' : 's'}…` }],
-      'Multi-token batch withdraw'
     );
 
     onCommitted?.();
 
-    // Background — don't block the modal close on the wallet round-trip.
     onWithdraw(withdrawalData, (steps) => {
-      setProgress(steps);
+      updateProgress(sessionId, steps);
     }).catch((error) => {
       console.error("Withdrawal failed:", error);
     });
