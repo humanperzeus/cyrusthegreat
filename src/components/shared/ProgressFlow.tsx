@@ -1,63 +1,99 @@
 /**
- * ProgressFlow — multi-step indicator for chains of wallet signatures.
+ * ProgressFlow — floating modal step indicator for chains of wallet signatures.
  *
- * Visual model mirrors the WLFI "Activate unlock schedule" mockups: a
- * horizontal row of dots connected by lines, with each dot showing its
- * status (pending / running / done / failed). Lives in the WLFI gold
- * accent palette already defined in the app's CSS variables.
+ * Mirrors the debug UI's createProgressFlow() helper (tools/contract-debug/
+ * index.html) so what users see on the live site matches what we use to test
+ * locally. Two states:
  *
- * Designed for flows like multi-token deposit: typically 1-N approve
- * txs followed by the actual operation tx (depositMultipleTokens etc).
+ *   • Expanded — backdrop dimmed, centered card, page is non-interactive.
+ *   • Minimized — backdrop gone, modal shrinks to a small chip in the
+ *     bottom-right with live status text; the page becomes fully interactive
+ *     so the user can keep working while a long-pending tx waits.
  *
- * Usage:
- *   const [steps, setSteps] = useState<ProgressStep[]>([
+ * Hide and Close are ALWAYS available (no waiting for terminal state):
+ *   • Hide  — collapses to the corner chip; click chip body to re-expand.
+ *   • Close — calls onClose so the parent can unmount this component. The
+ *             underlying tx is NOT cancelled by clicking Close — the wallet's
+ *             pending tx still resolves on-chain; the user just stops
+ *             tracking it in this UI.
+ *
+ * Usage (parent owns the steps state and unmount lifecycle):
+ *
+ *   const [steps, setSteps] = useState<ProgressStep[]>([]);
+ *
+ *   // Mount only when steps array is non-empty.
+ *   {steps.length > 0 && (
+ *     <ProgressFlow
+ *       title="Multi-token batch deposit"
+ *       steps={steps}
+ *       onClose={() => setSteps([])}
+ *     />
+ *   )}
+ *
+ *   // Drive via the parent flow:
+ *   setSteps([
  *     { label: "Approve USD1", status: "pending" },
  *     { label: "Approve WLFI", status: "pending" },
  *     { label: "Deposit", status: "pending" },
  *   ]);
- *
- *   <ProgressFlow
- *     title="Multi-token batch deposit"
- *     steps={steps}
- *     detail={detail}
- *   />
- *
- *   // In your async flow:
- *   setSteps(s => s.map((step, i) => i === 0 ? { ...step, status: "running" } : step));
- *   await approve1.wait();
+ *   await approveUsd1();
  *   setSteps(s => s.map((step, i) => i === 0 ? { ...step, status: "done" } : step));
  *   ...
  */
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type ProgressStepStatus = "pending" | "running" | "done" | "failed";
 
 export interface ProgressStep {
   label: string;
   status: ProgressStepStatus;
-  // Optional per-step detail (tx hash link, error message, etc.) shown
-  // only when this step is the currently-active one.
+  // Optional per-step detail (tx hash link, error message, etc.) shown in
+  // the modal's detail line. The detail of the currently-active step (or
+  // the last failed step) is what we show.
   detail?: string;
 }
 
 interface ProgressFlowProps {
   title?: string;
   steps: ProgressStep[];
-  detail?: string;
+  // Called when the user clicks Close. Parent is expected to unmount the
+  // ProgressFlow in response (e.g. by clearing the steps array). If
+  // omitted, Close is a no-op.
+  onClose?: () => void;
   className?: string;
 }
 
 export const ProgressFlow: React.FC<ProgressFlowProps> = ({
   title,
   steps,
-  detail,
+  onClose,
   className,
 }) => {
-  // Find the active step for the title-line subtitle.
+  const [minimized, setMinimized] = useState(false);
+  const prevOverflowRef = useRef<string>("");
+
+  // Lock/unlock body scroll based on expanded state.
+  useEffect(() => {
+    if (minimized) {
+      document.body.style.overflow = prevOverflowRef.current;
+    } else {
+      prevOverflowRef.current = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.body.style.overflow = prevOverflowRef.current;
+    };
+  }, [minimized]);
+
+  // Derived state — figure out which step is "currently active" for the
+  // chip label and the title subtitle.
   const runningIdx = steps.findIndex(s => s.status === "running");
   const failedIdx = steps.findIndex(s => s.status === "failed");
   const doneCount = steps.filter(s => s.status === "done").length;
+  const isTerminal = failedIdx >= 0 || doneCount === steps.length;
+
   const subtitle = (() => {
     if (failedIdx >= 0) return `step ${failedIdx + 1} failed — ${steps[failedIdx].label}`;
     if (runningIdx >= 0) return `step ${runningIdx + 1} of ${steps.length} — ${steps[runningIdx].label}`;
@@ -65,24 +101,142 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
     return `${doneCount}/${steps.length} complete`;
   })();
 
-  return (
-    <div className={`progress-flow-container ${className ?? ""}`}>
+  // Pick the detail line to show — the active step's detail, or the
+  // last-failed step's detail if the flow failed.
+  const activeDetail = (() => {
+    if (failedIdx >= 0) return steps[failedIdx].detail;
+    if (runningIdx >= 0) return steps[runningIdx].detail;
+    if (isTerminal) return steps[steps.length - 1]?.detail;
+    return undefined;
+  })();
+
+  // Chip (minimized) icon + text derivation.
+  const chipState: { icon: React.ReactNode; iconClass: string; label: string; sub: string } = (() => {
+    if (failedIdx >= 0) {
+      return {
+        icon: "✗",
+        iconClass: "failed",
+        label: title || "Failed",
+        sub: `step ${failedIdx + 1} failed · tap to view`,
+      };
+    }
+    if (doneCount === steps.length) {
+      return {
+        icon: "✓",
+        iconClass: "done",
+        label: title || "Complete",
+        sub: `${steps.length}/${steps.length} complete · tap to view`,
+      };
+    }
+    const idx = runningIdx >= 0 ? runningIdx : doneCount;
+    const safeIdx = Math.min(idx, steps.length - 1);
+    return {
+      icon: String(safeIdx + 1),
+      iconClass: "",
+      label: title || "Progress",
+      sub: `step ${safeIdx + 1} of ${steps.length} — ${steps[safeIdx]?.label ?? ""}`,
+    };
+  })();
+
+  const handleClose = () => {
+    onClose?.();
+  };
+
+  const handleHide = () => setMinimized(true);
+
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    // In minimized mode, a click on the chip body re-expands. In
+    // expanded mode, backdrop clicks are no-ops (intentional — dismissal
+    // is button-only to prevent accidental loss of context mid-flow).
+    if (!minimized) return;
+    const target = e.target as HTMLElement;
+    // Only re-expand if the click came on the chip body (the .pf-modal),
+    // not on the Close button (which has its own stopPropagation).
+    if (target.closest(".pf-modal") && !target.closest("button")) {
+      setMinimized(false);
+    }
+  };
+
+  // Render dots + connectors for the expanded view.
+  const stepperNodes = steps.map((s, i) => {
+    const isLast = i === steps.length - 1;
+    const digit = (() => {
+      if (s.status === "done") return "✓";
+      if (s.status === "failed") return "✗";
+      return String(i + 1);
+    })();
+    const cls = s.status === "pending" ? "" : s.status;
+    return (
+      <React.Fragment key={i}>
+        <div className={`pf-step ${cls}`}>
+          <div className="pf-dot">{digit}</div>
+          <span>{s.label}</span>
+        </div>
+        {!isLast && <div className="pf-conn" />}
+      </React.Fragment>
+    );
+  });
+
+  const overlay = (
+    <div
+      className={`pf-overlay open ${minimized ? "minimized" : ""} ${className ?? ""}`}
+      onClick={handleOverlayClick}
+    >
       <style>{`
-        .progress-flow-container {
-          background: linear-gradient(180deg, rgba(22, 21, 26, 1) 0%, rgba(28, 27, 33, 1) 100%);
+        .pf-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(8, 7, 12, 0.78);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          opacity: 0;
+          transition: opacity 0.22s ease, background 0.22s ease, backdrop-filter 0.22s ease;
+          padding: 16px;
+          animation: pfFadeIn 0.22s ease forwards;
+        }
+        @keyframes pfFadeIn {
+          to { opacity: 1; }
+        }
+        .pf-modal {
+          background: linear-gradient(180deg, #16151a 0%, #1c1b21 100%);
           border: 1px solid rgba(255, 220, 130, 0.18);
-          border-radius: 14px;
-          padding: 16px 18px;
-          margin: 14px 0;
+          border-radius: 18px;
+          padding: 30px 34px 26px;
+          max-width: 640px;
+          width: 100%;
+          box-shadow:
+            0 24px 70px rgba(0, 0, 0, 0.65),
+            0 0 0 1px rgba(240, 180, 0, 0.14),
+            0 0 60px rgba(240, 180, 0, 0.05);
+          transition:
+            transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+            padding 0.22s ease,
+            border-radius 0.22s ease,
+            max-width 0.22s ease;
+          position: relative;
           color: #f5f5f5;
           font: 13px/1.55 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+          animation: pfPopIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-        .pf-title { font-weight: 600; margin-bottom: 12px; font-size: 14px; }
+        @keyframes pfPopIn {
+          from { transform: translateY(10px) scale(0.97); }
+          to   { transform: translateY(0)   scale(1); }
+        }
+        .pf-title {
+          font-size: 15px;
+          font-weight: 600;
+          margin-bottom: 18px;
+          padding-right: 130px;
+        }
         .pf-title .pf-sub {
-          margin-left: 10px;
           font-weight: 400;
           color: #9ca3af;
           font-size: 12px;
+          margin-left: 8px;
         }
         .pf-stepper {
           display: flex;
@@ -149,45 +303,167 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
         .pf-detail {
           font-size: 12px;
           color: #9ca3af;
-          margin-top: 10px;
+          margin-top: 12px;
           font-family: ui-monospace, "SF Mono", monospace;
           word-break: break-all;
         }
         .pf-detail a { color: #F0B400; }
+
+        /* Header buttons row — always visible. */
+        .pf-controls {
+          position: absolute;
+          top: 14px;
+          right: 14px;
+          display: flex;
+          gap: 8px;
+        }
+        .pf-controls button {
+          padding: 6px 14px;
+          font-size: 12px;
+          font-weight: 600;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 220, 130, 0.18);
+          background: transparent;
+          color: #f5f5f5;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .pf-controls button:hover {
+          background: rgba(255, 255, 255, 0.04);
+          border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        /* Mini-mode (chip) body — hidden in expanded mode. */
+        .pf-mini { display: none; align-items: center; gap: 10px; }
+        .pf-mini-icon {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: #F0B400;
+          color: #0a0a0c;
+          font-weight: 800;
+          font-size: 12px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          animation: pfPulse 1.2s infinite ease-in-out;
+        }
+        .pf-mini-icon.done   { background: #10b981; color: white; animation: none; }
+        .pf-mini-icon.failed { background: #ef4444; color: white; animation: none; }
+        .pf-mini-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+        .pf-mini-label {
+          font-weight: 600;
+          color: #f5f5f5;
+          font-size: 13px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 240px;
+        }
+        .pf-mini-sub {
+          color: #9ca3af;
+          font-size: 11px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 240px;
+        }
+
+        /* Minimized state */
+        .pf-overlay.minimized {
+          background: transparent;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          inset: auto 16px 16px auto;
+          width: auto;
+          height: auto;
+          padding: 0;
+          pointer-events: none;
+          display: block;
+          animation: none;
+          opacity: 1;
+        }
+        .pf-overlay.minimized .pf-modal {
+          pointer-events: auto;
+          padding: 10px 14px;
+          border-radius: 999px;
+          max-width: 340px;
+          width: auto;
+          cursor: pointer;
+          transform: none;
+          box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(240, 180, 0, 0.28);
+          display: flex;
+          align-items: center;
+          animation: none;
+        }
+        .pf-overlay.minimized .pf-modal:hover {
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(240, 180, 0, 0.48);
+        }
+        .pf-overlay.minimized .pf-progress-body,
+        .pf-overlay.minimized .pf-controls .pf-hide {
+          display: none;
+        }
+        .pf-overlay.minimized .pf-controls {
+          position: static;
+          margin-left: 12px;
+        }
+        .pf-overlay.minimized .pf-controls button {
+          padding: 4px 10px;
+          font-size: 11px;
+        }
+        .pf-overlay.minimized .pf-mini { display: flex; }
       `}</style>
 
-      {title && (
-        <div className="pf-title">
-          {title}
-          <span className="pf-sub">{subtitle}</span>
+      <div className="pf-modal" role="dialog" aria-modal="true" aria-label={title ?? "Progress"}>
+        <div className="pf-mini">
+          <div className={`pf-mini-icon ${chipState.iconClass}`}>{chipState.icon}</div>
+          <div className="pf-mini-text">
+            <div className="pf-mini-label">{chipState.label}</div>
+            <div className="pf-mini-sub">{chipState.sub}</div>
+          </div>
         </div>
-      )}
 
-      <div className="pf-stepper">
-        {steps.map((s, i) => {
-          const digit = (() => {
-            if (s.status === "done") return "✓";
-            if (s.status === "failed") return "✗";
-            return String(i + 1);
-          })();
-          const isLast = i === steps.length - 1;
-          return (
-            <React.Fragment key={i}>
-              <div className={`pf-step ${s.status === "pending" ? "" : s.status}`}>
-                <div className="pf-dot">{digit}</div>
-                <span>{s.label}</span>
-              </div>
-              {!isLast && <div className="pf-conn" />}
-            </React.Fragment>
-          );
-        })}
+        <div className="pf-progress-body">
+          {title && (
+            <div className="pf-title">
+              {title}
+              <span className="pf-sub">{subtitle}</span>
+            </div>
+          )}
+
+          <div className="pf-stepper">{stepperNodes}</div>
+
+          {activeDetail && (
+            <div className="pf-detail" dangerouslySetInnerHTML={{ __html: activeDetail }} />
+          )}
+        </div>
+
+        <div className="pf-controls">
+          <button
+            type="button"
+            className="pf-hide"
+            onClick={(e) => { e.stopPropagation(); handleHide(); }}
+          >
+            Hide
+          </button>
+          <button
+            type="button"
+            className="pf-close"
+            onClick={(e) => { e.stopPropagation(); handleClose(); }}
+          >
+            Close
+          </button>
+        </div>
       </div>
-
-      {detail && (
-        <div className="pf-detail" dangerouslySetInnerHTML={{ __html: detail }} />
-      )}
     </div>
   );
+
+  // Render into document.body via portal so the overlay floats above any
+  // existing Radix Dialogs and isn't constrained by parent stacking
+  // contexts. Guard for SSR (no document at module load on server-render).
+  if (typeof document === "undefined") return null;
+  return createPortal(overlay, document.body);
 };
 
 export default ProgressFlow;

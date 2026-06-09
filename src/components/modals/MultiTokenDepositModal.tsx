@@ -369,21 +369,24 @@ export function MultiTokenDepositModal({
             </div>
           )}
 
-          {/* Progress Flow — appears once the user clicks Deposit and the
-              first step starts. Steps are pushed live by useVault.depositMultipleTokensWagmi's
-              onProgress callback (one per fresh ERC-20 approve + one for the
-              final deposit). Hidden when the array is empty. */}
+          {/* Progress Flow — renders as a floating overlay modal via portal
+              once the user clicks Deposit and the first step starts. Steps
+              are pushed live by useVault.depositMultipleTokensWagmi's
+              onProgress callback (one per fresh ERC-20 approve + the final
+              deposit). The ProgressFlow itself owns its Close/Hide buttons;
+              clicking Close clears the steps array and unmounts. */}
           {progressSteps.length > 0 && (
             <ProgressFlow
               title="Multi-token batch deposit"
               steps={progressSteps}
+              onClose={() => setProgressSteps([])}
             />
           )}
 
           {/* Action Buttons */}
           <div className="flex justify-between space-x-3 pt-4 border-t">
             <Button variant="outline" onClick={onClose} disabled={isLoading || isValidating}>
-              {progressSteps.some(s => s.status === 'done') && progressSteps.every(s => s.status === 'done' || s.status === 'failed') ? "Close" : "Cancel"}
+              Cancel
             </Button>
             <Button
               onClick={handleDeposit}

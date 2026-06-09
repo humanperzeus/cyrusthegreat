@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, ArrowUpDown } from "lucide-react";
 import { formatTokenBalance, convertToWei } from "@/lib/utils";
+import { ProgressFlow, ProgressStep } from "@/components/shared/ProgressFlow";
 
 interface Token {
   address: string;
@@ -33,7 +34,12 @@ interface MultiTokenWithdrawModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableTokens: Token[];
-  onWithdraw: (withdrawals: { token: string; amount: string }[]) => Promise<void>;
+  // onWithdraw accepts an optional onProgress callback used by useVault
+  // to push live step updates into this modal's floating ProgressFlow.
+  onWithdraw: (
+    withdrawals: { token: string; amount: string }[],
+    onProgress?: (steps: ProgressStep[]) => void,
+  ) => Promise<void>;
   isLoading?: boolean;
   rateLimitStatus?: {
     remaining: number;
@@ -53,6 +59,10 @@ export function MultiTokenWithdrawModal({
   const [withdrawals, setWithdrawals] = useState<WithdrawEntry[]>([]);
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isValidating, setIsValidating] = useState(false);
+  // Live step state for the floating ProgressFlow modal. Empty = not
+  // rendered. useVault.withdrawMultipleTokensWagmi pushes updates into
+  // this array via the onProgress callback we wire into handleWithdraw.
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -162,24 +172,25 @@ export function MultiTokenWithdrawModal({
     return withdrawals.length > 0 && withdrawals.every(d => d.isValid && d.amount);
   };
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
     if (!isFormValid()) {
       return;
     }
 
     setIsValidating(true);
+    setProgressSteps([]);
     try {
       const withdrawalData = withdrawals.map(d => ({
         token: d.token.address,
-        amount: d.amount
+        amount: d.amount,
       }));
 
-      onWithdraw(withdrawalData);
-      // Don't close modal immediately - let wagmi hooks handle transaction state
-      setTimeout(() => {
-        onClose();
-        setIsValidating(false);
-      }, 2000);
+      // Forward onProgress so useVault.withdrawMultipleTokensWagmi can
+      // drive the floating ProgressFlow modal live.
+      await onWithdraw(withdrawalData, (steps) => {
+        setProgressSteps(steps);
+      });
+      setIsValidating(false);
     } catch (error) {
       console.error("Withdrawal failed:", error);
       setIsValidating(false);
@@ -340,6 +351,17 @@ export function MultiTokenWithdrawModal({
             </div>
           )}
 
+          {/* Floating ProgressFlow overlay — rendered via portal into
+              document.body when there's at least one step. Owns its own
+              Hide/Close buttons; Close clears the steps and unmounts. */}
+          {progressSteps.length > 0 && (
+            <ProgressFlow
+              title="Multi-token batch withdraw"
+              steps={progressSteps}
+              onClose={() => setProgressSteps([])}
+            />
+          )}
+
           {/* Action Buttons */}
           <div className="flex justify-between space-x-3 pt-4 border-t">
             <Button variant="outline" onClick={onClose} disabled={isLoading || isValidating}>
@@ -349,7 +371,7 @@ export function MultiTokenWithdrawModal({
               onClick={handleWithdraw}
               disabled={!isFormValid() || isLoading || isValidating || (rateLimitStatus?.remaining === 0)}
             >
-              {isValidating ? "Validating..." : isLoading ? "Withdrawing..." : `Withdraw ${withdrawals.length} Tokens`}
+              {isValidating ? "Signing…" : isLoading ? "Withdrawing..." : `Withdraw ${withdrawals.length} Tokens`}
             </Button>
           </div>
         </div>

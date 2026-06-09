@@ -3079,10 +3079,26 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
   };
 
-  const withdrawMultipleTokensWagmi = async (withdrawals: { token: string; amount: string }[]) => {
+  const withdrawMultipleTokensWagmi = async (
+    withdrawals: { token: string; amount: string }[],
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     console.log('withdrawMultipleTokens called with:', withdrawals);
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
+
+    // Single-step progress indicator — withdraws are typically one tx
+    // (multi-token batch) plus optional 1-N ETH withdrawals. We keep it
+    // as a single live step and update the detail line as we move
+    // through validation → ETH withdraws → ERC-20 batch → done. The
+    // helpers below are no-ops when the caller didn't pass onProgress.
+    const _wSteps: _PS[] = [
+      { label: 'Withdraw vault tokens', status: 'pending' },
+    ];
+    const _wEmit = () => onProgress?.(_wSteps.map(s => ({ ...s })));
+    const _wRun  = (detail?: string) => { _wSteps[0].status = 'running'; if (detail !== undefined) _wSteps[0].detail = detail; _wEmit(); };
+    const _wDone = (detail?: string) => { _wSteps[0].status = 'done';    if (detail !== undefined) _wSteps[0].detail = detail; _wEmit(); };
+    const _wFail = (detail?: string) => { _wSteps[0].status = 'failed';  if (detail !== undefined) _wSteps[0].detail = detail; _wEmit(); };
 
     if (!address || !isConnected) {
       console.log('Wallet not connected - returning early');
@@ -3114,6 +3130,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       });
       return;
     }
+
+    // Validation passed — open the progress modal in the parent UI.
+    _wRun(`Preparing withdrawal of ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'}…`);
 
     try {
       // CRITICAL FIX: Separate ETH and ERC20 withdrawals for proper handling
@@ -3203,6 +3222,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       // CRITICAL FIX: Only handle ERC20 tokens in multi-token contract call (ETH handled separately above)
       if (tokenWithdrawals.length === 0) {
         console.log('✅ Only ETH withdrawals - no ERC20 tokens to process');
+        _wDone('All ETH withdrawals submitted');
         return; // All withdrawals were ETH, already processed above
       }
       
@@ -3253,6 +3273,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         return;
       }
 
+      _wRun(`Submitting withdrawMultipleTokens — open wallet to sign…`);
+
       // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
       await writeVaultContract({
         address: getActiveContractAddress() as `0x${string}`,
@@ -3265,6 +3287,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       });
 
       console.log('✅ Multi-token withdrawal transaction submitted via Wagmi hook');
+      _wDone(`Withdrawal of ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'} submitted to network`);
 
       toast({
         title: "Multi-token withdrawal initiated",
@@ -3275,6 +3298,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       // The transaction confirmation system will automatically refresh balances
 
     } catch (error: any) {
+      _wFail(error.message || 'Unknown error occurred');
       // Handle specific errors
       if (error.message?.includes('RateLimitExceeded')) {
         toast({
@@ -3300,10 +3324,24 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
   };
 
-  const transferMultipleTokensWagmi = async (transfers: { token: string; amount: string }[], to: string) => {
+  const transferMultipleTokensWagmi = async (
+    transfers: { token: string; amount: string }[],
+    to: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     console.log('transferMultipleTokens called with:', transfers, 'to:', to);
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
+
+    // Single-step progress indicator — mirrors withdraw. Helpers are
+    // no-ops when the caller didn't pass onProgress.
+    const _tSteps: _PS[] = [
+      { label: 'Internal transfer', status: 'pending' },
+    ];
+    const _tEmit = () => onProgress?.(_tSteps.map(s => ({ ...s })));
+    const _tRun  = (detail?: string) => { _tSteps[0].status = 'running'; if (detail !== undefined) _tSteps[0].detail = detail; _tEmit(); };
+    const _tDone = (detail?: string) => { _tSteps[0].status = 'done';    if (detail !== undefined) _tSteps[0].detail = detail; _tEmit(); };
+    const _tFail = (detail?: string) => { _tSteps[0].status = 'failed';  if (detail !== undefined) _tSteps[0].detail = detail; _tEmit(); };
 
     if (!address || !isConnected) {
       console.log('Wallet not connected - returning early');
@@ -3355,6 +3393,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         });
         return;
       }
+
+      // Validation passed — open the progress modal in the parent UI.
+      _tRun(`Preparing transfer of ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}…${to.slice(-4)}…`);
 
       // CRITICAL FIX: Separate ETH and ERC20 transfers for proper handling
       const ethTransfers = transfers.filter(transfer => {
@@ -3443,6 +3484,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       // CRITICAL FIX: Only handle ERC20 tokens in multi-token contract call (ETH handled separately above)
       if (tokenTransfers.length === 0) {
         console.log('✅ Only ETH transfers - no ERC20 tokens to process');
+        _tDone('All ETH transfers submitted');
         return; // All transfers were ETH, already processed above
       }
       
@@ -3481,6 +3523,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         return;
       }
 
+      _tRun(`Submitting transferMultipleTokensInternal — open wallet to sign…`);
+
       // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
       await writeVaultContract({
         address: getActiveContractAddress() as `0x${string}`,
@@ -3493,6 +3537,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       });
 
       console.log('✅ Multi-token transfer transaction submitted via Wagmi hook');
+      _tDone(`Transfer of ${transfers.length} token${transfers.length === 1 ? '' : 's'} submitted to network`);
 
       toast({
         title: "Multi-token transfer initiated",
@@ -3503,6 +3548,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       // The transaction confirmation system will automatically refresh balances
 
     } catch (error: any) {
+      _tFail(error.message || 'Unknown error occurred');
       // Handle specific errors
       if (error.message?.includes('RateLimitExceeded')) {
         toast({

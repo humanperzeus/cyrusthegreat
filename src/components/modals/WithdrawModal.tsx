@@ -14,7 +14,10 @@ interface WithdrawModalProps {
   onOpenChange: (open: boolean) => void;
   onWithdraw: (amount: string) => void;
   onTokenWithdraw?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
-  onMultiTokenWithdraw?: (withdrawals: { token: string; amount: string }[]) => Promise<void>;
+  onMultiTokenWithdraw?: (
+    withdrawals: { token: string; amount: string }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => Promise<void>;
   vaultBalance: string;
   currentFee?: string;
   isLoading: boolean;
@@ -72,9 +75,14 @@ export function WithdrawModal({
     }
   }, [open]);
 
-  const handleMultiTokenWithdraw = async (withdrawals: { token: string; amount: string }[]) => {
+  const handleMultiTokenWithdraw = async (
+    withdrawals: { token: string; amount: string }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
     if (onMultiTokenWithdraw) {
-      await onMultiTokenWithdraw(withdrawals);
+      // Forward onProgress so the MultiTokenWithdrawModal's ProgressFlow
+      // receives live step updates from useVault.
+      await onMultiTokenWithdraw(withdrawals, onProgress);
     }
   };
 

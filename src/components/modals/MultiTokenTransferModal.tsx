@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, ArrowRight, User } from "lucide-react";
 import { formatTokenBalance, convertToWei } from "@/lib/utils";
+import { ProgressFlow, ProgressStep } from "@/components/shared/ProgressFlow";
 
 interface Token {
   address: string;
@@ -33,7 +34,13 @@ interface MultiTokenTransferModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableTokens: Token[];
-  onTransfer: (transfers: { token: string; amount: string }[], to: string) => Promise<void>;
+  // onTransfer accepts an optional onProgress callback used by useVault
+  // to push live step updates into this modal's floating ProgressFlow.
+  onTransfer: (
+    transfers: { token: string; amount: string }[],
+    to: string,
+    onProgress?: (steps: ProgressStep[]) => void,
+  ) => Promise<void>;
   isLoading?: boolean;
   rateLimitStatus?: {
     remaining: number;
@@ -54,6 +61,10 @@ export function MultiTokenTransferModal({
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  // Live step state for the floating ProgressFlow modal — empty means
+  // not rendered. useVault.transferMultipleTokensWagmi pushes updates
+  // via the onProgress callback wired into handleTransfer.
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -178,24 +189,25 @@ export function MultiTokenTransferModal({
     return recipientValid && transfersValid;
   };
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
     if (!isFormValid()) {
       return;
     }
 
     setIsValidating(true);
+    setProgressSteps([]);
     try {
       const transferData = transfers.map(t => ({
         token: t.token.address,
-        amount: t.amount
+        amount: t.amount,
       }));
 
-      onTransfer(transferData, recipientAddress);
-      // Don't close modal immediately - let wagmi hooks handle transaction state
-      setTimeout(() => {
-        onClose();
-        setIsValidating(false);
-      }, 2000);
+      // Forward onProgress so useVault.transferMultipleTokensWagmi can
+      // drive the floating ProgressFlow modal live.
+      await onTransfer(transferData, recipientAddress, (steps) => {
+        setProgressSteps(steps);
+      });
+      setIsValidating(false);
     } catch (error) {
       console.error("Transfer failed:", error);
       setIsValidating(false);
@@ -379,6 +391,17 @@ export function MultiTokenTransferModal({
                 />
               </div>
             </div>
+          )}
+
+          {/* Floating ProgressFlow overlay — rendered via portal into
+              document.body when there's at least one step. Owns its own
+              Hide/Close buttons; Close clears the steps and unmounts. */}
+          {progressSteps.length > 0 && (
+            <ProgressFlow
+              title="Multi-token batch internal transfer"
+              steps={progressSteps}
+              onClose={() => setProgressSteps([])}
+            />
           )}
 
           {/* Action Buttons */}

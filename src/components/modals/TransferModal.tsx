@@ -14,7 +14,11 @@ interface TransferModalProps {
   onOpenChange: (open: boolean) => void;
   onTransfer: (to: string, amount: string) => void;
   onTokenTransfer?: (to: string, amount: string) => void;
-  onMultiTokenTransfer?: (transfers: { token: string; amount: string }[], to: string) => Promise<void>;
+  onMultiTokenTransfer?: (
+    transfers: { token: string; amount: string }[],
+    to: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => Promise<void>;
   vaultBalance: string;
   currentFee?: string;
   isLoading: boolean;
@@ -73,9 +77,15 @@ export function TransferModal({
     }
   }, [open]);
 
-  const handleMultiTokenTransfer = async (transfers: { token: string; amount: string }[], recipient: string) => {
+  const handleMultiTokenTransfer = async (
+    transfers: { token: string; amount: string }[],
+    recipient: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
     if (onMultiTokenTransfer) {
-      await onMultiTokenTransfer(transfers, recipient);
+      // Forward onProgress so the MultiTokenTransferModal's ProgressFlow
+      // receives live step updates from useVault.
+      await onMultiTokenTransfer(transfers, recipient, onProgress);
     }
   };
 
