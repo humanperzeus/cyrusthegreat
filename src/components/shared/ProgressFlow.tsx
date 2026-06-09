@@ -73,6 +73,23 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
 }) => {
   const [minimized, setMinimized] = useState(false);
   const prevOverflowRef = useRef<string>("");
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // ─── Stop pointerdown/mousedown bubbling to the document ───
+  // The ProgressFlow renders via createPortal to document.body, which puts
+  // its DOM tree OUTSIDE the parent Radix <Dialog>'s DialogContent
+  // subtree. Radix's DismissableLayer listens on document for pointerdown
+  // and fires onPointerDownOutside if the event target is not a
+  // descendant of DialogContent — which our overlay never is. The result:
+  // every click in our overlay (including Hide/Close) was being read as
+  // "click outside the parent dialog", closing the parent dialog before
+  // our own onClick handlers could run.
+  //
+  // Fix: catch pointerdown/mousedown at the overlay div in React's bubble
+  // phase and stop propagation. Document-level listeners never see the
+  // event, so DismissableLayer leaves the parent dialog alone. The click
+  // event still fires normally on the button so onClick still runs.
+  const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
 
   // Lock/unlock body scroll based on expanded state.
   useEffect(() => {
@@ -179,8 +196,11 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
 
   const overlay = (
     <div
+      ref={overlayRef}
       className={`pf-overlay open ${minimized ? "minimized" : ""} ${className ?? ""}`}
       onClick={handleOverlayClick}
+      onPointerDown={stopBubble}
+      onMouseDown={stopBubble}
     >
       <style>{`
         .pf-overlay {
