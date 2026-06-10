@@ -2228,128 +2228,35 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     onProgress?.([{ label: 'Preparing deposit…', status: 'running', detail: `Checking balances and allowances for ${deposits.length} token${deposits.length === 1 ? '' : 's'}…` }]);
 
     try {
-      // CRITICAL FIX: Separate ETH and ERC20 deposits for proper handling
-      const ethDeposits = deposits.filter(d => {
-        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
-        return tokenAddress === '0x0000000000000000000000000000000000000000';
-      });
+      // ONE atomic call (2026-06-10): Bank8 handles mixed native + ERC-20
+      // batches natively since the 2026-05-31 mixed-batch contract fix —
+      // native entries ride in the same tokens/amounts arrays as
+      // address(0) and the contract takes their sum from msg.value.
+      // The old frontend-side ETH-split (separate depositETH txs before
+      // the batch) predates that fix: it cost extra signatures + gas and
+      // its txs never appeared in the step indicator. Mirrors debug UI b8-4.
+      const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+      const tokens: string[] = [];
+      const amounts: string[] = [];
+      let nativeSum = 0n;
 
-      const tokenDeposits = deposits.filter(d => {
+      for (const d of deposits) {
         const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
-        return tokenAddress !== '0x0000000000000000000000000000000000000000';
-      });
-      
-      console.log('🔍 ETH deposits found:', ethDeposits.length);
-      console.log('🔍 Token deposits count:', tokenDeposits.length);
-      
-      // CRITICAL FIX: Handle ETH deposits separately from token deposits
-      if (ethDeposits.length > 0) {
-        console.log('💰 Processing ETH deposits separately...');
-        for (const ethDeposit of ethDeposits) {
-          try {
-            const ethAmount = parseEther(ethDeposit.amount);
-            console.log(`💰 Depositing ${formatEther(ethAmount)} ETH...`);
-            
-            // Get fresh fee for ETH deposit
-            const freshFee = await getCurrentFee();
-            if (!freshFee) {
-              throw new Error('Failed to get fresh fee for ETH deposit');
-            }
-            
-            // Calculate total ETH value (deposit amount + fee)
-            const totalEthValue = ethAmount + freshFee;
-            console.log(`💰 Total ETH value: ${formatEther(totalEthValue)} (deposit: ${formatEther(ethAmount)} + fee: ${formatEther(freshFee)})`);
-            
-            // Check wallet balance
-            if (walletBalance && walletBalance.value < totalEthValue) {
-              const required = formatEther(totalEthValue);
-              const available = formatEther(walletBalance.value);
-              toast({
-                title: "Insufficient Balance for ETH Deposit",
-                description: `You need ${required} ETH (${formatEther(ethAmount)} + ${formatEther(freshFee)} fee). You have ${available} ETH.`,
-                variant: "destructive",
-              });
-              return;
-            }
-            
-            // ✅ NEW: PRE-SIMULATION - Check if ETH deposit will succeed
-            console.log('🔍 Pre-simulating ETH deposit transaction...');
-            try {
-              const { request } = await publicClient.simulateContract({
-                address: getActiveContractAddress() as `0x${string}`,
-                abi: VAULT_ABI,
-                functionName: 'depositETH',
-                args: [],
-                account: address,
-                value: totalEthValue,
-              });
-              console.log('✅ ETH deposit pre-simulation successful');
-            } catch (simulationError) {
-              console.error('❌ ETH deposit pre-simulation failed:', simulationError);
-              toast({
-                title: "ETH Deposit Will Fail",
-                description: "Pre-simulation failed - transaction would not succeed",
-                variant: "destructive",
-              });
-              return; // ❌ Block transaction - user saves gas
-            }
-            
-            // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
-            await writeVaultContract({
-              address: getActiveContractAddress() as `0x${string}`,
-              abi: VAULT_ABI,
-              functionName: 'depositETH',
-              args: [],
-              chain: getTargetChain(),
-              account: address,
-              value: totalEthValue, // Send deposit amount + fee
-            });
-            
-            console.log('✅ ETH deposit transaction submitted via Wagmi hook');
-            toast({
-              title: "ETH Deposit Initiated",
-              description: `Depositing ${formatEther(ethAmount)} ETH to vault...`,
-            });
-            
-          } catch (error) {
-            console.error('❌ ETH deposit failed:', error);
-            toast({
-              title: "ETH Deposit Failed",
-              description: error instanceof Error ? error.message : "Unknown error occurred",
-              variant: "destructive",
-            });
-            return;
-          }
+        if (tokenAddress === ZERO_ADDRESS) {
+          // Native (ETH/BNB/HYPE…) — always 18 decimals on our chains.
+          const wei = parseEther(d.amount);
+          tokens.push(ZERO_ADDRESS);
+          amounts.push(wei.toString());
+          nativeSum += wei;
+        } else {
+          const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
+          const decimals = tokenInfo?.decimals || 18;
+          tokens.push(tokenAddress);
+          amounts.push(convertToWei(d.amount, decimals).toString());
         }
       }
 
-      // CRITICAL FIX: Only handle ERC20 tokens in multi-token contract call (ETH handled separately above)
-      if (tokenDeposits.length === 0) {
-        console.log('✅ Only ETH deposits - no ERC20 tokens to process');
-        return; // All deposits were ETH, already processed above
-      }
-      
-      console.log('🔄 Processing ERC20 token deposits...');
-      
-      // Prepare contract call data for ERC20 tokens only
-      const tokens = tokenDeposits.map(d => typeof d.token === 'string' ? d.token : d.token.address);
-      const amounts = tokenDeposits.map(d => {
-        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
-        const tokenInfo = walletTokens.find(t => t.address === tokenAddress);
-        const decimals = tokenInfo?.decimals || 18;
-        return convertToWei(d.amount, decimals).toString();
-      });
-
-      // Calculate ETH value to send (ETH deposit amount only)
-      let ethValueToSend = parseEther('0');
-      if (ethDeposits.length > 0) {
-        // Sum up all ETH deposits
-        const totalEthDepositAmount = ethDeposits.reduce((sum, deposit) => {
-          return sum + parseEther(deposit.amount);
-        }, parseEther('0'));
-        ethValueToSend = totalEthDepositAmount;
-        console.log('💰 Total ETH deposit amount:', formatEther(ethValueToSend));
-      }
+      console.log(`🔍 Atomic batch: ${tokens.length} entries, native sum ${formatEther(nativeSum)}`);
 
       // CRITICAL FIX: Robust fee management for multi-token deposits
       let feeInWei = currentFee ? (currentFee as bigint) : 0n;
@@ -2368,10 +2275,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       }
       
       console.log('💸 Final fee value:', formatEther(feeInWei));
-      
-      // Calculate total ETH value (ETH deposit + fee)
-      const totalEthValue = ethValueToSend + feeInWei;
-      console.log('💵 Total ETH value (ETH deposit + fee):', formatEther(totalEthValue));
+
+      // msg.value = sum of native deposits + dynamic fee — exactly what
+      // the contract's mixed-batch accounting expects.
+      const totalEthValue = nativeSum + feeInWei;
+      console.log('💵 Total msg.value (native sum + fee):', formatEther(totalEthValue));
+
+      // Wallet must cover natives + fee (gas is on top, wallet estimates that).
+      if (walletBalance && walletBalance.value < totalEthValue) {
+        toast({
+          title: "Insufficient Balance",
+          description: `You need ${formatEther(totalEthValue)} ETH (deposits + fee). You have ${formatEther(walletBalance.value)} ETH.`,
+          variant: "destructive",
+        });
+        return;
+      }
 
       // Check and handle approvals for all token deposits
       console.log('🔐 Checking approvals for token deposits...');
@@ -2550,7 +2468,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       console.log('Tokens:', tokens);
       console.log('Amounts:', amounts);
       console.log('Total ETH value to send:', formatEther(totalEthValue));
-      console.log('ETH deposit included:', ethDeposits.length > 0);
+      console.log('Native included:', nativeSum > 0n);
       console.log('Token deposits count:', approvalTokenDeposits.length);
 
       // Progress emit: final deposit step is running
@@ -3171,67 +3089,27 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     _wRun(`Preparing withdrawal of ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'}…`);
 
     try {
-      // CRITICAL FIX: Separate ETH and ERC20 withdrawals for proper handling
-      const ethWithdrawals = withdrawals.filter(withdrawal => {
-        const tokenAddress = typeof withdrawal.token === 'string' ? withdrawal.token : withdrawal.token.address;
-        return tokenAddress === '0x0000000000000000000000000000000000000000';
-      });
-      
-      const tokenWithdrawals = withdrawals.filter(withdrawal => {
-        const tokenAddress = typeof withdrawal.token === 'string' ? withdrawal.token : withdrawal.token.address;
-        return tokenAddress !== '0x0000000000000000000000000000000000000000';
-      });
-      
-      console.log('🔍 ETH withdrawals found:', ethWithdrawals.length);
-      console.log('🔍 Token withdrawals count:', tokenWithdrawals.length);
-      
-      // CRITICAL FIX: Handle ETH withdrawals separately from token withdrawals
-      if (ethWithdrawals.length > 0) {
-        console.log('💰 Processing ETH withdrawals separately...');
-        for (const ethWithdrawal of ethWithdrawals) {
-          try {
-            const ethAmount = parseEther(ethWithdrawal.amount);
-            console.log(`💰 Withdrawing ${formatEther(ethAmount)} ETH...`);
-            
-            // Get fresh fee for ETH withdrawal
-            const freshFee = await getCurrentFee();
-            if (!freshFee) {
-              throw new Error('Failed to get fresh fee for ETH withdrawal');
-            }
-            
-            // Execute ETH withdrawal
-            const ethWithdrawalHash = await writeContract(config, {
-              address: getActiveContractAddress() as `0x${string}`,
-              abi: VAULT_ABI,
-              functionName: 'withdrawETH',
-              args: [ethAmount],
-            });
-            
-            console.log('✅ ETH withdrawal transaction submitted:', ethWithdrawalHash);
-            toast({
-              title: "ETH Withdrawal Initiated",
-              description: `Withdrawing ${formatEther(ethAmount)} ETH from vault...`,
-            });
-            
-          } catch (error) {
-            console.error('❌ ETH withdrawal failed:', error);
-            toast({
-              title: "ETH Withdrawal Failed",
-              description: error instanceof Error ? error.message : "Unknown error occurred",
-              variant: "destructive",
-            });
-            return;
-          }
-        }
-      }
+      // ONE atomic call (2026-06-10): Bank8's withdrawMultipleTokens
+      // handles mixed native + ERC-20 batches since the 2026-05-31
+      // mixed-batch contract fix — native rides in the arrays as
+      // address(0). The old frontend-side ETH-split (separate
+      // withdrawETH txs first) predates that fix; it also broke mixed
+      // withdraws outright because native isn't in vaultTokens and the
+      // ERC-20 validation loop rejected it. Mirrors debug UI b8-7.
+      const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+      const tokens: string[] = [];
+      const amounts: string[] = [];
 
-      // CRITICAL FIX: Only validate ERC20 tokens (ETH handled separately above)
-      if (tokenWithdrawals.length > 0) {
-        console.log('🔄 Validating ERC20 token withdrawals...');
-        for (const withdrawal of tokenWithdrawals) {
-          const tokenAddress = typeof withdrawal.token === 'string' ? withdrawal.token : withdrawal.token.address;
+      for (const withdrawal of withdrawals) {
+        const tokenAddress = typeof withdrawal.token === 'string' ? withdrawal.token : withdrawal.token.address;
+        if (tokenAddress === ZERO_ADDRESS) {
+          // Native — always 18 decimals on our chains. Vault balance for
+          // native is validated by the picker UI (it shows the live
+          // vaulted balance); the pre-flight below catches any race.
+          tokens.push(ZERO_ADDRESS);
+          amounts.push(parseEther(withdrawal.amount).toString());
+        } else {
           const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
-
           if (!tokenInfo) {
             toast({
               title: "Token not found in vault",
@@ -3240,38 +3118,20 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
             });
             return;
           }
-
-          const vaultBalance = parseFloat(tokenInfo.balance);
-          const withdrawalAmount = parseFloat(withdrawal.amount);
-
-          if (withdrawalAmount > vaultBalance) {
+          if (parseFloat(withdrawal.amount) > parseFloat(tokenInfo.balance)) {
             toast({
               title: "Insufficient vault balance",
-              description: `You only have ${vaultBalance} ${tokenInfo.symbol} in your vault`,
+              description: `You only have ${tokenInfo.balance} ${tokenInfo.symbol} in your vault`,
               variant: "destructive",
             });
             return;
           }
+          tokens.push(tokenAddress);
+          amounts.push(convertToWei(withdrawal.amount, tokenInfo.decimals || 18).toString());
         }
       }
 
-      // CRITICAL FIX: Only handle ERC20 tokens in multi-token contract call (ETH handled separately above)
-      if (tokenWithdrawals.length === 0) {
-        console.log('✅ Only ETH withdrawals - no ERC20 tokens to process');
-        _wDone('All ETH withdrawals submitted');
-        return; // All withdrawals were ETH, already processed above
-      }
-      
-      console.log('🔄 Processing ERC20 token withdrawals...');
-      
-      // Prepare contract call data for ERC20 tokens only
-      const tokens = tokenWithdrawals.map(d => typeof d.token === 'string' ? d.token : d.token.address);
-      const amounts = tokenWithdrawals.map(d => {
-        const tokenAddress = typeof d.token === 'string' ? d.token : d.token.address;
-        const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
-        const decimals = tokenInfo?.decimals || 18;
-        return convertToWei(d.amount, decimals).toString();
-      });
+      console.log(`🔍 Atomic withdraw batch: ${tokens.length} entries`);
 
       // Get fee for the transaction
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
@@ -3433,67 +3293,25 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       // Validation passed — open the progress modal in the parent UI.
       _tRun(`Preparing transfer of ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}…${to.slice(-4)}…`);
 
-      // CRITICAL FIX: Separate ETH and ERC20 transfers for proper handling
-      const ethTransfers = transfers.filter(transfer => {
-        const tokenAddress = typeof transfer.token === 'string' ? transfer.token : transfer.token.address;
-        return tokenAddress === '0x0000000000000000000000000000000000000000';
-      });
-      
-      const tokenTransfers = transfers.filter(transfer => {
-        const tokenAddress = typeof transfer.token === 'string' ? transfer.token : transfer.token.address;
-        return tokenAddress !== '0x0000000000000000000000000000000000000000';
-      });
-      
-      console.log('🔍 ETH transfers found:', ethTransfers.length);
-      console.log('🔍 Token transfers count:', tokenTransfers.length);
-      
-      // CRITICAL FIX: Handle ETH transfers separately from token transfers
-      if (ethTransfers.length > 0) {
-        console.log('💰 Processing ETH transfers separately...');
-        for (const ethTransfer of ethTransfers) {
-          try {
-            const ethAmount = parseEther(ethTransfer.amount);
-            console.log(`💰 Transferring ${formatEther(ethAmount)} ETH to ${to}...`);
-            
-            // Get fresh fee for ETH transfer
-            const freshFee = await getCurrentFee();
-            if (!freshFee) {
-              throw new Error('Failed to get fresh fee for ETH transfer');
-            }
-            
-            // Execute ETH transfer
-            const ethTransferHash = await writeContract(config, {
-              address: getActiveContractAddress() as `0x${string}`,
-              abi: VAULT_ABI,
-              functionName: 'transferETH',
-              args: [to, ethAmount],
-            });
-            
-            console.log('✅ ETH transfer transaction submitted:', ethTransferHash);
-            toast({
-              title: "ETH Transfer Initiated",
-              description: `Transferring ${formatEther(ethAmount)} ETH to ${to}...`,
-            });
-            
-          } catch (error) {
-            console.error('❌ ETH transfer failed:', error);
-            toast({
-              title: "ETH Transfer Failed",
-              description: error instanceof Error ? error.message : "Unknown error occurred",
-              variant: "destructive",
-            });
-            return;
-          }
-        }
-      }
-      
-      // CRITICAL FIX: Only validate ERC20 tokens (ETH handled separately above)
-      if (tokenTransfers.length > 0) {
-        console.log('🔄 Validating ERC20 token transfers...');
-        for (const transfer of tokenTransfers) {
-          const tokenAddress = typeof transfer.token === 'string' ? transfer.token : transfer.token.address;
-          const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
+      // ONE atomic call (2026-06-10): Bank8's transferMultipleTokensInternal
+      // handles mixed native + ERC-20 batches since the 2026-05-31
+      // mixed-batch contract fix — native rides in the arrays as
+      // address(0). The old frontend-side ETH-split (separate transferETH
+      // txs first) predates that fix and broke mixed transfers because
+      // native isn't in vaultTokens. Mirrors debug UI b8-11.
+      const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+      const tokens: string[] = [];
+      const amounts: string[] = [];
 
+      for (const transfer of transfers) {
+        const tokenAddress = typeof transfer.token === 'string' ? transfer.token : transfer.token.address;
+        if (tokenAddress === ZERO_ADDRESS) {
+          // Native — always 18 decimals on our chains. Balance is
+          // validated by the picker UI; pre-flight catches any race.
+          tokens.push(ZERO_ADDRESS);
+          amounts.push(parseEther(transfer.amount).toString());
+        } else {
+          const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
           if (!tokenInfo) {
             toast({
               title: "Token not found in vault",
@@ -3502,38 +3320,20 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
             });
             return;
           }
-
-          const vaultBalance = parseFloat(tokenInfo.balance);
-          const transferAmount = parseFloat(transfer.amount);
-
-          if (transferAmount > vaultBalance) {
+          if (parseFloat(transfer.amount) > parseFloat(tokenInfo.balance)) {
             toast({
               title: "Insufficient vault balance",
-              description: `You only have ${vaultBalance} ${tokenInfo.symbol} in your vault`,
+              description: `You only have ${tokenInfo.balance} ${tokenInfo.symbol} in your vault`,
               variant: "destructive",
             });
             return;
           }
+          tokens.push(tokenAddress);
+          amounts.push(convertToWei(transfer.amount, tokenInfo.decimals || 18).toString());
         }
       }
 
-      // CRITICAL FIX: Only handle ERC20 tokens in multi-token contract call (ETH handled separately above)
-      if (tokenTransfers.length === 0) {
-        console.log('✅ Only ETH transfers - no ERC20 tokens to process');
-        _tDone('All ETH transfers submitted');
-        return; // All transfers were ETH, already processed above
-      }
-      
-      console.log('🔄 Processing ERC20 token transfers...');
-      
-      // Prepare contract call data for ERC20 tokens only
-      const tokens = tokenTransfers.map(t => typeof t.token === 'string' ? t.token : t.token.address);
-      const amounts = tokenTransfers.map(t => {
-        const tokenAddress = typeof t.token === 'string' ? t.token : t.token.address;
-        const tokenInfo = vaultTokens.find(t => t.address === tokenAddress);
-        const decimals = tokenInfo?.decimals || 18;
-        return convertToWei(t.amount, decimals).toString();
-      });
+      console.log(`🔍 Atomic transfer batch: ${tokens.length} entries → ${to}`);
 
       // Get fee for the transaction
       const feeInWei = currentFee ? (currentFee as bigint) : 0n;
