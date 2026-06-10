@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Info, Loader2, Coins, Zap } from "lucide-react";
+import { useProgress } from "@/contexts/ProgressContext";
 import { getChainConfig } from "@/config/web3";
 import { MultiTokenDepositModal } from "./MultiTokenDepositModal";
 import { RateLimitStatusDisplay } from "../shared/RateLimitStatusDisplay";
@@ -15,8 +16,20 @@ import { RateLimitStatusDisplay } from "../shared/RateLimitStatusDisplay";
 interface DepositModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onDeposit: (amount: string) => void;
-  onTokenDeposit?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
+  // Single-asset paths now accept an optional onProgress channel so the
+  // submit handler can drive the App-level ProgressFlow, matching the
+  // multi-token path. The callbacks are unchanged for any caller that
+  // doesn't pass the second arg.
+  onDeposit: (
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
+  onTokenDeposit?: (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
   onMultiTokenDeposit?: (
     deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[],
     onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
@@ -77,6 +90,12 @@ export function DepositModal({
     availableTokensCount: availableTokens.length
   });
   const [amount, setAmount] = useState("");
+  // Single-asset deposit owns a ProgressFlow session in the same way
+  // the multi-token sub-modal does. startProgress() returns an id that
+  // scopes all subsequent updates so a stale prior session can't
+  // repaint a newer one. `progressActive` is the in-flight backstop —
+  // mirror of the lock used to disable the submit button.
+  const { startProgress, updateProgress, active: progressActive } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -350,16 +369,34 @@ export function DepositModal({
           {!isMultiTokenMode && (
             <Button
               onClick={() => {
+                // Start a global ProgressFlow session — same pattern as the
+                // multi-token sub-modal. The seed step gives instant
+                // feedback BEFORE the dialog closes so the user never
+                // sees a frame without state.
+                const title = isTokenDeposit && tokenSymbol
+                  ? `Single ${tokenSymbol} deposit`
+                  : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} deposit`;
+                const sessionId = startProgress(
+                  title,
+                  [{ label: 'Preparing deposit…', status: 'running', detail: `Submitting ${amount}…` }],
+                );
+                // Close the dialog so the App-level ProgressFlow is the
+                // only floating UI and the page is interactive again.
+                onOpenChange(false);
+                // Fire the deposit in the background — useVault pushes
+                // step updates through the onProgress callback we hand it.
                 if (isTokenDeposit && tokenAddress && tokenSymbol && onTokenDeposit) {
-                  onTokenDeposit(tokenAddress, amount, tokenSymbol);
+                  onTokenDeposit(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
                 } else {
-                  onDeposit(amount);
+                  onDeposit(amount, (steps) => updateProgress(sessionId, steps));
                 }
               }}
-              disabled={isLoading || !amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
+              disabled={isLoading || progressActive || !amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
               className="w-full"
             >
-              {isSimulating ? (
+              {progressActive ? (
+                "Waiting for pending transaction…"
+              ) : isSimulating ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Checking...

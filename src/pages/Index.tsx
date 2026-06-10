@@ -220,9 +220,14 @@ const Index = () => {
   };
 
   // Handle token deposit from modal
-  const handleTokenDepositFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
+  const handleTokenDepositFromModal = (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
     // Call the smart deposit function with complete allowance flow (Wagmi-based)
-    depositTokenSmartWagmi(tokenAddress, amount, tokenSymbol);
+    depositTokenSmartWagmi(tokenAddress, amount, tokenSymbol, onProgress);
   };
 
   // Handle multi-token deposit from modal
@@ -243,9 +248,14 @@ const Index = () => {
   };
 
   // Handle token withdraw from modal
-  const handleTokenWithdrawFromModal = (tokenAddress: string, amount: string, tokenSymbol: string) => {
+  const handleTokenWithdrawFromModal = (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
     // Call the token withdraw function (Wagmi-based)
-    withdrawTokenWagmi(tokenAddress, amount, tokenSymbol);
+    withdrawTokenWagmi(tokenAddress, amount, tokenSymbol, onProgress);
   };
 
   // Token transfer handler
@@ -260,9 +270,13 @@ const Index = () => {
   };
 
   // Token transfer from modal (for ETH compatibility - keeps existing logic)
-  const handleTokenTransferFromModal = (to: string, amount: string) => {
+  const handleTokenTransferFromModal = (
+    to: string,
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
     if (tokenTransferInfo) {
-      transferInternalTokenWagmi(tokenTransferInfo.address, to, amount, tokenTransferInfo.symbol);
+      transferInternalTokenWagmi(tokenTransferInfo.address, to, amount, tokenTransferInfo.symbol, onProgress);
     }
   };
 

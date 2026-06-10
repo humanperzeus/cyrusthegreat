@@ -8,12 +8,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowUpDown, Loader2, Info, Coins } from "lucide-react";
 import { getChainConfig } from "@/config/web3";
 import { MultiTokenWithdrawModal } from "./MultiTokenWithdrawModal";
+import { useProgress } from "@/contexts/ProgressContext";
 
 interface WithdrawModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onWithdraw: (amount: string) => void;
-  onTokenWithdraw?: (tokenAddress: string, amount: string, tokenSymbol: string) => void;
+  // Optional onProgress channel for the App-level ProgressFlow — see
+  // DepositModal for the rationale.
+  onWithdraw: (
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
+  onTokenWithdraw?: (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
   onMultiTokenWithdraw?: (
     withdrawals: { token: string; amount: string }[],
     onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
@@ -61,6 +72,8 @@ export function WithdrawModal({
   rateLimitStatus
 }: WithdrawModalProps) {
   const [amount, setAmount] = useState("");
+  // ProgressFlow session wiring — see DepositModal for the pattern.
+  const { startProgress, updateProgress, active: progressActive } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -235,16 +248,26 @@ export function WithdrawModal({
                 </Button>
                 <Button
                   onClick={() => {
+                    const title = isTokenWithdraw && tokenSymbol
+                      ? `Single ${tokenSymbol} withdraw`
+                      : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} withdraw`;
+                    const sessionId = startProgress(
+                      title,
+                      [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${amount}…` }],
+                    );
+                    onOpenChange(false);
                     if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
-                      onTokenWithdraw(tokenAddress, amount, tokenSymbol);
+                      onTokenWithdraw(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
                     } else {
-                      onWithdraw(amount);
+                      onWithdraw(amount, (steps) => updateProgress(sessionId, steps));
                     }
                   }}
-                  disabled={!amount || isLoading || isSimulating}
+                  disabled={!amount || isLoading || isSimulating || progressActive}
                   className="flex-1"
                 >
-                  {isSimulating ? (
+                  {progressActive ? (
+                    "Waiting for pending transaction…"
+                  ) : isSimulating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Checking...

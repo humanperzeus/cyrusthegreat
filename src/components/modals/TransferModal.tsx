@@ -8,12 +8,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowUpDown, Loader2, Shield, Info, Coins } from "lucide-react";
 import { getChainConfig } from "@/config/web3";
 import { MultiTokenTransferModal } from "./MultiTokenTransferModal";
+import { useProgress } from "@/contexts/ProgressContext";
 
 interface TransferModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onTransfer: (to: string, amount: string) => void;
-  onTokenTransfer?: (to: string, amount: string) => void;
+  // Optional onProgress channel for the App-level ProgressFlow — see
+  // DepositModal for the rationale.
+  onTransfer: (
+    to: string,
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
+  onTokenTransfer?: (
+    to: string,
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
   onMultiTokenTransfer?: (
     transfers: { token: string; amount: string }[],
     to: string,
@@ -63,6 +74,8 @@ export function TransferModal({
 }: TransferModalProps) {
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
+  // ProgressFlow session wiring — see DepositModal for the pattern.
+  const { startProgress, updateProgress, active: progressActive } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -91,9 +104,21 @@ export function TransferModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (to && amount) {
-      onTransfer(to, amount);
-      // Don't reset form here - wait for transaction confirmation
+    if (!to || !amount) return;
+    // Start a global session, seed it with a preparing step, close the
+    // dialog so the App-level ProgressFlow is the only floating UI.
+    const title = isTokenTransfer && tokenSymbol
+      ? `Single ${tokenSymbol} transfer`
+      : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} transfer`;
+    const sessionId = startProgress(
+      title,
+      [{ label: 'Preparing transfer…', status: 'running', detail: `Submitting ${amount} → ${to.slice(0, 6)}…${to.slice(-4)}…` }],
+    );
+    onOpenChange(false);
+    if (isTokenTransfer && onTokenTransfer) {
+      onTokenTransfer(to, amount, (steps) => updateProgress(sessionId, steps));
+    } else {
+      onTransfer(to, amount, (steps) => updateProgress(sessionId, steps));
     }
   };
 
@@ -258,17 +283,13 @@ export function TransferModal({
                 Cancel
               </Button>
               <Button
-                onClick={() => {
-                  if (isTokenTransfer && onTokenTransfer) {
-                    onTokenTransfer(to, amount);
-                  } else {
-                    onTransfer(to, amount);
-                  }
-                }}
-                disabled={!to || !amount || isLoading || isSimulating}
+                onClick={handleSubmit}
+                disabled={!to || !amount || isLoading || isSimulating || progressActive}
                 className="flex-1"
               >
-                {isSimulating ? (
+                {progressActive ? (
+                  "Waiting for pending transaction…"
+                ) : isSimulating ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                     Checking...

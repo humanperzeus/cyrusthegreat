@@ -1492,7 +1492,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   };
 
   // NEW: Wagmi-based ETH withdrawal for comparison with custom implementation
-  const withdrawETHWagmi = async (amount: string) => {
+  const withdrawETHWagmi = async (
+    amount: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     if (!amount || isNaN(Number(amount))) {
       toast({
         title: "Invalid Amount",
@@ -1570,28 +1573,49 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       setIsSimulating(false);
       setIsLoading(true);
       
-      debugLog('Withdrawing ETH via Wagmi:', { 
-        amount, 
+      debugLog('Withdrawing ETH via Wagmi:', {
+        amount,
         amountInWei: amountInWei.toString(),
         feeInWei: feeInWei.toString()
       });
-      
-      // CRITICAL: Use writeVaultContract (Wagmi hook) for automatic transaction management
-      await writeVaultContract({
-        address: getActiveContractAddress() as `0x${string}`,
-        abi: VAULT_ABI as any,
-        functionName: 'withdrawETH',
-        args: [amountInWei],
-        value: feeInWei, // Send fee with withdrawal transaction
-        chain: getTargetChain(),
-        account: address,
-      });
 
-      toast({
-        title: "Withdrawal Initiated (Wagmi)",
-        description: `Withdrawing ${amount} ETH from vault...`,
-      });
-      
+      // 3-step lifecycle, same shape as depositETHWagmi.
+      const lc = buildTxLifecycle(onProgress);
+      try {
+        lc.set(0, 'running', `Open your wallet and sign withdrawETH(${amount})…`);
+        const txHash = await writeVaultContractAsync({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI as any,
+          functionName: 'withdrawETH',
+          args: [amountInWei],
+          value: feeInWei,
+          chain: getTargetChain(),
+          account: address,
+        });
+        lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+        lc.advance(1);
+        lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+        const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+        if (receipt.status !== 'success') {
+          throw new Error(`withdrawETH reverted on-chain (block ${receipt.blockNumber})`);
+        }
+        lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+
+        toast({
+          title: "Withdrawal Confirmed",
+          description: `Withdrew ${amount} ETH from vault`,
+        });
+
+        lc.advance(2);
+        const finality = getChainFinalityDelay();
+        lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, finality));
+        lc.set(2, 'done', 'Balances updated ✓');
+      } catch (innerError: any) {
+        lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Withdrawal failed');
+        throw innerError;
+      }
+
     } catch (error) {
       debugError('Withdrawal error (Wagmi):', error);
       toast({
@@ -1719,7 +1743,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   };
 
   // NEW: Wagmi-based ETH transfer for comparison with custom implementation
-  const transferInternalETHWagmi = async (to: string, amount: string) => {
+  const transferInternalETHWagmi = async (
+    to: string,
+    amount: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     if (!to || !amount || isNaN(Number(amount))) {
       toast({
         title: "Invalid Input",
@@ -1797,29 +1825,50 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       setIsSimulating(false);
       setIsLoading(true);
       
-      debugLog('Transferring ETH via Wagmi:', { 
-        to, 
-        amount, 
+      debugLog('Transferring ETH via Wagmi:', {
+        to,
+        amount,
         amountInWei: amountInWei.toString(),
         feeInWei: feeInWei.toString()
       });
-      
-      // CRITICAL: Use writeVaultContract (Wagmi hook) for automatic transaction management
-      await writeVaultContract({
-        address: getActiveContractAddress() as `0x${string}`,
-        abi: VAULT_ABI as any,
-        functionName: 'transferInternalETH',
-        args: [to as `0x${string}`, amountInWei],
-        value: feeInWei, // Send fee with transfer transaction
-        chain: getTargetChain(),
-        account: address,
-      });
 
-      toast({
-        title: "Transfer Initiated (Wagmi)",
-        description: `Transferring ${amount} ETH to ${to.slice(0, 6)}...${to.slice(-4)} (fee: ${weiToEtherFullPrecision(feeInWei)} ETH)`,
-      });
-      
+      // 3-step lifecycle, same shape as the deposit/withdraw twins.
+      const lc = buildTxLifecycle(onProgress);
+      try {
+        lc.set(0, 'running', `Open your wallet and sign transferInternalETH(${amount} → ${to.slice(0, 6)}…${to.slice(-4)})…`);
+        const txHash = await writeVaultContractAsync({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI as any,
+          functionName: 'transferInternalETH',
+          args: [to as `0x${string}`, amountInWei],
+          value: feeInWei,
+          chain: getTargetChain(),
+          account: address,
+        });
+        lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+        lc.advance(1);
+        lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+        const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+        if (receipt.status !== 'success') {
+          throw new Error(`transferInternalETH reverted on-chain (block ${receipt.blockNumber})`);
+        }
+        lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+
+        toast({
+          title: "Transfer Confirmed",
+          description: `Transferred ${amount} ETH to ${to.slice(0, 6)}...${to.slice(-4)}`,
+        });
+
+        lc.advance(2);
+        const finality = getChainFinalityDelay();
+        lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, finality));
+        lc.set(2, 'done', 'Balances updated ✓');
+      } catch (innerError: any) {
+        lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Transfer failed');
+        throw innerError;
+      }
+
     } catch (error) {
       debugError('Transfer error (Wagmi):', error);
       toast({
@@ -2072,7 +2121,19 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   };
 
   // NEW: Smart token deposit with automatic allowance checking and auto-deposit
-  const depositTokenSmartWagmi = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
+  //
+  // onProgress (2026-06-10): forwarded to executeTokenDeposit when the
+  // token is already approved (the common case — max-approve is sticky).
+  // For the FIRST deposit of a token that needs a fresh approve, the
+  // legacy executeTokenApprovalAndDeposit setTimeout state machine
+  // still owns the flow and shows only its toast-based feedback. That
+  // path is a separate refactor — flagged in the commit message.
+  const depositTokenSmartWagmi = async (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     if (!address) {
       toast({
         title: "Error",
@@ -2134,8 +2195,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       // Step 4: Check if approval is needed
       if ((currentAllowance as bigint) >= amountWei) {
         debugLog(`✅ Sufficient allowance (${currentAllowance}), proceeding directly to deposit`);
-        // Skip approval, go straight to deposit
-        await executeTokenDeposit(tokenAddress, amountWei, tokenSymbol);
+        // Skip approval, go straight to deposit — wire progress through.
+        await executeTokenDeposit(tokenAddress, amountWei, tokenSymbol, onProgress);
       } else {
         debugLog(`❌ Insufficient allowance (${currentAllowance} < ${amountWei}), approval needed`);
         // Need approval first, then auto-deposit after confirmation
@@ -2185,6 +2246,41 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   // the ProgressFlow component using each setSteps snapshot.
   type _PSStatus = 'pending' | 'running' | 'done' | 'failed';
   type _PS = { label: string; status: _PSStatus; detail?: string };
+
+  // Single-asset tx lifecycle helper — used by depositETHWagmi /
+  // withdrawETHWagmi / transferInternalETHWagmi and their token-side
+  // twins. Builds the canonical 3-step indicator
+  //
+  //   [0] Sign in wallet      — running while wallet popup is open
+  //   [1] Confirm on-chain    — running while in mempool, ✓ on receipt
+  //   [2] Finalize & refresh  — running through getChainFinalityDelay,
+  //                             ✓ after balances are refetched
+  //
+  // and returns a small driver object so each hook's body becomes
+  // mechanical. The helper is a no-op when onProgress is undefined,
+  // so existing callers (e.g. internal helpers that don't drive a
+  // popup) keep working untouched.
+  const buildTxLifecycle = (onProgress?: (steps: _PS[]) => void) => {
+    const steps: _PS[] = [
+      { label: 'Sign in wallet',     status: 'pending' },
+      { label: 'Confirm on-chain',   status: 'pending' },
+      { label: 'Finalize & refresh', status: 'pending' },
+    ];
+    let phase = 0;
+    const emit = () => onProgress?.(steps.map(s => ({ ...s })));
+    return {
+      // Move the "currently running step" pointer. The catch block in
+      // each hook reads getPhase() to know which dot to flag red.
+      advance(i: number) { phase = i; },
+      getPhase() { return phase; },
+      // Set the status/detail of a specific step and re-emit.
+      set(i: number, status: _PSStatus, detail?: string) {
+        steps[i] = { ...steps[i], status, ...(detail !== undefined ? { detail } : {}) };
+        emit();
+      },
+    };
+  };
+
   const depositMultipleTokensWagmi = async (
     deposits: { token: string; amount: string }[],
     onProgress?: (steps: _PS[]) => void,
@@ -2808,46 +2904,68 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
   };
 
-  // Helper: Execute token deposit (when allowance is sufficient)
-  const executeTokenDeposit = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+  // Helper: Execute token deposit (when allowance is sufficient).
+  // When onProgress is provided, runs the canonical 3-step lifecycle
+  // (Sign → Confirm → Finalize) and waits for the receipt before
+  // returning, matching the ETH-side hooks.
+  const executeTokenDeposit = async (
+    tokenAddress: string,
+    amount: bigint,
+    tokenSymbol: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     try {
       debugLog(`🚀 Executing direct deposit for ${tokenSymbol}...`);
-      
+
       // CRITICAL FIX: Always get fresh fee before transaction
       debugLog('💰 Getting fresh fee before token deposit...');
       const freshFee = await getCurrentFee();
       if (!freshFee) {
         throw new Error('Failed to get fresh fee');
       }
-      
-      // Update current fee state with fresh value
+
       setCurrentFee(freshFee);
       debugLog(`✅ Fresh fee obtained: ${formatEther(freshFee)} ETH`);
-      
+
       const feeWei = freshFee;
       debugLog(`💰 Using fresh fee: ${feeWei} wei (${formatEther(feeWei)} ETH)`);
-      
-      // Call the actual vault deposit function WITH ETH fee
-      await writeVaultContract({
-        address: getActiveContractAddress() as `0x${string}`,
-        abi: VAULT_ABI,
-        functionName: 'depositToken',
-        args: [tokenAddress, amount],
-        chain: getTargetChain(),
-        account: address,
-        value: feeWei, // Send ETH fee along with token deposit
-      });
-      
-      debugLog(`📝 Direct token deposit transaction initiated with ETH fee`);
-      
-      toast({
-        title: "Token Deposit Initiated",
-        description: `Depositing ${formatEther(amount)} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee to vault...`,
-      });
-      
-      // DON'T refresh here - let the transaction confirmation system handle it
-      // DON'T set isLoading(false) here - let the transaction confirmation system handle it
-      
+
+      const lc = buildTxLifecycle(onProgress);
+      try {
+        lc.set(0, 'running', `Open your wallet and sign depositToken(${tokenSymbol})…`);
+        const txHash = await writeVaultContractAsync({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'depositToken',
+          args: [tokenAddress, amount],
+          chain: getTargetChain(),
+          account: address,
+          value: feeWei,
+        });
+        lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+        lc.advance(1);
+        lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+        const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+        if (receipt.status !== 'success') {
+          throw new Error(`depositToken reverted on-chain (block ${receipt.blockNumber})`);
+        }
+        lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+
+        toast({
+          title: "Token Deposit Confirmed",
+          description: `Deposited ${formatEther(amount)} ${tokenSymbol} to vault`,
+        });
+
+        lc.advance(2);
+        const finality = getChainFinalityDelay();
+        lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, finality));
+        lc.set(2, 'done', 'Balances updated ✓');
+      } catch (innerError: any) {
+        lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Deposit failed');
+        throw innerError;
+      }
+
     } catch (error) {
       debugError('❌ Direct token deposit error:', error);
       toast({
@@ -2931,7 +3049,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   };
 
   // Token withdrawal function with approval
-  const withdrawTokenWagmi = async (tokenAddress: string, amount: string, tokenSymbol: string) => {
+  const withdrawTokenWagmi = async (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     if (!address) {
       toast({
         title: "Error",
@@ -3030,27 +3153,43 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         return; // ❌ Block transaction - user saves gas
       }
 
-      // Call the vault withdraw function WITH ETH fee
-      await writeVaultContract({
-        address: getActiveContractAddress() as `0x${string}`,
-        abi: VAULT_ABI,
-        functionName: 'withdrawToken',
-        args: [tokenAddress, amountWei],
-        chain: getTargetChain(),
-        account: address,
-        value: feeWei, // Send ETH fee along with token withdrawal
-      });
-      
-      debugLog(`📝 Token withdrawal transaction initiated with ETH fee`);
-      
-      toast({
-        title: "Token Withdrawal Initiated",
-        description: `Withdrawing ${amount} ${tokenSymbol} + ${formatEther(feeWei)} ETH fee from vault...`,
-      });
-      
-      // DON'T refresh here - let the transaction confirmation system handle it
-      // DON'T set isLoading(false) here - let the transaction confirmation system handle it
-      
+      // 3-step lifecycle, same shape as the ETH-side hooks.
+      const lc = buildTxLifecycle(onProgress);
+      try {
+        lc.set(0, 'running', `Open your wallet and sign withdrawToken(${tokenSymbol}, ${amount})…`);
+        const txHash = await writeVaultContractAsync({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'withdrawToken',
+          args: [tokenAddress, amountWei],
+          chain: getTargetChain(),
+          account: address,
+          value: feeWei,
+        });
+        lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+        lc.advance(1);
+        lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+        const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+        if (receipt.status !== 'success') {
+          throw new Error(`withdrawToken reverted on-chain (block ${receipt.blockNumber})`);
+        }
+        lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+
+        toast({
+          title: "Token Withdrawal Confirmed",
+          description: `Withdrew ${amount} ${tokenSymbol} from vault`,
+        });
+
+        lc.advance(2);
+        const finality = getChainFinalityDelay();
+        lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, finality));
+        lc.set(2, 'done', 'Balances updated ✓');
+      } catch (innerError: any) {
+        lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Withdrawal failed');
+        throw innerError;
+      }
+
     } catch (error) {
       debugError('❌ Token withdrawal error:', error);
       toast({
@@ -3484,7 +3623,8 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     tokenAddress: string,
     to: string,
     amount: string,
-    tokenSymbol: string
+    tokenSymbol: string,
+    onProgress?: (steps: _PS[]) => void,
   ) => {
     if (!address) {
       toast({
@@ -3592,26 +3732,42 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         feeWei: feeWei.toString()
       });
 
-      const result = await writeVaultContract({
-        address: getActiveContractAddress() as `0x${string}`,
-        abi: VAULT_ABI,
-        functionName: 'transferInternalToken',
-        args: [tokenAddress, to, amountWei],
-        chain: getTargetChain(),
-        account: address,
-        value: feeWei,
-      });
+      const lc = buildTxLifecycle(onProgress);
+      try {
+        lc.set(0, 'running', `Open your wallet and sign transferInternalToken(${tokenSymbol}, ${amount} → ${to.slice(0, 6)}…${to.slice(-4)})…`);
+        const txHash = await writeVaultContractAsync({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'transferInternalToken',
+          args: [tokenAddress, to, amountWei],
+          chain: getTargetChain(),
+          account: address,
+          value: feeWei,
+        });
+        lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+        lc.advance(1);
+        lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+        const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+        if (receipt.status !== 'success') {
+          throw new Error(`transferInternalToken reverted on-chain (block ${receipt.blockNumber})`);
+        }
+        lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-      debugLog(`📝 Token transfer transaction result:`, result);
-      
-      toast({
-        title: "Token Transfer Initiated",
-        description: `Transferring ${amount} ${tokenSymbol} to ${to.slice(0, 6)}...${to.slice(-4)} + ${formatEther(feeWei)} ETH fee...`,
-      });
-      
-      // DON'T refresh here - let the transaction confirmation system handle it
-      // DON'T set isLoading(false) here - let the transaction confirmation system handle it
-      
+        toast({
+          title: "Token Transfer Confirmed",
+          description: `Transferred ${amount} ${tokenSymbol} to ${to.slice(0, 6)}...${to.slice(-4)}`,
+        });
+
+        lc.advance(2);
+        const finality = getChainFinalityDelay();
+        lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, finality));
+        lc.set(2, 'done', 'Balances updated ✓');
+      } catch (innerError: any) {
+        lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Transfer failed');
+        throw innerError;
+      }
+
     } catch (error) {
       debugError('❌ Token transfer error:', error);
       toast({
@@ -4174,7 +4330,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   }, [activeChain, currentNetwork.mode]);
 
   // NEW: Wagmi-based ETH deposit for comparison with custom implementation
-  const depositETHWagmi = async (amount: string) => {
+  const depositETHWagmi = async (
+    amount: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     if (!amount || isNaN(Number(amount))) {
       toast({
         title: "Invalid Amount",
@@ -4240,29 +4399,55 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       setIsSimulating(false);
       setIsLoading(true);
       
-      debugLog('Depositing ETH via Wagmi:', { 
-        amount, 
+      debugLog('Depositing ETH via Wagmi:', {
+        amount,
         amountInWei: amountInWei.toString(),
         feeInWei: feeInWei.toString(),
         totalValue: totalValue.toString()
       });
-      
-      // CRITICAL: Use writeVaultContract (Wagmi hook) for automatic transaction management
-      await writeVaultContract({
-        address: getActiveContractAddress() as `0x${string}`,
-        abi: VAULT_ABI as any,
-        functionName: 'depositETH',
-        args: [],
-        value: totalValue, // Send amount + fee together
-        chain: getTargetChain(),
-        account: address,
-      });
 
-      toast({
-        title: "Deposit Initiated (Wagmi)",
-        description: `Depositing ${amount} ETH + ${weiToEtherFullPrecision(feeInWei)} ETH fee to vault...`,
-      });
-      
+      // Same 3-step lifecycle the multi-X flows use. writeVaultContractAsync
+      // still feeds the hook's data → useWaitForTransactionReceipt →
+      // isConfirmed auto-refresh path, so the existing balance-refetch
+      // effect keeps firing alongside our explicit waitForTransactionReceipt.
+      const lc = buildTxLifecycle(onProgress);
+      try {
+        lc.set(0, 'running', `Open your wallet and sign depositETH(${amount})…`);
+        const txHash = await writeVaultContractAsync({
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI as any,
+          functionName: 'depositETH',
+          args: [],
+          value: totalValue, // Send amount + fee together
+          chain: getTargetChain(),
+          account: address,
+        });
+
+        lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+        lc.advance(1);
+        lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+
+        const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+        if (receipt.status !== 'success') {
+          throw new Error(`depositETH reverted on-chain (block ${receipt.blockNumber})`);
+        }
+        lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+
+        toast({
+          title: "Deposit Confirmed",
+          description: `Deposited ${amount} ETH (+ ${weiToEtherFullPrecision(feeInWei)} fee) to vault`,
+        });
+
+        lc.advance(2);
+        const finality = getChainFinalityDelay();
+        lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, finality));
+        lc.set(2, 'done', 'Balances updated ✓');
+      } catch (innerError: any) {
+        lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Deposit failed');
+        throw innerError;
+      }
+
     } catch (error) {
       debugError('Deposit error (Wagmi):', error);
       toast({
