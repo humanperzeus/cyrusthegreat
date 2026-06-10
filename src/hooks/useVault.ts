@@ -2337,7 +2337,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           _progressSteps.push({ label: `Approve ${symbol}`, status: 'pending' });
         }
       }
-      _progressSteps.push({ label: 'Deposit multiple tokens', status: 'pending' });
+      // The final tx renders as THREE honest lifecycle steps (mirrors
+      // debug UI b8-4): sign (wallet popup) → confirm (mempool → mined)
+      // → finalize (chain propagation delay + balance refresh). Each
+      // turns ✓ only when its real signal fires.
+      _progressSteps.push({ label: 'Sign in wallet', status: 'pending' });
+      _progressSteps.push({ label: 'Confirm on-chain', status: 'pending' });
+      _progressSteps.push({ label: 'Finalize & refresh', status: 'pending' });
       onProgress?.(_progressSteps.map(s => ({ ...s })));
 
       let _approveIdx = 0;
@@ -2477,16 +2483,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       console.log('Native included:', nativeSum > 0n);
       console.log('Token deposits count:', approvalTokenDeposits.length);
 
-      // Progress emit: final deposit step is running
-      const _depositIdx = _progressSteps.length - 1;
-      _progressSteps[_depositIdx] = {
-        ..._progressSteps[_depositIdx],
-        status: 'running',
-        detail: `Submitting depositMultipleTokens — open wallet to sign…`,
+      // Tx lifecycle indices = the last three steps.
+      const _signIdx    = _progressSteps.length - 3;
+      const _confirmIdx = _progressSteps.length - 2;
+      const _finalIdx   = _progressSteps.length - 1;
+      const _setStep = (idx: number, status: _PSStatus, detail?: string) => {
+        _progressSteps[idx] = { ..._progressSteps[idx], status, ...(detail !== undefined ? { detail } : {}) };
+        onProgress?.(_progressSteps.map(s => ({ ...s })));
       };
-      onProgress?.(_progressSteps.map(s => ({ ...s })));
 
+      // `_phase` tracks the in-flight lifecycle step so the catch block
+      // fails the right one (user rejection at sign vs on-chain revert).
+      let _phase = _signIdx;
       try {
+        _setStep(_signIdx, 'running', 'Open your wallet and sign the deposit…');
+
         // Async variant returns the tx hash while STILL feeding the
         // hook's data → useWaitForTransactionReceipt → isConfirmed
         // auto-refresh machinery (same mutation state).
@@ -2500,42 +2511,37 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           value: totalEthValue,
         });
 
-        // Signed ≠ confirmed. Keep the step running until the chain
+        // Signed ≠ confirmed. The confirm step runs until the chain
         // mines the tx — exactly like the debug UI's `await tx.wait()`.
-        _progressSteps[_depositIdx] = {
-          ..._progressSteps[_depositIdx],
-          status: 'running',
-          detail: `Tx submitted (${String(txHash).slice(0, 10)}…) — waiting for confirmation…`,
-        };
-        onProgress?.(_progressSteps.map(s => ({ ...s })));
+        _setStep(_signIdx, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+        _phase = _confirmIdx;
+        _setStep(_confirmIdx, 'running', 'Waiting for on-chain confirmation…');
 
         const receipt = await waitForTransactionReceipt(config, { hash: txHash });
         if (receipt.status !== 'success') {
           throw new Error(`depositMultipleTokens reverted on-chain (block ${receipt.blockNumber})`);
         }
+        _setStep(_confirmIdx, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-        _progressSteps[_depositIdx] = {
-          ..._progressSteps[_depositIdx],
-          status: 'done',
-          detail: `Confirmed in block ${receipt.blockNumber} — tx ${String(txHash).slice(0, 10)}…`,
-        };
-        onProgress?.(_progressSteps.map(s => ({ ...s })));
+        console.log('✅ Multi-token deposit confirmed on-chain');
+        toast({
+          title: "Multi-token deposit confirmed",
+          description: `Deposited ${deposits.length} token${deposits.length === 1 ? '' : 's'} to vault`,
+        });
+
+        // Finalize: RPCs need a moment before they serve the new state
+        // (12s on ETH, less elsewhere — getChainFinalityDelay). This
+        // info used to be a corner toast; it now lives in the popup.
+        // The isConfirmed effect refreshes balances on the same delay.
+        _phase = _finalIdx;
+        const _finalityDelay = getChainFinalityDelay();
+        _setStep(_finalIdx, 'running', `Waiting ${_finalityDelay / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, _finalityDelay));
+        _setStep(_finalIdx, 'done', 'Balances updated ✓');
       } catch (e: any) {
-        _progressSteps[_depositIdx] = {
-          ..._progressSteps[_depositIdx],
-          status: 'failed',
-          detail: e?.shortMessage || e?.message || 'Deposit failed',
-        };
-        onProgress?.(_progressSteps.map(s => ({ ...s })));
+        _setStep(_phase, 'failed', e?.shortMessage || e?.message || 'Deposit failed');
         throw e;
       }
-
-      console.log('✅ Multi-token deposit confirmed on-chain');
-
-      toast({
-        title: "Multi-token deposit confirmed",
-        description: `Deposited ${deposits.length} token${deposits.length === 1 ? '' : 's'} to vault`,
-      });
 
     } catch (error: any) {
 
@@ -3058,18 +3064,22 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
 
-    // Single-step progress indicator — withdraws are typically one tx
-    // (multi-token batch) plus optional 1-N ETH withdrawals. We keep it
-    // as a single live step and update the detail line as we move
-    // through validation → ETH withdraws → ERC-20 batch → done. The
-    // helpers below are no-ops when the caller didn't pass onProgress.
+    // THREE honest lifecycle steps (mirrors debug UI b8-7): sign →
+    // confirm → finalize. Withdraw is one tx — no approvals needed for
+    // tokens already in the vault. Helpers are no-ops when the caller
+    // didn't pass onProgress. _wPhase tracks the in-flight step so the
+    // catch handler fails the right one.
     const _wSteps: _PS[] = [
-      { label: 'Withdraw vault tokens', status: 'pending' },
+      { label: 'Sign in wallet', status: 'pending' },
+      { label: 'Confirm on-chain', status: 'pending' },
+      { label: 'Finalize & refresh', status: 'pending' },
     ];
+    let _wPhase = 0;
     const _wEmit = () => onProgress?.(_wSteps.map(s => ({ ...s })));
-    const _wRun  = (detail?: string) => { _wSteps[0].status = 'running'; if (detail !== undefined) _wSteps[0].detail = detail; _wEmit(); };
-    const _wDone = (detail?: string) => { _wSteps[0].status = 'done';    if (detail !== undefined) _wSteps[0].detail = detail; _wEmit(); };
-    const _wFail = (detail?: string) => { _wSteps[0].status = 'failed';  if (detail !== undefined) _wSteps[0].detail = detail; _wEmit(); };
+    const _wSet = (idx: number, status: _PSStatus, detail?: string) => {
+      _wSteps[idx] = { ..._wSteps[idx], status, ...(detail !== undefined ? { detail } : {}) };
+      _wEmit();
+    };
 
     if (!address || !isConnected) {
       console.log('Wallet not connected - returning early');
@@ -3103,7 +3113,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
 
     // Validation passed — open the progress modal in the parent UI.
-    _wRun(`Preparing withdrawal of ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'}…`);
+    _wSet(0, 'running', `Preparing withdrawal of ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'}…`);
 
     try {
       // ONE atomic call (2026-06-10): Bank8's withdrawMultipleTokens
@@ -3186,11 +3196,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         return;
       }
 
-      _wRun(`Submitting withdrawMultipleTokens — open wallet to sign…`);
+      _wSet(0, 'running', 'Open your wallet and sign the withdraw…');
 
       // Async variant returns the hash while still feeding the hook's
-      // auto-refresh machinery. Signed ≠ confirmed: keep the step
-      // running until the receipt lands (debug UI's `await tx.wait()`).
+      // auto-refresh machinery. Signed ≠ confirmed: the confirm step
+      // runs until the receipt lands (debug UI's `await tx.wait()`).
       const txHash = await writeVaultContractAsync({
         address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
@@ -3201,22 +3211,32 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         value: feeInWei,
       });
 
-      _wRun(`Tx submitted (${String(txHash).slice(0, 10)}…) — waiting for confirmation…`);
+      _wSet(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+      _wPhase = 1;
+      _wSet(1, 'running', 'Waiting for on-chain confirmation…');
       const receipt = await waitForTransactionReceipt(config, { hash: txHash });
       if (receipt.status !== 'success') {
         throw new Error(`withdrawMultipleTokens reverted on-chain (block ${receipt.blockNumber})`);
       }
 
       console.log('✅ Multi-token withdrawal confirmed on-chain');
-      _wDone(`Confirmed in block ${receipt.blockNumber} — tx ${String(txHash).slice(0, 10)}…`);
+      _wSet(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
       toast({
         title: "Multi-token withdrawal confirmed",
         description: `Withdrew ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'} from vault`,
       });
 
+      // Finalize: RPCs need a moment before they serve the new state.
+      // This info used to be a corner toast; it now lives in the popup.
+      _wPhase = 2;
+      const _wFinality = getChainFinalityDelay();
+      _wSet(2, 'running', `Waiting ${_wFinality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+      await new Promise(resolve => setTimeout(resolve, _wFinality));
+      _wSet(2, 'done', 'Balances updated ✓');
+
     } catch (error: any) {
-      _wFail(error.message || 'Unknown error occurred');
+      _wSet(_wPhase, 'failed', error.message || 'Unknown error occurred');
       // Handle specific errors
       if (error.message?.includes('RateLimitExceeded')) {
         toast({
@@ -3251,15 +3271,21 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     console.log('Address:', address);
     console.log('Is connected:', isConnected);
 
-    // Single-step progress indicator — mirrors withdraw. Helpers are
-    // no-ops when the caller didn't pass onProgress.
+    // THREE honest lifecycle steps (mirrors debug UI b8-11): sign →
+    // confirm → finalize. One tx — no approvals for vaulted tokens.
+    // Helpers are no-ops when the caller didn't pass onProgress.
+    // _tPhase tracks the in-flight step for the catch handler.
     const _tSteps: _PS[] = [
-      { label: 'Internal transfer', status: 'pending' },
+      { label: 'Sign in wallet', status: 'pending' },
+      { label: 'Confirm on-chain', status: 'pending' },
+      { label: 'Finalize & refresh', status: 'pending' },
     ];
+    let _tPhase = 0;
     const _tEmit = () => onProgress?.(_tSteps.map(s => ({ ...s })));
-    const _tRun  = (detail?: string) => { _tSteps[0].status = 'running'; if (detail !== undefined) _tSteps[0].detail = detail; _tEmit(); };
-    const _tDone = (detail?: string) => { _tSteps[0].status = 'done';    if (detail !== undefined) _tSteps[0].detail = detail; _tEmit(); };
-    const _tFail = (detail?: string) => { _tSteps[0].status = 'failed';  if (detail !== undefined) _tSteps[0].detail = detail; _tEmit(); };
+    const _tSet = (idx: number, status: _PSStatus, detail?: string) => {
+      _tSteps[idx] = { ..._tSteps[idx], status, ...(detail !== undefined ? { detail } : {}) };
+      _tEmit();
+    };
 
     if (!address || !isConnected) {
       console.log('Wallet not connected - returning early');
@@ -3313,7 +3339,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       }
 
       // Validation passed — open the progress modal in the parent UI.
-      _tRun(`Preparing transfer of ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}…${to.slice(-4)}…`);
+      _tSet(0, 'running', `Preparing transfer of ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}…${to.slice(-4)}…`);
 
       // ONE atomic call (2026-06-10): Bank8's transferMultipleTokensInternal
       // handles mixed native + ERC-20 batches since the 2026-05-31
@@ -3381,11 +3407,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         return;
       }
 
-      _tRun(`Submitting transferMultipleTokensInternal — open wallet to sign…`);
+      _tSet(0, 'running', 'Open your wallet and sign the transfer…');
 
       // Async variant returns the hash while still feeding the hook's
-      // auto-refresh machinery. Signed ≠ confirmed: keep the step
-      // running until the receipt lands (debug UI's `await tx.wait()`).
+      // auto-refresh machinery. Signed ≠ confirmed: the confirm step
+      // runs until the receipt lands (debug UI's `await tx.wait()`).
       const txHash = await writeVaultContractAsync({
         address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
@@ -3396,22 +3422,32 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         value: feeInWei,
       });
 
-      _tRun(`Tx submitted (${String(txHash).slice(0, 10)}…) — waiting for confirmation…`);
+      _tSet(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
+      _tPhase = 1;
+      _tSet(1, 'running', 'Waiting for on-chain confirmation…');
       const receipt = await waitForTransactionReceipt(config, { hash: txHash });
       if (receipt.status !== 'success') {
         throw new Error(`transferMultipleTokensInternal reverted on-chain (block ${receipt.blockNumber})`);
       }
 
       console.log('✅ Multi-token transfer confirmed on-chain');
-      _tDone(`Confirmed in block ${receipt.blockNumber} — tx ${String(txHash).slice(0, 10)}…`);
+      _tSet(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
       toast({
         title: "Multi-token transfer confirmed",
         description: `Transferred ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}...${to.slice(-4)}`,
       });
 
+      // Finalize: RPCs need a moment before they serve the new state.
+      // This info used to be a corner toast; it now lives in the popup.
+      _tPhase = 2;
+      const _tFinality = getChainFinalityDelay();
+      _tSet(2, 'running', `Waiting ${_tFinality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+      await new Promise(resolve => setTimeout(resolve, _tFinality));
+      _tSet(2, 'done', 'Balances updated ✓');
+
     } catch (error: any) {
-      _tFail(error.message || 'Unknown error occurred');
+      _tSet(_tPhase, 'failed', error.message || 'Unknown error occurred');
       // Handle specific errors
       if (error.message?.includes('RateLimitExceeded')) {
         toast({
@@ -3651,12 +3687,18 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         debugLog(`⏰ Waiting ${finalityDelay}ms for ${activeChain} chain finality before refreshing data...`);
       }
       
-      // Show user-friendly notification with delay time
-      toast({
-        title: "Transaction Confirmed!",
-        description: `Waiting ${finalityDelay/1000} seconds for ${activeChain} chain finality, then updating balances...`,
-        variant: "default",
-      });
+      // 2026-06-10: HIDDEN, not removed — the finality-wait info now
+      // lives in the ProgressFlow popup's "Finalize & refresh" step for
+      // multi-token flows. Flip the flag to bring the corner toast back
+      // (e.g. if single-asset flows need it again).
+      const SHOW_FINALITY_TOAST = false;
+      if (SHOW_FINALITY_TOAST) {
+        toast({
+          title: "Transaction Confirmed!",
+          description: `Waiting ${finalityDelay/1000} seconds for ${activeChain} chain finality, then updating balances...`,
+          variant: "default",
+        });
+      }
       
       // Delay the refresh to allow blockchain state to settle (or refresh immediately if no delay)
       const executeRefresh = () => {
