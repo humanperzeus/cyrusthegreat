@@ -2057,12 +2057,32 @@ const BANK8_TESTS = [
       const total = ethers.parseEther(amt) + fee;
       // Pre-flight: need value + ~150k gas at 10 gwei = ~0.0000015 ETH gas headroom (rounded up to 0.00005)
       await ensureBalance(total + ethers.parseEther("0.00005"), "depositETH");
-      const ov = await prepareTx({ value: total, gasLimit: 250000n });
-      const tx = await c.connect(signer).depositETH(ov);
-      const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-      const r = await tx.wait();
-      const cur = NETWORKS[chainId]?.currency || "ETH";
-      return { html: `<b>Deposited:</b> ${amt} ${cur}\n<b>+ Fee:</b> ${ethers.formatEther(fee)} ${cur}\n<b>= Total sent:</b> ${ethers.formatEther(total)} ${cur}\n\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok ✓" : "FAILED ✗"}` };
+
+      // Single-asset 3-step lifecycle (matches multi-token b8-4/b8-7/b8-11):
+      // sign in wallet → confirm on-chain → finalized. `phase` tracks the
+      // in-flight step so a failure (user reject vs revert) flags the
+      // right dot red.
+      const pf = createProgressFlow(["Sign in wallet", "Confirm on-chain", "Finalized"], "Single ETH deposit");
+      let phase = 0;
+      try {
+        pf.update(0, "running", `Open your wallet and sign depositETH(${amt})…`);
+        const ov = await prepareTx({ value: total, gasLimit: 250000n });
+        const tx = await c.connect(signer).depositETH(ov);
+        phase = 1;
+        pf.update(1, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
+        const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+        const r = await tx.wait();
+        if (r.status !== 1) {
+          pf.update(1, "failed", `Tx mined but status = ${r.status}`);
+          throw new Error(`depositETH reverted, status ${r.status}`);
+        }
+        pf.update(2, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+        const cur = NETWORKS[chainId]?.currency || "ETH";
+        return { html: `<b>Deposited:</b> ${amt} ${cur}\n<b>+ Fee:</b> ${ethers.formatEther(fee)} ${cur}\n<b>= Total sent:</b> ${ethers.formatEther(total)} ${cur}\n\nTx: ${link}\nBlock ${r.blockNumber}, status ok ✓` };
+      } catch (e) {
+        pf.update(phase, "failed", `Deposit failed: ${e.shortMessage || e.message}`);
+        throw e;
+      }
     },
   },
   {
@@ -2250,10 +2270,27 @@ const BANK8_TESTS = [
           const fee = await c.getCurrentFeeInWei();
           const cw = c.connect(signer);
           await ensureBalance(fee + ethers.parseEther("0.0001"), "internal-transfer fee");
-          const tx = await cw.transferInternalETH(to, amt, { value: fee, gasLimit: 250000n });
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          return { html: `Transferred ${amtStr} ${cur} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+
+          // Single-asset 3-step lifecycle, mirrors multi-token tests.
+          const pf = createProgressFlow(["Sign in wallet", "Confirm on-chain", "Finalized"], `Internal ${cur} transfer`);
+          let phase = 0;
+          try {
+            pf.update(0, "running", `Open your wallet and sign transferInternalETH(${amtStr} → ${fmtAddr(to)})…`);
+            const tx = await cw.transferInternalETH(to, amt, { value: fee, gasLimit: 250000n });
+            phase = 1;
+            pf.update(1, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(1, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`transferInternalETH reverted, status ${r.status}`);
+            }
+            pf.update(2, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            return { html: `Transferred ${amtStr} ${cur} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ok ✓` };
+          } catch (e) {
+            pf.update(phase, "failed", `Transfer failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },
@@ -2297,10 +2334,26 @@ const BANK8_TESTS = [
           const fee = await c.getCurrentFeeInWei();
           const cw = c.connect(signer);
           await ensureBalance(fee + ethers.parseEther("0.0001"), "withdraw fee");
-          const tx = await cw.withdrawETH(amt, { value: fee, gasLimit: 250000n });
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          return { html: `Withdrew ${amtStr} ${cur}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+
+          const pf = createProgressFlow(["Sign in wallet", "Confirm on-chain", "Finalized"], `Single ${cur} withdraw`);
+          let phase = 0;
+          try {
+            pf.update(0, "running", `Open your wallet and sign withdrawETH(${amtStr})…`);
+            const tx = await cw.withdrawETH(amt, { value: fee, gasLimit: 250000n });
+            phase = 1;
+            pf.update(1, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(1, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`withdrawETH reverted, status ${r.status}`);
+            }
+            pf.update(2, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            return { html: `Withdrew ${amtStr} ${cur}\nTx: ${link}\nBlock ${r.blockNumber}, status ok ✓` };
+          } catch (e) {
+            pf.update(phase, "failed", `Withdraw failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },
@@ -2517,10 +2570,26 @@ const BANK8_TESTS = [
           const c = new ethers.Contract(v, abi, getReadProvider());
           const fee = await c.getCurrentFeeInWei();
           await ensureBalance(fee + ethers.parseEther("0.0001"), "withdrawToken fee");
-          const tx = await c.connect(signer).withdrawToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          return { html: `Withdrew: ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol}\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+
+          const pf = createProgressFlow(["Sign in wallet", "Confirm on-chain", "Finalized"], `Single ${t.symbol} withdraw`);
+          let phase = 0;
+          try {
+            pf.update(0, "running", `Open your wallet and sign withdrawToken(${t.symbol}, ${ethers.formatUnits(t.amountWei, t.decimals)})…`);
+            const tx = await c.connect(signer).withdrawToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
+            phase = 1;
+            pf.update(1, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(1, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`withdrawToken reverted, status ${r.status}`);
+            }
+            pf.update(2, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            return { html: `Withdrew: ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol}\nTx: ${link}\nBlock ${r.blockNumber}, status ok ✓` };
+          } catch (e) {
+            pf.update(phase, "failed", `Withdraw failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },
@@ -2569,10 +2638,26 @@ const BANK8_TESTS = [
           const c = new ethers.Contract(v, abi, getReadProvider());
           const fee = await c.getCurrentFeeInWei();
           await ensureBalance(fee + ethers.parseEther("0.0001"), "transferInternalToken fee");
-          const tx = await c.connect(signer).transferInternalToken(t.addr, to, t.amountWei, { value: fee, gasLimit: 300000n });
-          const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
-          const r = await tx.wait();
-          return { html: `Transferred ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ${r.status === 1 ? "ok" : "FAILED"}` };
+
+          const pf = createProgressFlow(["Sign in wallet", "Confirm on-chain", "Finalized"], `Internal ${t.symbol} transfer`);
+          let phase = 0;
+          try {
+            pf.update(0, "running", `Open your wallet and sign transferInternalToken(${t.symbol}, ${ethers.formatUnits(t.amountWei, t.decimals)} → ${fmtAddr(to)})…`);
+            const tx = await c.connect(signer).transferInternalToken(t.addr, to, t.amountWei, { value: fee, gasLimit: 300000n });
+            phase = 1;
+            pf.update(1, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
+            const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
+            const r = await tx.wait();
+            if (r.status !== 1) {
+              pf.update(1, "failed", `Tx mined but status = ${r.status}`);
+              throw new Error(`transferInternalToken reverted, status ${r.status}`);
+            }
+            pf.update(2, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            return { html: `Transferred ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status ok ✓` };
+          } catch (e) {
+            pf.update(phase, "failed", `Transfer failed: ${e.shortMessage || e.message}`);
+            throw e;
+          }
         },
       };
     },
