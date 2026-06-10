@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, ArrowRight, User } from "lucide-react";
 import { formatTokenBalance, convertToWei } from "@/lib/utils";
+import { normalizeAmount } from "@/lib/normalizeAmount";
 import type { ProgressStep } from "@/components/shared/ProgressFlow";
 import { useProgress } from "@/contexts/ProgressContext";
 
@@ -99,7 +100,18 @@ export function MultiTokenTransferModal({
   }, [isOpen]);
 
   const validateTransfer = (token: Token, amount: string): { isValid: boolean; error?: string } => {
-    if (!amount || parseFloat(amount) <= 0) {
+    if (!amount) {
+      return { isValid: false, error: "Amount must be greater than 0" };
+    }
+    // Locale-tolerant input parse — see src/lib/normalizeAmount.ts.
+    let normalized: string;
+    try {
+      normalized = normalizeAmount(amount);
+      amount = normalized;
+    } catch (e: any) {
+      return { isValid: false, error: e?.message || "Invalid amount" };
+    }
+    if (parseFloat(amount) <= 0) {
       return { isValid: false, error: "Amount must be greater than 0" };
     }
 
@@ -202,9 +214,11 @@ export function MultiTokenTransferModal({
       return;
     }
 
+    // Normalize amounts before useVault — see deposit modal for full
+    // rationale (parseUnits only accepts "1234.56" form).
     const transferData = transfers.map(t => ({
       token: t.token.address,
-      amount: t.amount,
+      amount: normalizeAmount(t.amount),
     }));
 
     const sessionId = startProgress(
@@ -292,7 +306,10 @@ export function MultiTokenTransferModal({
                         <div className="font-medium">{transfer.token.symbol}</div>
                         <div className="flex gap-1">
                           <Input
-                            type="number"
+                            // type="text" + inputMode="decimal" — see
+                            // MultiTokenDepositModal for the locale rationale.
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Amount"
                             value={transfer.amount}
                             onChange={(e) => updateTransferAmount(index, e.target.value)}

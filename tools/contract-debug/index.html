@@ -1494,6 +1494,40 @@ async function fetchVaultedTokens(vaultAddr) {
 }
 
 // Renders a checkbox+amount table for a list of tokens.
+// Locale-tolerant amount normalization (debug UI copy of
+// src/lib/normalizeAmount.ts — duplicated because debug is plain JS
+// outside the Vite build). Strips US/EU thousands separators, treats
+// a lone comma as a decimal mark (EU "0,1" → "0.1"). Throws on
+// hopeless input — caller surfaces the error in the test result panel.
+function normalizeAmount(raw) {
+  let s = String(raw || "").replace(/\s+/g, "");
+  if (!s) throw new Error("Empty amount");
+  if (/[^\d.,]/.test(s)) throw new Error(`Amount contains invalid characters: "${raw}"`);
+  const hasDot = s.includes("."), hasComma = s.includes(",");
+  if (hasDot && hasComma) {
+    s = s.lastIndexOf(".") > s.lastIndexOf(",")
+      ? s.replace(/,/g, "")                       // US "1,234.56"
+      : s.replace(/\./g, "").replace(",", ".");   // EU "1.234,56"
+  } else if (hasComma) {
+    // Strict US thousands shape: \d{1,3}(,\d{3})+. Otherwise either a
+    // single EU decimal comma, or nonsense — reject the nonsense rather
+    // than silently strip. Matches the src/lib/normalizeAmount.ts rule.
+    if (/^\d{1,3}(,\d{3})+$/.test(s)) {
+      s = s.replace(/,/g, "");
+    } else if ((s.match(/,/g) || []).length === 1) {
+      s = s.replace(",", ".");
+    } else {
+      throw new Error(`Ambiguous or invalid comma usage: "${raw}"`);
+    }
+  } else if (hasDot && (s.match(/\./g) || []).length > 1) {
+    throw new Error(`Amount has multiple decimal points: "${raw}"`);
+  }
+  if (!/^\d*\.?\d+$|^\d+\.?\d*$/.test(s)) {
+    throw new Error(`Amount normalization produced invalid result: "${raw}" → "${s}"`);
+  }
+  return s;
+}
+
 // Returns { getSelected() → [{addr, decimals, amountWei, useMaxApprove}], refresh(newTokens) }.
 //
 // opts.showMaxApprove (default false) adds a "Max approve" column with a
@@ -1577,8 +1611,13 @@ function renderTokenPicker(host, tokens, opts = {}) {
       const out = [];
       for (const r of rows) {
         if (!r._cb.checked) continue;
-        const v = r._amt.value.trim();
-        if (!v) continue;
+        const raw = r._amt.value.trim();
+        if (!raw) continue;
+        // Locale-tolerant: "0,1" / "1.234,56" / "1,234.56" all normalize
+        // before parseUnits (which only accepts "1234.56" form).
+        let v;
+        try { v = normalizeAmount(raw); }
+        catch (e) { throw new Error(`Bad amount for ${r.symbol}: ${e.message}`); }
         let wei;
         try { wei = ethers.parseUnits(v, r.decimals); }
         catch (e) { throw new Error(`Bad amount for ${r.symbol}: ${v}`); }

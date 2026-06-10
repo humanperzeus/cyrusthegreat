@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 import { TokenList } from "../tokens/TokenList";
 import { formatTokenBalance, convertToWei } from "@/lib/utils";
+import { normalizeAmount } from "@/lib/normalizeAmount";
 
 interface Token {
   address: string;
@@ -99,21 +100,38 @@ export function MultiTokenDepositModal({
   }, [isOpen]);
 
   const validateDeposit = (token: Token, amount: string): { isValid: boolean; error?: string } => {
-    if (!amount || parseFloat(amount) <= 0) {
+    if (!amount) {
+      return { isValid: false, error: "Amount must be greater than 0" };
+    }
+
+    // Normalize locale-formatted input ("0,1" / "1,234.56" / "1 234,56")
+    // to the parser-friendly "1234.56" form BEFORE any numeric parsing
+    // runs. Anything that fails normalization (multiple decimal points,
+    // mixed nonsense, junk characters) is caught here as a clear error
+    // instead of slipping through to convertToWei and surfacing as a
+    // confusing parser exception further down the deposit flow.
+    let normalized: string;
+    try {
+      normalized = normalizeAmount(amount);
+    } catch (e: any) {
+      return { isValid: false, error: e?.message || "Invalid amount" };
+    }
+
+    if (parseFloat(normalized) <= 0) {
       return { isValid: false, error: "Amount must be greater than 0" };
     }
 
     // CRITICAL FIX: Use dynamic minimum based on token decimals
     const minDeposit = getMinDeposit(token.decimals);
-    if (parseFloat(amount) < parseFloat(minDeposit)) {
+    if (parseFloat(normalized) < parseFloat(minDeposit)) {
       return { isValid: false, error: `Minimum deposit is ${minDeposit} ${token.symbol}` };
     }
 
     // CRITICAL FIX: Compare amounts as BigInt to avoid precision loss - PRECISION SAFE
     // Convert both amounts to the smallest unit (wei) for exact comparison using decimal.js
-    const amountInSmallestUnit = convertToWei(amount, token.decimals);
+    const amountInSmallestUnit = convertToWei(normalized, token.decimals);
     const balanceInSmallestUnit = convertToWei(token.balance, token.decimals);
-    
+
     if (amountInSmallestUnit > balanceInSmallestUnit) {
       return { isValid: false, error: `Insufficient balance. Max: ${formatTokenBalance(token.balance, token.decimals)}` };
     }
@@ -214,10 +232,15 @@ export function MultiTokenDepositModal({
       return;
     }
 
+    // Normalize amounts before they cross into useVault — that side
+    // calls convertToWei (parseUnits under the hood), which only
+    // understands "1234.56" form. isFormValid() already enforced that
+    // every amount normalizes cleanly, so we can throw on failure here
+    // as an internal invariant rather than user error.
     const depositData = deposits.map(d => ({
       token: d.token.address,
-      amount: d.amount,
-      approvalType: d.approvalType
+      amount: normalizeAmount(d.amount),
+      approvalType: d.approvalType,
     }));
 
     // Start a NEW progress session for this submit. startProgress
@@ -310,7 +333,12 @@ export function MultiTokenDepositModal({
                         </div>
                         <div className="flex gap-1">
                           <Input
-                            type="number"
+                            // type="text" not "number" — the latter blocks
+                            // commas/spaces in EU/FR locales BEFORE our
+                            // normalizeAmount can interpret them. inputMode
+                            // gives mobile the right numeric keypad.
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Amount"
                             value={deposit.amount}
                             onChange={(e) => updateDepositAmount(index, e.target.value)}

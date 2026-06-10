@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, ArrowUpDown } from "lucide-react";
 import { formatTokenBalance, convertToWei } from "@/lib/utils";
+import { normalizeAmount } from "@/lib/normalizeAmount";
 import type { ProgressStep } from "@/components/shared/ProgressFlow";
 import { useProgress } from "@/contexts/ProgressContext";
 
@@ -97,7 +98,18 @@ export function MultiTokenWithdrawModal({
   }, [isOpen]);
 
   const validateWithdrawal = (token: Token, amount: string): { isValid: boolean; error?: string } => {
-    if (!amount || parseFloat(amount) <= 0) {
+    if (!amount) {
+      return { isValid: false, error: "Amount must be greater than 0" };
+    }
+    // Locale-tolerant input parse — see src/lib/normalizeAmount.ts.
+    let normalized: string;
+    try {
+      normalized = normalizeAmount(amount);
+      amount = normalized;
+    } catch (e: any) {
+      return { isValid: false, error: e?.message || "Invalid amount" };
+    }
+    if (parseFloat(amount) <= 0) {
       return { isValid: false, error: "Amount must be greater than 0" };
     }
 
@@ -186,9 +198,11 @@ export function MultiTokenWithdrawModal({
       return;
     }
 
+    // Normalize amounts before useVault — see deposit modal for full
+    // rationale (parseUnits only accepts "1234.56" form).
     const withdrawalData = withdrawals.map(d => ({
       token: d.token.address,
-      amount: d.amount,
+      amount: normalizeAmount(d.amount),
     }));
 
     const sessionId = startProgress(
@@ -251,7 +265,10 @@ export function MultiTokenWithdrawModal({
                         <div className="font-medium">{withdrawal.token.symbol}</div>
                         <div className="flex gap-1">
                           <Input
-                            type="number"
+                            // type="text" + inputMode="decimal" — see
+                            // MultiTokenDepositModal for the locale rationale.
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Amount"
                             value={withdrawal.amount}
                             onChange={(e) => updateWithdrawalAmount(index, e.target.value)}
