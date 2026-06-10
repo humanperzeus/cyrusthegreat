@@ -2389,21 +2389,27 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
               onProgress?.(_progressSteps.map(s => ({ ...s })));
             }
 
-            // Approval amount policy (2026-06-07 onwards):
+            // Approval amount policy (2026-06-10 reversal of 272eaa2):
             //
-            // DEFAULT = unlimited (MAX_UINT256). All UI paths pass approvalType
-            // 'unlimited' now — we removed the radio button to eliminate the
-            // decimal-comma-typo risk (a user accidentally approving 100 USD1
-            // instead of 1.00 USD1 leaves a 99x over-approval; for the inverse
-            // they get under-allowance + tx revert and have to redo).
+            // DEFAULT = 'exact' (requiredAmount + 10% buffer). MAX_UINT256
+            // is now opt-in via the per-row "Max approve" checkbox in
+            // MultiTokenDepositModal.
             //
-            // The 'exact' branch is kept as a defensive fallback for any
-            // programmatic caller — IF that path is ever reached, we now add a
-            // +10% buffer (was 0.01%) so price/decimal jitter never causes the
-            // downstream deposit to fail allowance.
+            // Why the reversal: the all-MAX policy from 272eaa2 was driven
+            // by decimal-comma-typo fear (user types 100 instead of 1.00,
+            // exact approve underflows the deposit). The amount input is
+            // now normalized upstream (utils/normalizeAmount strips
+            // thousands separators and treats lone EU commas as decimals
+            // — see commit message for the locale-correctness reasoning),
+            // so the typo-protection rationale doesn't hold. Meanwhile,
+            // an unbounded allowance is a long-lived security footgun:
+            // it persists forever, lets the vault contract (or any
+            // upgrade target) move arbitrary balances at any time. The
+            // +10% headroom on the exact path absorbs parse/round wobble
+            // without leaving a permanent unlimited approval behind.
             const approvalAmount = deposit.approvalType === 'exact'
-              ? requiredAmount + (requiredAmount / 10n)        // +10% buffer
-              : 2n ** 256n - 1n;                                // Unlimited (MAX_UINT256)
+              ? requiredAmount + (requiredAmount / 10n)        // +10% buffer — the new default
+              : 2n ** 256n - 1n;                                // MAX_UINT256 — opt-in
 
             // Approve token using writeContract
             const approvalHash = await writeContract(config, {

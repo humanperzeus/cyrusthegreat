@@ -1494,9 +1494,24 @@ async function fetchVaultedTokens(vaultAddr) {
 }
 
 // Renders a checkbox+amount table for a list of tokens.
-// Returns { getSelected() → [{addr, decimals, amountWei}], refresh(newTokens) }.
+// Returns { getSelected() → [{addr, decimals, amountWei, useMaxApprove}], refresh(newTokens) }.
+//
+// opts.showMaxApprove (default false) adds a "Max approve" column with a
+// per-token checkbox. Used by deposit pickers (b8-4 / b8-8) where the
+// user can opt a single token in to MAX_UINT256 approval; left off for
+// withdraw / transfer pickers since vaulted tokens don't need an approve.
+//
+// Approval policy (2026-06-10 reversal of 272eaa2):
+// DEFAULT is now finite (amount + 10% buffer), MAX is the opt-in. The
+// earlier all-MAX policy was driven by decimal-comma typo fear, but
+// unlimited-forever allowances are a long-lived security footgun
+// (the contract — or any future upgrade target — can drain anything the
+// user holds in that token, anytime). The +10% headroom + the new amount
+// normalization (see normalizeAmount) covers parsing/rounding wobble
+// without leaving an unbounded allowance behind.
 function renderTokenPicker(host, tokens, opts = {}) {
   host.innerHTML = "";
+  const showMaxApprove = !!opts.showMaxApprove;
   const table = document.createElement("table");
   table.style.cssText = "width: 100%; font-size: 13px; border-collapse: collapse;";
   table.innerHTML = `<thead><tr>
@@ -1504,6 +1519,7 @@ function renderTokenPicker(host, tokens, opts = {}) {
     <th style="text-align:left; padding: 4px 6px;">Token</th>
     <th style="text-align:right; padding: 4px 6px;">${opts.balanceLabel || "Wallet balance"}</th>
     <th style="text-align:left; padding: 4px 6px; width: 200px;">Amount</th>
+    ${showMaxApprove ? `<th style="text-align:left; padding: 4px 6px; width: 110px;" title="Tick to approve MAX_UINT256 for this token (unbounded). Leave OFF for the safer amount + 10% buffer.">Max approve</th>` : ""}
   </tr></thead>`;
   const tbody = document.createElement("tbody");
   table.appendChild(tbody);
@@ -1514,6 +1530,8 @@ function renderTokenPicker(host, tokens, opts = {}) {
     const formatted = ethers.formatUnits(t.balance, t.decimals);
     const hasBalance = t.balance > 0n;
     const addrShort = t.isNative ? "(native)" : `<a target="_blank" href="${explorerAddr(t.addr)}">${fmtAddr(t.addr)}</a>`;
+    // Native has no allowance concept — hide the toggle on those rows.
+    const showMaxForThisRow = showMaxApprove && !t.isNative;
     tr.innerHTML = `
       <td style="padding: 6px;"><input type="checkbox" ${hasBalance ? "" : "disabled"} /></td>
       <td style="padding: 6px;"><b>${t.symbol}</b> <span class="hint">${addrShort}</span>${t.error ? ` <span style="color: var(--err);">⚠ ${t.error}</span>` : ""}</td>
@@ -1522,11 +1540,13 @@ function renderTokenPicker(host, tokens, opts = {}) {
         <input type="text" class="amt mono" placeholder="0.0" style="width: 120px;" ${hasBalance ? "" : "disabled"} />
         <button class="setMax" type="button" ${hasBalance ? "" : "disabled"} style="padding: 2px 8px; font-size: 11px;">max</button>
       </td>
+      ${showMaxApprove ? `<td style="padding: 6px; text-align: center;">${showMaxForThisRow ? `<input type="checkbox" class="maxApprove" ${hasBalance ? "" : "disabled"} title="MAX_UINT256 approval (unbounded). Default OFF = amount + 10% (safer)." />` : `<span class="hint" style="font-size: 11px;">n/a</span>`}</td>` : ""}
     `;
     tbody.appendChild(tr);
     const cb = tr.querySelector('input[type="checkbox"]');
     const amt = tr.querySelector(".amt");
     const max = tr.querySelector(".setMax");
+    const maxApprove = tr.querySelector(".maxApprove");
     max.onclick = () => {
       // The 0.0005 native buffer ONLY applies when the balance comes from
       // the wallet (deposits): the user needs to keep some native to pay
@@ -1544,7 +1564,7 @@ function renderTokenPicker(host, tokens, opts = {}) {
       cb.checked = true;
     };
     amt.oninput = () => { if (amt.value.trim() && hasBalance) cb.checked = true; };
-    return { ...t, _cb: cb, _amt: amt, _formatted: formatted };
+    return { ...t, _cb: cb, _amt: amt, _maxApprove: maxApprove, _formatted: formatted };
   });
   host.appendChild(table);
 
@@ -1564,7 +1584,11 @@ function renderTokenPicker(host, tokens, opts = {}) {
         catch (e) { throw new Error(`Bad amount for ${r.symbol}: ${v}`); }
         if (wei <= 0n) throw new Error(`Amount for ${r.symbol} must be > 0`);
         if (wei > r.balance) throw new Error(`${r.symbol} amount (${v}) exceeds balance (${r._formatted})`);
-        out.push({ addr: r.addr, decimals: r.decimals, symbol: r.symbol, amountWei: wei, isNative: r.isNative });
+        // useMaxApprove: only meaningful when the picker exposed the
+        // toggle (showMaxApprove + non-native row). Defaults to false →
+        // caller will use the safer finite (amount + 10%) approval.
+        const useMaxApprove = !!(r._maxApprove && r._maxApprove.checked);
+        out.push({ addr: r.addr, decimals: r.decimals, symbol: r.symbol, amountWei: wei, isNative: r.isNative, useMaxApprove });
       }
       return out;
     },
@@ -2020,7 +2044,7 @@ const BANK8_TESTS = [
       const pickerHost = document.createElement("div");
       body.innerHTML = "";
       body.appendChild(pickerHost);
-      const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No known tokens for this chain. Add to KNOWN_TOKENS in source." });
+      const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No known tokens for this chain. Add to KNOWN_TOKENS in source.", showMaxApprove: true });
       return {
         run: async () => {
           await ensureSigner();
@@ -2069,13 +2093,26 @@ const BANK8_TESTS = [
           let approveLog = "";
           for (let i = 0; i < ercToApprove.length; i++) {
             const s = ercToApprove[i];
-            pf.update(i, "running", `Approving ${s.symbol} for ${fmtAddr(v)}…`);
+            // Per-token approval policy (2026-06-10 reversal of 272eaa2):
+            //   useMaxApprove=true  → MAX_UINT256 (unbounded; opt-in)
+            //   default             → amount + 10% buffer (finite, safer)
+            // Rationale: unlimited approvals are a security footgun (if
+            // the contract is ever compromised or upgraded badly, every
+            // future balance can be drained). The +10% headroom covers
+            // parse/round wobble; amount normalization (see
+            // normalizeAmount) covers locale comma/period confusion.
+            const approvalAmount = s.useMaxApprove
+              ? MAX_UINT256
+              : s.amountWei + (s.amountWei / 10n);
+            const approvalLabel = s.useMaxApprove ? "MAX_UINT256" : `${ethers.formatUnits(approvalAmount, s.decimals)} (amount + 10%)`;
+            pf.update(i, "running", `Approving ${s.symbol} (${approvalLabel}) for ${fmtAddr(v)}…`);
             try {
-              const a = await s.erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
+              const a = await s.erc.connect(signer).approve(v, approvalAmount, { gasLimit: 100000n });
               pf.update(i, "running", `Approve tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
               await a.wait();
-              pf.update(i, "done", `🔓 Max-approved ${s.symbol} (one-time): <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
-              approveLog += `  🔓 Max-approved ${s.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+              const doneIcon = s.useMaxApprove ? "🔓" : "✓";
+              pf.update(i, "done", `${doneIcon} Approved ${s.symbol} = ${approvalLabel}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
+              approveLog += `  ${doneIcon} Approved ${s.symbol} = ${approvalLabel}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
             } catch (e) {
               pf.update(i, "failed", `Approve ${s.symbol} failed: ${e.shortMessage || e.message}`);
               throw e;
@@ -2310,8 +2347,8 @@ const BANK8_TESTS = [
     id: "b8-8", name: "Single ERC20 deposit (depositToken)", kind: "write",
 
     phase: "Step 3 · ERC-20 single-token", phaseSub: "Token-side operations (Sepolia: USD1, WLFI).",
-    desc: "Pick ONE token from your wallet, set an amount. Auto-handles approval via MAX_UINT256 (one-time per token; mirrors production frontend). Smaller scope than the multi-token batch — confirms the single-token path works on its own.",
-    expect: "Tx confirms; the picked token's vaulted balance increases. Approval shown as 🔓 first time, ✓ already-approved afterwards.",
+    desc: "Pick ONE token from your wallet, set an amount. Approval defaults to amount + 10% buffer (safer — no lingering unbounded allowance); tick 'Max approve' to opt into MAX_UINT256 instead. Smaller scope than the multi-token batch — confirms the single-token path works on its own.",
+    expect: "Tx confirms; the picked token's vaulted balance increases. Approval shown as ✓ (finite) or 🔓 (max), already-approved afterwards.",
     setup: async (body) => {
       if (!provider || !account) {
         body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
@@ -2329,7 +2366,7 @@ const BANK8_TESTS = [
       body.appendChild(pickerHost);
       // Progress feedback during run() is rendered by createProgressFlow()
       // as a floating overlay modal — no inline host element needed.
-      const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No ERC20 tokens found." });
+      const picker = renderTokenPicker(pickerHost, tokens, { balanceLabel: "Wallet balance", emptyMsg: "No ERC20 tokens found.", showMaxApprove: true });
       return {
         run: async () => {
           await ensureSigner();
@@ -2360,19 +2397,27 @@ const BANK8_TESTS = [
 
           let approveLog = "";
           if (needsApprove) {
-            pf.update(0, "running", `Approving ${t.symbol} (MAX_UINT256) for ${fmtAddr(v)}…`);
+            // Same per-token policy as b8-4: default finite (amount + 10%),
+            // MAX_UINT256 only when the user explicitly opts in via the
+            // picker's "Max approve" checkbox.
+            const approvalAmount = t.useMaxApprove
+              ? MAX_UINT256
+              : t.amountWei + (t.amountWei / 10n);
+            const approvalLabel = t.useMaxApprove ? "MAX_UINT256" : `${ethers.formatUnits(approvalAmount, t.decimals)} (amount + 10%)`;
+            pf.update(0, "running", `Approving ${t.symbol} (${approvalLabel}) for ${fmtAddr(v)}…`);
             try {
-              const a = await erc.connect(signer).approve(v, MAX_UINT256, { gasLimit: 100000n });
+              const a = await erc.connect(signer).approve(v, approvalAmount, { gasLimit: 100000n });
               pf.update(0, "running", `Approve tx submitted: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
               await a.wait();
-              pf.update(0, "done", `🔓 Max-approved ${t.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
-              approveLog = `🔓 Max-approved ${t.symbol}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
+              const doneIcon = t.useMaxApprove ? "🔓" : "✓";
+              pf.update(0, "done", `${doneIcon} Approved ${t.symbol} = ${approvalLabel}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>`);
+              approveLog = `${doneIcon} Approved ${t.symbol} = ${approvalLabel}: <a target="_blank" href="${explorerTx(a.hash)}">${a.hash.slice(0, 10)}…</a>\n`;
             } catch (e) {
               pf.update(0, "failed", `Approve failed: ${e.shortMessage || e.message}`);
               throw e;
             }
           } else {
-            approveLog = `✓ ${t.symbol} already max-approved (allowance ${cur === MAX_UINT256 ? "∞" : cur.toString()})\n`;
+            approveLog = `✓ ${t.symbol} already sufficiently approved (allowance ${cur === MAX_UINT256 ? "∞" : cur.toString()})\n`;
           }
 
           const signIdx    = needsApprove ? 1 : 0;

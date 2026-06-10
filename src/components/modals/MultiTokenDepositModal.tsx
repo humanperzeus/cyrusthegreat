@@ -145,7 +145,20 @@ export function MultiTokenDepositModal({
       token,
       amount: "",
       isValid: false,
-      approvalType: 'unlimited' // 2026-06-07: max approval is the unified default; the UI no longer exposes 'exact'
+      // Approval policy reversal (2026-06-10) — reverses 272eaa2.
+      //
+      // DEFAULT = 'exact' (amount + 10% buffer). The earlier all-MAX
+      // policy was driven by decimal-typo fear, but an unbounded
+      // allowance is a long-lived security footgun: it persists across
+      // sessions, lets the vault (or any future upgrade target) move
+      // arbitrary amounts of that token at any time. The +10% headroom
+      // covers parse/round wobble; the amount-input normalization (see
+      // utils/normalizeAmount) handles the locale comma/period
+      // confusion that drove the original all-MAX decision.
+      //
+      // Users who genuinely want fire-and-forget approvals can tick
+      // the per-row "Max approve" toggle (sets approvalType: 'unlimited').
+      approvalType: 'exact',
     };
 
     setDeposits(prev => [...prev, newDeposit]);
@@ -169,6 +182,16 @@ export function MultiTokenDepositModal({
       }
       return deposit;
     }));
+  };
+
+  // Per-row approval toggle: ticked = MAX_UINT256 (unbounded, opt-in),
+  // unticked = 'exact' = amount + 10% buffer (the new safer default).
+  const toggleMaxApprove = (index: number) => {
+    setDeposits(prev => prev.map((d, i) =>
+      i === index
+        ? { ...d, approvalType: d.approvalType === 'unlimited' ? 'exact' : 'unlimited' }
+        : d
+    ));
   };
 
   const removeDeposit = (index: number) => {
@@ -321,16 +344,33 @@ export function MultiTokenDepositModal({
                       </Button>
                     </div>
 
-                    {/* Approval info — unified to MAX_UINT256 ("approve once")
-                        per 2026-06-07 policy. Choice removed because the
-                        decimal-comma-typo risk on "exact" outweighs the
-                        theoretical safety upside. ETH path stays exempt
-                        (no approve needed at all). */}
+                    {/* Approval policy (2026-06-10 reversal of 272eaa2):
+                        DEFAULT = finite (amount + 10% buffer) because an
+                        unbounded allowance is a long-lived security
+                        footgun. Locale comma/period confusion is now
+                        handled by amount normalization upstream, so the
+                        original "always max to dodge typos" rationale
+                        doesn't hold anymore. Users who actually want a
+                        one-time approve-and-forget tick the box below. */}
                     {deposit.token.address !== '0x0000000000000000000000000000000000000000' ? (
                       <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="text-xs text-gray-600">
-                          🔓 Will approve <b>unlimited {deposit.token.symbol}</b> — one-time signature; future deposits of {deposit.token.symbol} on this vault skip the approval step entirely. (Standard pattern used by Uniswap, Aave, etc.)
-                        </div>
+                        <label className="flex items-start gap-2 text-xs cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={deposit.approvalType === 'unlimited'}
+                            onChange={() => toggleMaxApprove(index)}
+                            disabled={isLoading}
+                            className="mt-0.5"
+                          />
+                          <span className="text-gray-700">
+                            <b>Max approve {deposit.token.symbol}</b> — tick to approve the full <code>MAX_UINT256</code> allowance once instead of <i>amount + 10%</i> this transaction only.
+                            <div className="text-gray-500 mt-0.5">
+                              {deposit.approvalType === 'unlimited'
+                                ? `🔓 Will approve unlimited ${deposit.token.symbol}. Future deposits skip the approve step but the vault keeps unbounded access until you revoke.`
+                                : `✓ Will approve ${deposit.token.symbol} just for this deposit (+10% buffer for rounding). Safer; you'll re-approve next time.`}
+                            </div>
+                          </span>
+                        </label>
                       </div>
                     ) : (
                       <div className="mt-3 pt-3 border-t border-gray-200">
