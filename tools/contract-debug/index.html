@@ -2010,10 +2010,16 @@ const BANK8_TESTS = [
             if (cur < s.amountWei) ercToApprove.push({ ...s, erc });
           }
 
-          // Build the step labels: one per fresh approve, plus the final deposit.
+          // Build the step labels: one per fresh approve, then the tx
+          // lifecycle as THREE honest phases — sign (wallet popup),
+          // confirm (mempool → mined), finalized (receipt ok). Each
+          // phase maps to a real signal, so the indicator never shows
+          // ✓ for something the chain hasn't actually done yet.
           const stepLabels = [
             ...ercToApprove.map(s => `Approve ${s.symbol}`),
-            "depositMultipleTokens",
+            "Sign in wallet",
+            "Confirm on-chain",
+            "Finalized",
           ];
           const pf = createProgressFlow(stepLabels, "Multi-token batch deposit");
 
@@ -2034,9 +2040,11 @@ const BANK8_TESTS = [
             }
           }
 
-          // Final deposit step
-          const depositIdx = ercToApprove.length;
-          pf.update(depositIdx, "running", `Building tx (msg.value = ${ethers.formatEther(ethValue)} native = sum(natives) + fee)…`);
+          // Tx lifecycle: sign → confirm → finalized.
+          const signIdx    = ercToApprove.length;
+          const confirmIdx = signIdx + 1;
+          const finalIdx   = signIdx + 2;
+          pf.update(signIdx, "running", `Pre-flight check (msg.value = ${ethers.formatEther(ethValue)} native = sum(natives) + fee)…`);
 
           // Pre-flight staticCall — surface revert reasons clearly.
           try {
@@ -2045,28 +2053,33 @@ const BANK8_TESTS = [
             );
           } catch (e) {
             const reason = e.shortMessage || e.reason || e.message || String(e);
-            pf.update(depositIdx, "failed", `Pre-flight reverted: ${reason}`);
+            pf.update(signIdx, "failed", `Pre-flight reverted: ${reason}`);
             throw new Error(`Pre-flight reverted: ${reason}`);
           }
 
+          // `phase` tracks which lifecycle step is in flight so the
+          // catch block fails the right one (sign vs confirm).
+          let phase = signIdx;
           try {
+            pf.update(signIdx, "running", "Open your wallet and sign the deposit…");
             const tx = await c.connect(signer).depositMultipleTokens(
               tokenAddrs, amounts, { value: ethValue, gasLimit: 800000n },
             );
-            pf.update(depositIdx, "running", `Tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            phase = confirmIdx;
+            pf.update(confirmIdx, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
             const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
             const r = await tx.wait();
             if (r.status !== 1) {
-              pf.update(depositIdx, "failed", `Tx mined but status = ${r.status}`);
+              pf.update(confirmIdx, "failed", `Tx mined but status = ${r.status}`);
               throw new Error(`depositMultipleTokens reverted, status ${r.status}`);
             }
-            pf.update(depositIdx, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            pf.update(finalIdx, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
             const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
             return {
               html: `${approveLog}Deposited (ONE tx): ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓`,
             };
           } catch (e) {
-            pf.update(depositIdx, "failed", `Deposit failed: ${e.shortMessage || e.message}`);
+            pf.update(phase, "failed", `Deposit failed: ${e.shortMessage || e.message}`);
             throw e;
           }
         },
@@ -2206,10 +2219,10 @@ const BANK8_TESTS = [
           const amounts   = sel.map(s => s.amountWei);
 
           // Withdraw is a single-tx flow (no per-token approvals needed —
-          // you already own what's vaulted). One-step progress modal with
-          // detail-line updates as the tx progresses through staticCall →
-          // submit → mined.
-          const pf = createProgressFlow(["withdrawMultipleTokens"], "Multi-token batch withdraw");
+          // you already own what's vaulted). The tx lifecycle is shown as
+          // THREE honest phases: sign (wallet popup) → confirm (mempool →
+          // mined) → finalized (receipt ok).
+          const pf = createProgressFlow(["Sign in wallet", "Confirm on-chain", "Finalized"], "Multi-token batch withdraw");
 
           pf.update(0, "running", "Pre-flight check (staticCall)…");
           try {
@@ -2222,23 +2235,25 @@ const BANK8_TESTS = [
             throw new Error(`Pre-flight reverted: ${reason}`);
           }
 
+          let phase = 0;
           try {
-            pf.update(0, "running", "Submitting withdraw — open wallet to sign…");
+            pf.update(0, "running", "Open your wallet and sign the withdraw…");
             const tx = await c.connect(signer).withdrawMultipleTokens(
               tokenAddrs, amounts, { value: fee, gasLimit: 800000n },
             );
-            pf.update(0, "running", `Tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            phase = 1;
+            pf.update(1, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
             const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
             const r = await tx.wait();
             if (r.status !== 1) {
-              pf.update(0, "failed", `Tx mined but status = ${r.status}`);
+              pf.update(1, "failed", `Tx mined but status = ${r.status}`);
               throw new Error(`withdrawMultipleTokens reverted, status ${r.status}`);
             }
-            pf.update(0, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            pf.update(2, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
             const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
             return { html: `Withdrew: ${summary}\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
           } catch (e) {
-            pf.update(0, "failed", `Withdraw failed: ${e.shortMessage || e.message}`);
+            pf.update(phase, "failed", `Withdraw failed: ${e.shortMessage || e.message}`);
             throw e;
           }
         },
@@ -2291,10 +2306,14 @@ const BANK8_TESTS = [
           const cur = await erc.allowance(account, v);
           const needsApprove = cur < t.amountWei;
 
-          // If the token is already approved, the flow is single-step.
-          const stepLabels = needsApprove
-            ? [`Approve ${t.symbol}`, `depositToken (${t.symbol})`]
-            : [`depositToken (${t.symbol})`];
+          // Optional approve step, then the tx lifecycle as THREE honest
+          // phases: sign (wallet popup) → confirm → finalized.
+          const stepLabels = [
+            ...(needsApprove ? [`Approve ${t.symbol}`] : []),
+            "Sign in wallet",
+            "Confirm on-chain",
+            "Finalized",
+          ];
           const pf = createProgressFlow(stepLabels, `Single ERC-20 deposit · ${t.symbol}`);
 
           let approveLog = "";
@@ -2314,21 +2333,25 @@ const BANK8_TESTS = [
             approveLog = `✓ ${t.symbol} already max-approved (allowance ${cur === MAX_UINT256 ? "∞" : cur.toString()})\n`;
           }
 
-          const depositIdx = needsApprove ? 1 : 0;
-          pf.update(depositIdx, "running", `Submitting depositToken(${t.symbol}, ${ethers.formatUnits(t.amountWei, t.decimals)})…`);
+          const signIdx    = needsApprove ? 1 : 0;
+          const confirmIdx = signIdx + 1;
+          const finalIdx   = signIdx + 2;
+          let phase = signIdx;
           try {
+            pf.update(signIdx, "running", `Open your wallet and sign depositToken(${t.symbol}, ${ethers.formatUnits(t.amountWei, t.decimals)})…`);
             const tx = await c.connect(signer).depositToken(t.addr, t.amountWei, { value: fee, gasLimit: 300000n });
-            pf.update(depositIdx, "running", `Tx submitted: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            phase = confirmIdx;
+            pf.update(confirmIdx, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
             const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
             const r = await tx.wait();
             if (r.status !== 1) {
-              pf.update(depositIdx, "failed", `Tx mined but status = ${r.status}`);
+              pf.update(confirmIdx, "failed", `Tx mined but status = ${r.status}`);
               throw new Error(`depositToken reverted, status ${r.status}`);
             }
-            pf.update(depositIdx, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            pf.update(finalIdx, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
             return { html: `${approveLog}Deposited: ${ethers.formatUnits(t.amountWei, t.decimals)} ${t.symbol}\nTx: ${link}\nBlock ${r.blockNumber}, status ok ✓` };
           } catch (e) {
-            pf.update(depositIdx, "failed", `Deposit failed: ${e.shortMessage || e.message}`);
+            pf.update(phase, "failed", `Deposit failed: ${e.shortMessage || e.message}`);
             throw e;
           }
         },
@@ -2471,9 +2494,9 @@ const BANK8_TESTS = [
 
           // Internal batch transfer is a single-tx flow — no per-token
           // approvals needed because tokens are already in the vault.
-          // One-step progress modal with detail-line updates through
-          // staticCall → submit → mined.
-          const pf = createProgressFlow(["transferMultipleTokensInternal"], "Multi-token batch internal transfer");
+          // The tx lifecycle is shown as THREE honest phases:
+          // sign (wallet popup) → confirm (mempool → mined) → finalized.
+          const pf = createProgressFlow(["Sign in wallet", "Confirm on-chain", "Finalized"], "Multi-token batch internal transfer");
 
           pf.update(0, "running", "Pre-flight check (staticCall)…");
           try {
@@ -2486,23 +2509,25 @@ const BANK8_TESTS = [
             throw new Error(`Pre-flight reverted: ${reason}`);
           }
 
+          let phase = 0;
           try {
-            pf.update(0, "running", `Submitting transfer to ${fmtAddr(to)} — open wallet to sign…`);
+            pf.update(0, "running", `Open your wallet and sign the transfer to ${fmtAddr(to)}…`);
             const tx = await c.connect(signer).transferMultipleTokensInternal(
               tokenAddrs, to, amounts, { value: fee, gasLimit: 800000n },
             );
-            pf.update(0, "running", `Tx submitted, waiting for confirmation: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            phase = 1;
+            pf.update(1, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
             const link = `<a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash}</a>`;
             const r = await tx.wait();
             if (r.status !== 1) {
-              pf.update(0, "failed", `Tx mined but status = ${r.status}`);
+              pf.update(1, "failed", `Tx mined but status = ${r.status}`);
               throw new Error(`transferMultipleTokensInternal reverted, status ${r.status}`);
             }
-            pf.update(0, "done", `Confirmed in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+            pf.update(2, "done", `Finalized in block ${r.blockNumber}: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
             const summary = sel.map(s => `${ethers.formatUnits(s.amountWei, s.decimals)} ${s.symbol}`).join(" + ");
             return { html: `Batch-transferred: ${summary} → <a target="_blank" href="${explorerAddr(to)}">${fmtAddr(to)}</a>\nTx: ${link}\nBlock ${r.blockNumber}, status: ok ✓` };
           } catch (e) {
-            pf.update(0, "failed", `Transfer failed: ${e.shortMessage || e.message}`);
+            pf.update(phase, "failed", `Transfer failed: ${e.shortMessage || e.message}`);
             throw e;
           }
         },
