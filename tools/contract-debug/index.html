@@ -535,17 +535,23 @@
     padding: 16px;
   }
   .pf-overlay.open { opacity: 1; }
+  /* "Imperial Gold" skin (design round 2026-06-10, variant A):
+     warm Persian brown + heavy gold ring; matches the landing page's
+     amber feel. Same skin ships in production ProgressFlow.tsx. */
   .pf-overlay .pf-modal {
-    background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
-    border: 1px solid var(--border-strong);
+    background:
+      radial-gradient(ellipse 120% 80% at 50% -20%, rgba(240, 180, 0, 0.12) 0%, transparent 50%),
+      linear-gradient(180deg, #201408 0%, #2a1b0c 100%);
+    border: 1px solid rgba(240, 180, 0, 0.38);
     border-radius: 18px;
     padding: 30px 34px 26px;
     max-width: 640px;
     width: 100%;
     box-shadow:
-      0 24px 70px rgba(0, 0, 0, 0.65),
-      0 0 0 1px rgba(240, 180, 0, 0.14),
-      0 0 60px rgba(240, 180, 0, 0.05);
+      0 24px 70px rgba(0, 0, 0, 0.7),
+      0 0 0 1px rgba(240, 180, 0, 0.18),
+      0 0 80px rgba(240, 180, 0, 0.10),
+      inset 0 1px 0 rgba(255, 220, 130, 0.18);
     transform: translateY(10px) scale(0.97);
     transition:
       transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
@@ -569,7 +575,26 @@
     font-size: 15px;
     margin-bottom: 18px;
     padding-right: 130px; /* leave room for Hide + Close buttons */
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, var(--gold-bright) 0%, var(--gold) 55%, var(--gold-deep) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
+  .pf-overlay .pf-modal .progress-flow .progress-title .sub {
+    -webkit-text-fill-color: #b59668;
+    color: #b59668;
+  }
+  /* Warm-gold tints for pending dots/connectors; done/running/failed
+     state colors stay untouched. */
+  .pf-overlay .pf-modal .stepper .step .dot {
+    border-color: rgba(240, 180, 0, 0.3);
+    background: rgba(240, 180, 0, 0.06);
+  }
+  .pf-overlay .pf-modal .stepper .conn { background: rgba(240, 180, 0, 0.18); }
+  .pf-overlay .pf-modal .step-detail { color: #b59668; }
+  .pf-overlay .pf-modal .step-detail a { color: var(--gold-bright); }
 
   /* Header buttons row — always visible. */
   .pf-overlay .pf-controls {
@@ -583,6 +608,11 @@
     padding: 6px 14px;
     font-size: 12px;
     font-weight: 600;
+    border-color: rgba(240, 180, 0, 0.4);
+  }
+  .pf-overlay .pf-controls button:hover:not([disabled]) {
+    background: rgba(240, 180, 0, 0.12);
+    border-color: rgba(240, 180, 0, 0.6);
   }
 
   /* Mini-mode (chip) body — hidden in expanded mode. */
@@ -642,12 +672,15 @@
     width: auto;
     cursor: pointer;
     transform: none;
-    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(240, 180, 0, 0.28);
+    /* Imperial Gold chip: warm brown body + gold ring + soft gold glow */
+    background: linear-gradient(180deg, #201408 0%, #2a1b0c 100%);
+    border: 1px solid rgba(240, 180, 0, 0.45);
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.6), 0 0 24px rgba(240, 180, 0, 0.15);
     display: flex;
     align-items: center;
   }
   .pf-overlay.minimized .pf-modal:hover {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(240, 180, 0, 0.48);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65), 0 0 32px rgba(240, 180, 0, 0.28);
   }
   .pf-overlay.minimized .progress-flow,
   .pf-overlay.minimized .pf-controls .pf-hide {
