@@ -258,17 +258,23 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
         @keyframes pfFadeIn {
           to { opacity: 1; }
         }
+        /* "Imperial Gold" skin (design round 2026-06-10, variant A) —
+           identical to the debug UI's progress modal so both surfaces
+           match: warm Persian brown + gold ring + inner top highlight. */
         .pf-modal {
-          background: linear-gradient(180deg, #16151a 0%, #1c1b21 100%);
-          border: 1px solid rgba(255, 220, 130, 0.18);
+          background:
+            radial-gradient(ellipse 120% 80% at 50% -20%, rgba(240, 180, 0, 0.12) 0%, transparent 50%),
+            linear-gradient(180deg, #201408 0%, #2a1b0c 100%);
+          border: 1px solid rgba(240, 180, 0, 0.38);
           border-radius: 18px;
           padding: 30px 34px 26px;
           max-width: 640px;
           width: 100%;
           box-shadow:
-            0 24px 70px rgba(0, 0, 0, 0.65),
-            0 0 0 1px rgba(240, 180, 0, 0.14),
-            0 0 60px rgba(240, 180, 0, 0.05);
+            0 24px 70px rgba(0, 0, 0, 0.7),
+            0 0 0 1px rgba(240, 180, 0, 0.18),
+            0 0 80px rgba(240, 180, 0, 0.10),
+            inset 0 1px 0 rgba(255, 220, 130, 0.18);
           transition:
             transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
             padding 0.22s ease,
@@ -285,13 +291,19 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
         }
         .pf-title {
           font-size: 15px;
-          font-weight: 600;
+          font-weight: 800;
+          letter-spacing: -0.01em;
           margin-bottom: 18px;
           padding-right: 130px;
+          background: linear-gradient(135deg, #FFC83D 0%, #F0B400 55%, #C99000 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
         }
         .pf-title .pf-sub {
           font-weight: 400;
-          color: #9ca3af;
+          -webkit-text-fill-color: #b59668;
+          color: #b59668;
           font-size: 12px;
           margin-left: 8px;
         }
@@ -317,8 +329,8 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
           width: 24px;
           height: 24px;
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1.5px solid rgba(255, 255, 255, 0.12);
+          background: rgba(240, 180, 0, 0.06);
+          border: 1.5px solid rgba(240, 180, 0, 0.3);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -352,19 +364,19 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
         .pf-conn {
           flex: 1;
           height: 1.5px;
-          background: rgba(255, 255, 255, 0.1);
+          background: rgba(240, 180, 0, 0.18);
           margin: 0 12px;
           min-width: 24px;
         }
         .pf-step.done + .pf-conn { background: #10b981; }
         .pf-detail {
           font-size: 12px;
-          color: #9ca3af;
+          color: #b59668;
           margin-top: 12px;
           font-family: ui-monospace, "SF Mono", monospace;
           word-break: break-all;
         }
-        .pf-detail a { color: #F0B400; }
+        .pf-detail a { color: #FFC83D; }
 
         /* Header buttons row — always visible. */
         .pf-controls {
@@ -379,15 +391,15 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
           font-size: 12px;
           font-weight: 600;
           border-radius: 999px;
-          border: 1px solid rgba(255, 220, 130, 0.18);
+          border: 1px solid rgba(240, 180, 0, 0.4);
           background: transparent;
           color: #f5f5f5;
           cursor: pointer;
           transition: all 0.15s ease;
         }
         .pf-controls button:hover {
-          background: rgba(255, 255, 255, 0.04);
-          border-color: rgba(255, 255, 255, 0.28);
+          background: rgba(240, 180, 0, 0.12);
+          border-color: rgba(240, 180, 0, 0.6);
         }
 
         /* Mini-mode (chip) body — hidden in expanded mode. */
@@ -449,13 +461,16 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
           width: auto;
           cursor: pointer;
           transform: none;
-          box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(240, 180, 0, 0.28);
+          /* Imperial Gold chip: warm brown body + gold ring + soft glow */
+          background: linear-gradient(180deg, #201408 0%, #2a1b0c 100%);
+          border: 1px solid rgba(240, 180, 0, 0.45);
+          box-shadow: 0 6px 28px rgba(0, 0, 0, 0.6), 0 0 24px rgba(240, 180, 0, 0.15);
           display: flex;
           align-items: center;
           animation: none;
         }
         .pf-overlay.minimized .pf-modal:hover {
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(240, 180, 0, 0.48);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65), 0 0 32px rgba(240, 180, 0, 0.28);
         }
         .pf-overlay.minimized .pf-progress-body,
         .pf-overlay.minimized .pf-controls .pf-hide {
