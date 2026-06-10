@@ -2630,6 +2630,119 @@ const BANK8_TESTS = [
       };
     },
   },
+  {
+    id: "b8-13", name: "Revoke ERC-20 approvals to Bank8 (reset to 0)", kind: "write",
+
+    phase: "Step 6 · Maintenance", phaseSub: "Reset approval state — useful for testing the fresh-approve UX.",
+    desc: "Reads the current allowance for every KNOWN_TOKENS ERC-20 → Bank8 on this chain. Tick the ones you want to reset to zero. Running fires one approve(spender, 0) tx per ticked token. After the revoke confirms on-chain, b8-4 / b8-8 will request a FRESH approval the next time you deposit those tokens — so you can see the full 'Approve TOKEN → Sign → Confirm → Finalized' lifecycle in the new Imperial Gold modal from scratch.",
+    expect: "Each ticked token's allowance drops to 0. Re-running b8-4 / b8-8 for those tokens now shows the approve step in the progress modal instead of skipping it.",
+    setup: async (body) => {
+      if (!provider || !account) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">Connect wallet first.</div>`;
+        return { run: async () => { throw new Error("Wallet not connected"); } };
+      }
+      const v = bank8AddressForChain();
+      if (!v) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No Bank8 on this chain.</div>`;
+        return { run: async () => { throw new Error("No Bank8 on this chain"); } };
+      }
+
+      // Snapshot allowance for every known ERC-20 on this chain. Native
+      // (0x0) is skipped — there's no allowance concept for it.
+      const list = (KNOWN_TOKENS[chainId] || []).filter(t => !t.isNative);
+      const rp = getReadProvider();
+      const rows = await Promise.all(list.map(async (t) => {
+        const addr = t.addr();
+        try {
+          const erc = new ethers.Contract(addr, ERC20_ABI, rp);
+          const [symbol, decimals, allowance] = await Promise.all([
+            erc.symbol().catch(() => t.label),
+            erc.decimals().catch(() => 18),
+            erc.allowance(account, v),
+          ]);
+          const MAX = (1n << 256n) - 1n;
+          const isMax = allowance === MAX;
+          const hasAllowance = allowance > 0n;
+          const display = isMax
+            ? "∞ (MAX_UINT256)"
+            : ethers.formatUnits(allowance, decimals) + ` ${symbol}`;
+          return { addr, symbol, decimals, allowance, hasAllowance, isMax, display };
+        } catch (e) {
+          return { addr, symbol: t.label, decimals: 18, allowance: 0n, hasAllowance: false, isMax: false, display: `(read failed: ${e.shortMessage || e.message})` };
+        }
+      }));
+
+      const withAllowance = rows.filter(r => r.hasAllowance);
+      if (rows.length === 0) {
+        body.innerHTML = `<div class="hint" style="padding: 8px;">No known ERC-20 tokens for chain ${chainId}. Add some to KNOWN_TOKENS in source.</div>`;
+        return { run: async () => { throw new Error("No ERC-20s configured"); } };
+      }
+
+      body.innerHTML = `
+        <div class="hint" style="margin-bottom: 10px;">
+          Spender = Bank8 on this chain (<code class="mono">${fmtAddr(v)}</code>).
+          ${withAllowance.length === 0
+            ? "<b>All approvals already at 0.</b> Nothing to revoke — your next deposit will show the full approve step on its own."
+            : `<b>${withAllowance.length} token${withAllowance.length === 1 ? '' : 's'} currently approved.</b>`}
+        </div>
+        <div class="grid" style="display: grid; grid-template-columns: auto 1fr auto; gap: 8px 14px; align-items: center;">
+          ${rows.map((r, i) => `
+            <label class="row" style="display: contents;">
+              <input type="checkbox" data-revoke-idx="${i}" ${r.hasAllowance ? "checked" : "disabled"} />
+              <div>
+                <b>${r.symbol}</b>
+                <div class="hint" style="font-size: 11px;"><code class="mono">${fmtAddr(r.addr)}</code></div>
+              </div>
+              <div class="hint" style="font-size: 12px;">${r.display}</div>
+            </label>
+          `).join("")}
+        </div>
+      `;
+
+      return {
+        run: async () => {
+          await ensureSigner();
+          const checked = Array.from(body.querySelectorAll("input[type=checkbox]:checked"))
+            .map(el => rows[parseInt(el.dataset.revokeIdx, 10)])
+            .filter(r => r && r.hasAllowance);
+          if (checked.length === 0) throw new Error("Tick at least one approved token to revoke.");
+
+          // Each token = one progress step (label "Revoke SYMBOL"). The
+          // internal Sign → Confirm → Finalized states live in the
+          // detail line, matching the b8-4 approve-loop pattern.
+          const pf = createProgressFlow(
+            checked.map(c => `Revoke ${c.symbol}`),
+            `Revoke ${checked.length} approval${checked.length === 1 ? '' : 's'} on Bank8`,
+          );
+
+          const lines = [];
+          for (let i = 0; i < checked.length; i++) {
+            const t = checked[i];
+            try {
+              pf.update(i, "running", `Open your wallet and sign approve(${t.symbol}, 0)…`);
+              const erc = new ethers.Contract(t.addr, ERC20_ABI, getReadProvider());
+              const tx = await erc.connect(signer).approve(v, 0n, { gasLimit: 100000n });
+              pf.update(i, "running", `Signed & broadcast: <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> — waiting for confirmation…`);
+              const r = await tx.wait();
+              if (r.status !== 1) {
+                pf.update(i, "failed", `Tx mined but status = ${r.status}`);
+                throw new Error(`approve(${t.symbol}, 0) reverted, status ${r.status}`);
+              }
+              pf.update(i, "done", `🚫 ${t.symbol} revoked (allowance now 0) — block ${r.blockNumber}, <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a>`);
+              lines.push(`  🚫 ${t.symbol}: revoked — <a target="_blank" href="${explorerTx(tx.hash)}">${tx.hash.slice(0, 10)}…</a> (block ${r.blockNumber})`);
+            } catch (e) {
+              pf.update(i, "failed", `Revoke ${t.symbol} failed: ${e.shortMessage || e.message}`);
+              throw e;
+            }
+          }
+
+          return {
+            html: `Revoked ${checked.length}/${checked.length} approval${checked.length === 1 ? '' : 's'}:\n${lines.join("\n")}\n\nNext deposit of ${checked.map(c => c.symbol).join(" / ")} will show the fresh approve step in b8-4 / b8-8.`,
+          };
+        },
+      };
+    },
+  },
 ];
 
 // ============================================================
