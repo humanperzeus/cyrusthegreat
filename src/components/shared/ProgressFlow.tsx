@@ -307,23 +307,28 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
           font-size: 12px;
           margin-left: 8px;
         }
+        /* Stepper — column-per-step layout (dot on top, label below)
+           so any number of steps fits without horizontal scroll. */
         .pf-stepper {
           display: flex;
-          align-items: center;
+          align-items: flex-start;        /* dots align at top */
           gap: 0;
-          overflow-x: auto;
           padding: 4px 0;
-          scrollbar-width: thin;
         }
         .pf-step {
           display: flex;
+          flex-direction: column;         /* dot above label */
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           color: #9ca3af;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 500;
-          white-space: nowrap;
-          flex-shrink: 0;
+          text-align: center;
+          flex: 0 0 auto;
+          min-width: 56px;
+          max-width: 96px;
+          line-height: 1.25;
+          word-break: break-word;
         }
         .pf-dot {
           width: 24px;
@@ -337,6 +342,7 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
           font-weight: 700;
           font-size: 11px;
           color: #f5f5f5;
+          flex-shrink: 0;
         }
         .pf-step.done { color: #10b981; font-weight: 600; }
         .pf-step.done .pf-dot {
@@ -362,11 +368,12 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
           50%      { box-shadow: 0 0 0 10px rgba(240, 180, 0, 0); }
         }
         .pf-conn {
-          flex: 1;
+          flex: 1 1 0;
           height: 1.5px;
           background: rgba(240, 180, 0, 0.18);
-          margin: 0 12px;
-          min-width: 24px;
+          margin: 12px 4px 0;             /* 12px = half the 24px dot height — aligns the line with the dot's vertical center */
+          min-width: 8px;
+          align-self: flex-start;         /* hug the top so the line lines up with the dot row, not the label row */
         }
         .pf-step.done + .pf-conn { background: #10b981; }
         .pf-detail {

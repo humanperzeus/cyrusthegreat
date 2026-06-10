@@ -402,28 +402,35 @@
   }
   ::-webkit-scrollbar-thumb:hover { background: rgba(240, 180, 0, 0.3); }
 
-  /* ─── Stepper bar (sticky, shows all phases at a glance) ─── */
+  /* ─── Stepper bar — vertical layout (dot on top, label below).
+     2026-06-10: switched from inline-labels + horizontal scroll to
+     this column-per-step layout so every step is always visible no
+     matter how many there are. Connectors run along the dot row;
+     labels wrap below within a fixed-width column. ─── */
   .stepper {
     display: flex;
-    align-items: center;
+    align-items: flex-start;        /* dots align at the top */
     gap: 0;
     padding: 14px 20px;
     background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-card-2) 100%);
     border: 1px solid var(--border);
     border-radius: 14px;
     margin: 18px 0;
-    overflow-x: auto;
-    scrollbar-width: thin;
   }
   .stepper .step {
     display: flex;
+    flex-direction: column;         /* dot above label */
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
-    white-space: nowrap;
-    flex-shrink: 0;
+    text-align: center;
+    flex: 0 0 auto;
+    min-width: 56px;
+    max-width: 96px;
+    line-height: 1.25;
+    word-break: break-word;
   }
   .stepper .step .dot {
     width: 22px;
@@ -437,6 +444,7 @@
     font-weight: 700;
     font-size: 11px;
     color: var(--text);
+    flex-shrink: 0;
   }
   .stepper .step.active { color: var(--gold-bright); font-weight: 700; }
   .stepper .step.active .dot {
@@ -469,11 +477,12 @@
     50%      { box-shadow: 0 0 0 10px rgba(240, 180, 0, 0); }
   }
   .stepper .conn {
-    flex: 1;
+    flex: 1 1 0;
     height: 1.5px;
     background: rgba(255, 255, 255, 0.1);
-    margin: 0 12px;
-    min-width: 24px;
+    margin: 11px 4px 0;             /* 11px ≈ half the 22px dot height — aligns the line with the dot's vertical center */
+    min-width: 8px;
+    align-self: flex-start;         /* hug the top so it lines up with the dot row, not the label row */
   }
   .stepper .step.done + .conn { background: var(--ok); }
 
