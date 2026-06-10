@@ -2264,6 +2264,11 @@ const BANK8_TESTS = [
           const to = body.querySelector('[data-k="to"]').value.trim();
           const amtStr = body.querySelector('[data-k="amt"]').value.trim();
           if (!ethers.isAddress(to)) throw new Error("Recipient is not a valid address");
+          // Bank8.transferInternalETH reverts on self-transfer (require to !=
+          // msg.sender). Catch this in the UI so the user gets a clear
+          // error instead of a silent wallet refusal — b8-10 / b8-11
+          // already have the same guard.
+          if (to.toLowerCase() === account.toLowerCase()) throw new Error("Recipient must differ from sender (contract requires this)");
           const amt = ethers.parseEther(amtStr);
           if (amt <= 0n) throw new Error("Amount must be > 0");
           if (amt > vaultEth) throw new Error(`Amount ${amtStr} exceeds your vaulted ${cur} (${ethers.formatEther(vaultEth)})`);

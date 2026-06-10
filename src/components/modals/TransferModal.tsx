@@ -9,6 +9,7 @@ import { ArrowUpDown, Loader2, Shield, Info, Coins } from "lucide-react";
 import { getChainConfig } from "@/config/web3";
 import { MultiTokenTransferModal } from "./MultiTokenTransferModal";
 import { useProgress } from "@/contexts/ProgressContext";
+import { useAccount } from "wagmi";
 
 interface TransferModalProps {
   open: boolean;
@@ -76,6 +77,13 @@ export function TransferModal({
   const [amount, setAmount] = useState("");
   // ProgressFlow session wiring — see DepositModal for the pattern.
   const { startProgress, updateProgress, active: progressActive } = useProgress();
+  // Connected wallet address — used to reject self-transfers up-front.
+  // The contract reverts on transferInternalETH/Token(self), and the
+  // wallet may silently swallow that revert at the simulate stage,
+  // leaving the user staring at "Preparing transfer…" with nothing
+  // happening. Block the submit before we ever open a session.
+  const { address: connectedAddress } = useAccount();
+  const isSelfTransfer = !!(connectedAddress && to && to.toLowerCase() === connectedAddress.toLowerCase());
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -105,6 +113,10 @@ export function TransferModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!to || !amount) return;
+    // Bank8 reverts on self-transfer (require recipient != msg.sender).
+    // Catch it here so we never open a popup for a tx the contract will
+    // refuse — mirrors the debug UI b8-5 / b8-10 / b8-11 guards.
+    if (isSelfTransfer) return;
     // Start a global session, seed it with a preparing step, close the
     // dialog so the App-level ProgressFlow is the only floating UI.
     const title = isTokenTransfer && tokenSymbol
@@ -284,10 +296,12 @@ export function TransferModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!to || !amount || isLoading || isSimulating || progressActive}
+                disabled={!to || !amount || isLoading || isSimulating || progressActive || isSelfTransfer}
                 className="flex-1"
               >
-                {progressActive ? (
+                {isSelfTransfer ? (
+                  "Recipient must differ from sender"
+                ) : progressActive ? (
                   "Waiting for pending transaction…"
                 ) : isSimulating ? (
                   <>
