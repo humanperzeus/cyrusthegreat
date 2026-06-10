@@ -24,6 +24,20 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   const { toast } = useToast();
   const { switchChain } = useSwitchChain();
 
+  // 2026-06-10: HIDDEN, not removed. Every successful tx in the
+  // happy-path lifecycle previously fired a corner toast ("Deposit
+  // Confirmed", "Multi-token withdrawal confirmed", etc.). With the
+  // App-level ProgressFlow now showing the same "Confirm on-chain" ✓
+  // for every flow, those corner toasts were strict duplicates — the
+  // user pointed this out, so we gate them all behind one flag.
+  // Flip to true to bring them back (e.g. if the ProgressFlow ever
+  // gets disabled / hidden). Error toasts and pre-flight blockers are
+  // kept on regardless — they're not duplicates of anything in the
+  // popup. This is the same pattern as SHOW_CONFIRMATION_TOAST further
+  // down (the generic "Transaction Confirmed!" toast); kept as a
+  // separate flag so the two layers can be toggled independently.
+  const SHOW_LIFECYCLE_CONFIRMATION_TOASTS = false;
+
   // Get current network configuration
   const currentNetwork = getCurrentNetwork();
 
@@ -1601,10 +1615,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-        toast({
-          title: "Withdrawal Confirmed",
-          description: `Withdrew ${amount} ETH from vault`,
-        });
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Withdrawal Confirmed",
+            description: `Withdrew ${amount} ETH from vault`,
+          });
+        }
 
         lc.advance(2);
         const finality = getChainFinalityDelay();
@@ -1854,10 +1870,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-        toast({
-          title: "Transfer Confirmed",
-          description: `Transferred ${amount} ETH to ${to.slice(0, 6)}...${to.slice(-4)}`,
-        });
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Transfer Confirmed",
+            description: `Transferred ${amount} ETH to ${to.slice(0, 6)}...${to.slice(-4)}`,
+          });
+        }
 
         lc.advance(2);
         const finality = getChainFinalityDelay();
@@ -2626,10 +2644,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         _setStep(_confirmIdx, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
         console.log('✅ Multi-token deposit confirmed on-chain');
-        toast({
-          title: "Multi-token deposit confirmed",
-          description: `Deposited ${deposits.length} token${deposits.length === 1 ? '' : 's'} to vault`,
-        });
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Multi-token deposit confirmed",
+            description: `Deposited ${deposits.length} token${deposits.length === 1 ? '' : 's'} to vault`,
+          });
+        }
 
         // Finalize: RPCs need a moment before they serve the new state
         // (12s on ETH, less elsewhere — getChainFinalityDelay). This
@@ -2951,10 +2971,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-        toast({
-          title: "Token Deposit Confirmed",
-          description: `Deposited ${formatEther(amount)} ${tokenSymbol} to vault`,
-        });
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Token Deposit Confirmed",
+            description: `Deposited ${formatEther(amount)} ${tokenSymbol} to vault`,
+          });
+        }
 
         lc.advance(2);
         const finality = getChainFinalityDelay();
@@ -3175,10 +3197,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-        toast({
-          title: "Token Withdrawal Confirmed",
-          description: `Withdrew ${amount} ${tokenSymbol} from vault`,
-        });
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Token Withdrawal Confirmed",
+            description: `Withdrew ${amount} ${tokenSymbol} from vault`,
+          });
+        }
 
         lc.advance(2);
         const finality = getChainFinalityDelay();
@@ -3367,10 +3391,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       console.log('✅ Multi-token withdrawal confirmed on-chain');
       _wSet(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-      toast({
-        title: "Multi-token withdrawal confirmed",
-        description: `Withdrew ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'} from vault`,
-      });
+      if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+        toast({
+          title: "Multi-token withdrawal confirmed",
+          description: `Withdrew ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'} from vault`,
+        });
+      }
 
       // Finalize: RPCs need a moment before they serve the new state.
       // This info used to be a corner toast; it now lives in the popup.
@@ -3578,10 +3604,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       console.log('✅ Multi-token transfer confirmed on-chain');
       _tSet(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-      toast({
-        title: "Multi-token transfer confirmed",
-        description: `Transferred ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}...${to.slice(-4)}`,
-      });
+      if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+        toast({
+          title: "Multi-token transfer confirmed",
+          description: `Transferred ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}...${to.slice(-4)}`,
+        });
+      }
 
       // Finalize: RPCs need a moment before they serve the new state.
       // This info used to be a corner toast; it now lives in the popup.
@@ -3753,10 +3781,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-        toast({
-          title: "Token Transfer Confirmed",
-          description: `Transferred ${amount} ${tokenSymbol} to ${to.slice(0, 6)}...${to.slice(-4)}`,
-        });
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Token Transfer Confirmed",
+            description: `Transferred ${amount} ${tokenSymbol} to ${to.slice(0, 6)}...${to.slice(-4)}`,
+          });
+        }
 
         lc.advance(2);
         const finality = getChainFinalityDelay();
@@ -4433,10 +4463,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
 
-        toast({
-          title: "Deposit Confirmed",
-          description: `Deposited ${amount} ETH (+ ${weiToEtherFullPrecision(feeInWei)} fee) to vault`,
-        });
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Deposit Confirmed",
+            description: `Deposited ${amount} ETH (+ ${weiToEtherFullPrecision(feeInWei)} fee) to vault`,
+          });
+        }
 
         lc.advance(2);
         const finality = getChainFinalityDelay();
