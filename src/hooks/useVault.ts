@@ -749,8 +749,14 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
   };
 
-  // Contract write hooks for real transactions
-  const { writeContract: writeVaultContract, data: hash, isPending: isWritePending } = useWriteContract();
+  // Contract write hooks for real transactions.
+  // writeVaultContractAsync is the SAME mutation as writeVaultContract —
+  // both update the hook's `data: hash`, which feeds the
+  // useWaitForTransactionReceipt → isConfirmed auto-refresh machinery.
+  // The async variant additionally RETURNS the tx hash, which the
+  // multi-token flows need to wait for the receipt inline so the
+  // progress step only turns ✓ after real block confirmation.
+  const { writeContract: writeVaultContract, writeContractAsync: writeVaultContractAsync, data: hash, isPending: isWritePending } = useWriteContract();
   
   // Wait for transaction confirmation
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
@@ -2481,8 +2487,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       onProgress?.(_progressSteps.map(s => ({ ...s })));
 
       try {
-        // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
-        await writeVaultContract({
+        // Async variant returns the tx hash while STILL feeding the
+        // hook's data → useWaitForTransactionReceipt → isConfirmed
+        // auto-refresh machinery (same mutation state).
+        const txHash = await writeVaultContractAsync({
           address: getActiveContractAddress() as `0x${string}`,
           abi: VAULT_ABI,
           functionName: 'depositMultipleTokens',
@@ -2491,13 +2499,25 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           account: address,
           value: totalEthValue,
         });
-        // writeVaultContract returns void here — wagmi's hook tracks the tx
-        // state separately. We mark the step done so the indicator goes
-        // green; the actual confirmation toast comes from the existing flow.
+
+        // Signed ≠ confirmed. Keep the step running until the chain
+        // mines the tx — exactly like the debug UI's `await tx.wait()`.
+        _progressSteps[_depositIdx] = {
+          ..._progressSteps[_depositIdx],
+          status: 'running',
+          detail: `Tx submitted (${String(txHash).slice(0, 10)}…) — waiting for confirmation…`,
+        };
+        onProgress?.(_progressSteps.map(s => ({ ...s })));
+
+        const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+        if (receipt.status !== 'success') {
+          throw new Error(`depositMultipleTokens reverted on-chain (block ${receipt.blockNumber})`);
+        }
+
         _progressSteps[_depositIdx] = {
           ..._progressSteps[_depositIdx],
           status: 'done',
-          detail: `Submitted — wallet confirmed the tx. Watch your vault balance.`,
+          detail: `Confirmed in block ${receipt.blockNumber} — tx ${String(txHash).slice(0, 10)}…`,
         };
         onProgress?.(_progressSteps.map(s => ({ ...s })));
       } catch (e: any) {
@@ -2510,15 +2530,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         throw e;
       }
 
-      console.log('✅ Multi-token deposit transaction submitted via Wagmi hook');
+      console.log('✅ Multi-token deposit confirmed on-chain');
 
       toast({
-        title: "Multi-token deposit initiated",
-        description: `Depositing ${deposits.length} tokens to vault`,
+        title: "Multi-token deposit confirmed",
+        description: `Deposited ${deposits.length} token${deposits.length === 1 ? '' : 's'} to vault`,
       });
-
-      // CRITICAL FIX: No need to return hash - Wagmi hook will handle transaction state automatically
-      // The transaction confirmation system will automatically refresh balances
 
     } catch (error: any) {
 
@@ -3171,8 +3188,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
 
       _wRun(`Submitting withdrawMultipleTokens — open wallet to sign…`);
 
-      // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
-      await writeVaultContract({
+      // Async variant returns the hash while still feeding the hook's
+      // auto-refresh machinery. Signed ≠ confirmed: keep the step
+      // running until the receipt lands (debug UI's `await tx.wait()`).
+      const txHash = await writeVaultContractAsync({
         address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'withdrawMultipleTokens',
@@ -3182,16 +3201,19 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         value: feeInWei,
       });
 
-      console.log('✅ Multi-token withdrawal transaction submitted via Wagmi hook');
-      _wDone(`Withdrawal of ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'} submitted to network`);
+      _wRun(`Tx submitted (${String(txHash).slice(0, 10)}…) — waiting for confirmation…`);
+      const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+      if (receipt.status !== 'success') {
+        throw new Error(`withdrawMultipleTokens reverted on-chain (block ${receipt.blockNumber})`);
+      }
+
+      console.log('✅ Multi-token withdrawal confirmed on-chain');
+      _wDone(`Confirmed in block ${receipt.blockNumber} — tx ${String(txHash).slice(0, 10)}…`);
 
       toast({
-        title: "Multi-token withdrawal initiated",
-        description: `Withdrawing ${withdrawals.length} tokens from vault`,
+        title: "Multi-token withdrawal confirmed",
+        description: `Withdrew ${withdrawals.length} token${withdrawals.length === 1 ? '' : 's'} from vault`,
       });
-
-      // CRITICAL FIX: No need to return hash - Wagmi hook will handle transaction state automatically
-      // The transaction confirmation system will automatically refresh balances
 
     } catch (error: any) {
       _wFail(error.message || 'Unknown error occurred');
@@ -3361,8 +3383,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
 
       _tRun(`Submitting transferMultipleTokensInternal — open wallet to sign…`);
 
-      // CRITICAL FIX: Use writeVaultContract (Wagmi hook) instead of writeContract for automatic refresh
-      await writeVaultContract({
+      // Async variant returns the hash while still feeding the hook's
+      // auto-refresh machinery. Signed ≠ confirmed: keep the step
+      // running until the receipt lands (debug UI's `await tx.wait()`).
+      const txHash = await writeVaultContractAsync({
         address: getActiveContractAddress() as `0x${string}`,
         abi: VAULT_ABI,
         functionName: 'transferMultipleTokensInternal',
@@ -3372,16 +3396,19 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         value: feeInWei,
       });
 
-      console.log('✅ Multi-token transfer transaction submitted via Wagmi hook');
-      _tDone(`Transfer of ${transfers.length} token${transfers.length === 1 ? '' : 's'} submitted to network`);
+      _tRun(`Tx submitted (${String(txHash).slice(0, 10)}…) — waiting for confirmation…`);
+      const receipt = await waitForTransactionReceipt(config, { hash: txHash });
+      if (receipt.status !== 'success') {
+        throw new Error(`transferMultipleTokensInternal reverted on-chain (block ${receipt.blockNumber})`);
+      }
+
+      console.log('✅ Multi-token transfer confirmed on-chain');
+      _tDone(`Confirmed in block ${receipt.blockNumber} — tx ${String(txHash).slice(0, 10)}…`);
 
       toast({
-        title: "Multi-token transfer initiated",
-        description: `Transferring ${transfers.length} tokens to ${to.slice(0, 6)}...${to.slice(-4)}`,
+        title: "Multi-token transfer confirmed",
+        description: `Transferred ${transfers.length} token${transfers.length === 1 ? '' : 's'} to ${to.slice(0, 6)}...${to.slice(-4)}`,
       });
-
-      // CRITICAL FIX: No need to return hash - Wagmi hook will handle transaction state automatically
-      // The transaction confirmation system will automatically refresh balances
 
     } catch (error: any) {
       _tFail(error.message || 'Unknown error occurred');
