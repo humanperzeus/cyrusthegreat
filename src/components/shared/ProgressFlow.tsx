@@ -58,19 +58,11 @@ export interface ProgressStep {
 interface ProgressFlowProps {
   title?: string;
   steps: ProgressStep[];
-  // CONTROLLED display state. The parent (typically ProgressProvider)
-  // owns whether this instance shows as the centered modal (`expanded:
-  // true`) or as a corner chip (`expanded: false`). Internal toggling
-  // is gone — that's what lets multiple sessions coexist with at most
-  // one expanded at a time.
+  // CONTROLLED display state. The parent (ProgressProvider) owns
+  // whether this shows as the centered modal (`expanded: true`) or as
+  // the corner chip (`expanded: false`).
   expanded: boolean;
-  // Stacking position when this instance is a chip. Index 0 sits at
-  // the corner; higher indices stack upward in 8px-padded rows. Has
-  // no effect when expanded.
-  chipIndex?: number;
-  // Click on the chip body → request expansion. Parent decides whether
-  // to honor (which usually means minimizing whatever was expanded
-  // before).
+  // Click on the chip body → request expansion.
   onExpand?: () => void;
   // Click on Hide → request minimization to corner chip.
   onMinimize?: () => void;
@@ -84,7 +76,6 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
   title,
   steps,
   expanded,
-  chipIndex = 0,
   onExpand,
   onMinimize,
   onClose,
@@ -234,13 +225,6 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
     <div
       ref={overlayRef}
       className={`pf-overlay open ${minimized ? "minimized" : ""} ${className ?? ""}`}
-      // Stack chips vertically in the bottom-right corner. Index 0
-      // sits ~16px from the edge; each higher index stacks ~60px
-      // (chip height ~48px + 12px gap) upward. Only applies in
-      // minimized mode — the inline `bottom` overrides the .pf-overlay.minimized
-      // rule's `inset: auto 16px 16px auto` shorthand for the
-      // bottom value, leaving the other three edges alone.
-      style={minimized && chipIndex > 0 ? { bottom: `${16 + chipIndex * 60}px` } : undefined}
       onClick={handleOverlayClick}
     >
       <style>{`
