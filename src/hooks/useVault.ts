@@ -3654,14 +3654,26 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   React.useEffect(() => {
     if (isConfirmed && !hasRefreshedAfterConfirmation) {
       debugLog('🔄 Transaction confirmed! Starting smart refetch...');
-      
+
       // Set flag to prevent multiple refreshes for THIS transaction
       setHasRefreshedAfterConfirmation(true);
-      
-      toast({
-        title: "Transaction Confirmed!",
-        description: "Your transaction has been confirmed on the blockchain",
-      });
+
+      // 2026-06-10: HIDDEN, not removed. This generic on-confirmation
+      // toast fires for EVERY confirmed tx (single-asset deposits,
+      // multi-token batches, approvals, etc). For multi-token flows it
+      // duplicated the on-chain confirmation already shown in the
+      // ProgressFlow popup's "Confirm on-chain" step, which is what
+      // the user pointed out. Flipping SHOW_CONFIRMATION_TOAST to true
+      // restores the corner notification (the single-asset paths still
+      // have their own toasts elsewhere — see depositETHWagmi etc. —
+      // so removing this one doesn't leave them silent).
+      const SHOW_CONFIRMATION_TOAST = false;
+      if (SHOW_CONFIRMATION_TOAST) {
+        toast({
+          title: "Transaction Confirmed!",
+          description: "Your transaction has been confirmed on the blockchain",
+        });
+      }
       setIsLoading(false);
       
       // Check if this was an approval transaction that should trigger auto-deposit
