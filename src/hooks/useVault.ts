@@ -4024,7 +4024,26 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   }, [activeChain, isConnected, address]);
 
   // Combined loading state - ONLY for current chain's transactions
-  const isTransactionLoading = isLoading || isWritePendingForCurrentChain || isConfirmingForCurrentChain;
+  // Drop the wagmi-derived `isConfirmingForCurrentChain` once isConfirmed
+  // flips true (2026-06-10): the hook's `isConfirming → false` transition
+  // lags our explicit waitForTransactionReceipt by ~hundreds of ms to a
+  // few seconds. With the lifecycle helpers now calling setIsLoading(false)
+  // immediately after the receipt (11a8218), keeping isConfirming in the
+  // formula re-blocks the UI for that lag window — user reported the
+  // home-page per-token buttons and the cross-modal submit (e.g. start
+  // a USD1 deposit while a WLFI withdraw is still in its finality wait)
+  // were stuck during that period even though our own lifecycle had
+  // already declared "Confirmed on-chain ✓".
+  //
+  // Including `&& !isConfirmed` makes wagmi's "currently confirming"
+  // signal stop counting the moment the same hook also reports the
+  // receipt landed — closes the lag window without removing the lock
+  // for legacy code paths that never set isLoading and rely on the
+  // wagmi state machine for blocking (they still get
+  // isConfirmingForCurrentChain=true → blocked while genuinely
+  // confirming; once isConfirmed flips, the lock releases at the same
+  // instant our explicit await returns).
+  const isTransactionLoading = isLoading || isWritePendingForCurrentChain || (isConfirmingForCurrentChain && !isConfirmed);
 
   // Check if we're on the correct network
   const isOnCorrectNetwork = chainId === getTargetChain().id;
