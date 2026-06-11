@@ -1597,14 +1597,17 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       const lc = buildTxLifecycle(onProgress);
       try {
         lc.set(0, 'running', `Open your wallet and sign withdrawETH(${amount})…`);
-        const txHash = await writeVaultContractAsync({
+        // @wagmi/core writeContract action — independent per call (NO
+        // shared mutation state). Replaces writeVaultContractAsync so
+        // a second concurrent single-asset call (e.g. open Deposit USD1
+        // while a WLFI withdraw is still pending) doesn't race the
+        // shared react-query mutation and clobber both flows.
+        const txHash = await writeContract(config, {
           address: getActiveContractAddress() as `0x${string}`,
           abi: VAULT_ABI as any,
           functionName: 'withdrawETH',
           args: [amountInWei],
           value: feeInWei,
-          chain: getTargetChain(),
-          account: address,
         });
         lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
         lc.advance(1);
@@ -1632,6 +1635,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         const finality = getChainFinalityDelay();
         lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
         await new Promise(resolve => setTimeout(resolve, finality));
+        // Single-asset hooks use @wagmi/core's writeContract action
+        // (no shared mutation state), which means the legacy
+        // isConfirmed useEffect that did these refetches doesn't fire
+        // for our hash. Do them here so balances/fee/token-lists land.
+        refreshAfterTx();
         lc.set(2, 'done', 'Balances updated ✓');
       } catch (innerError: any) {
         lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Withdrawal failed');
@@ -1858,14 +1866,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       const lc = buildTxLifecycle(onProgress);
       try {
         lc.set(0, 'running', `Open your wallet and sign transferInternalETH(${amount} → ${to.slice(0, 6)}…${to.slice(-4)})…`);
-        const txHash = await writeVaultContractAsync({
+        // @wagmi/core action — independent per call (no shared mutation).
+        const txHash = await writeContract(config, {
           address: getActiveContractAddress() as `0x${string}`,
           abi: VAULT_ABI as any,
           functionName: 'transferInternalETH',
           args: [to as `0x${string}`, amountInWei],
           value: feeInWei,
-          chain: getTargetChain(),
-          account: address,
         });
         lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
         lc.advance(1);
@@ -1893,6 +1900,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         const finality = getChainFinalityDelay();
         lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
         await new Promise(resolve => setTimeout(resolve, finality));
+        // Single-asset hooks use @wagmi/core's writeContract action
+        // (no shared mutation state), which means the legacy
+        // isConfirmed useEffect that did these refetches doesn't fire
+        // for our hash. Do them here so balances/fee/token-lists land.
+        refreshAfterTx();
         lc.set(2, 'done', 'Balances updated ✓');
       } catch (innerError: any) {
         lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Transfer failed');
@@ -2290,6 +2302,20 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   // mechanical. The helper is a no-op when onProgress is undefined,
   // so existing callers (e.g. internal helpers that don't drive a
   // popup) keep working untouched.
+  // Called by every single-asset lifecycle after the finality delay,
+  // to bring balances/fee/token lists in sync. With single-asset hooks
+  // switching to @wagmi/core's writeContract action (independent per
+  // call — no shared mutation state), the legacy isConfirmed effect
+  // that did these refetches no longer fires for these flows, so we
+  // do them here explicitly. Same calls that effect made; just inline.
+  const refreshAfterTx = () => {
+    refetchVaultBalance();
+    refetchWalletBalance();
+    refetchFee();
+    fetchWalletTokens();
+    fetchVaultTokensSigned();
+  };
+
   const buildTxLifecycle = (onProgress?: (steps: _PS[]) => void) => {
     const steps: _PS[] = [
       { label: 'Sign in wallet',     status: 'pending' },
@@ -2969,13 +2995,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       const lc = buildTxLifecycle(onProgress);
       try {
         lc.set(0, 'running', `Open your wallet and sign depositToken(${tokenSymbol})…`);
-        const txHash = await writeVaultContractAsync({
+        // @wagmi/core action — independent per call (no shared mutation).
+        const txHash = await writeContract(config, {
           address: getActiveContractAddress() as `0x${string}`,
           abi: VAULT_ABI,
           functionName: 'depositToken',
           args: [tokenAddress, amount],
-          chain: getTargetChain(),
-          account: address,
           value: feeWei,
         });
         lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
@@ -3004,6 +3029,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         const finality = getChainFinalityDelay();
         lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
         await new Promise(resolve => setTimeout(resolve, finality));
+        // Single-asset hooks use @wagmi/core's writeContract action
+        // (no shared mutation state), which means the legacy
+        // isConfirmed useEffect that did these refetches doesn't fire
+        // for our hash. Do them here so balances/fee/token-lists land.
+        refreshAfterTx();
         lc.set(2, 'done', 'Balances updated ✓');
       } catch (innerError: any) {
         lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Deposit failed');
@@ -3201,13 +3231,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       const lc = buildTxLifecycle(onProgress);
       try {
         lc.set(0, 'running', `Open your wallet and sign withdrawToken(${tokenSymbol}, ${amount})…`);
-        const txHash = await writeVaultContractAsync({
+        // @wagmi/core action — independent per call (no shared mutation).
+        const txHash = await writeContract(config, {
           address: getActiveContractAddress() as `0x${string}`,
           abi: VAULT_ABI,
           functionName: 'withdrawToken',
           args: [tokenAddress, amountWei],
-          chain: getTargetChain(),
-          account: address,
           value: feeWei,
         });
         lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
@@ -3236,6 +3265,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         const finality = getChainFinalityDelay();
         lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
         await new Promise(resolve => setTimeout(resolve, finality));
+        // Single-asset hooks use @wagmi/core's writeContract action
+        // (no shared mutation state), which means the legacy
+        // isConfirmed useEffect that did these refetches doesn't fire
+        // for our hash. Do them here so balances/fee/token-lists land.
+        refreshAfterTx();
         lc.set(2, 'done', 'Balances updated ✓');
       } catch (innerError: any) {
         lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Withdrawal failed');
@@ -3793,13 +3827,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       const lc = buildTxLifecycle(onProgress);
       try {
         lc.set(0, 'running', `Open your wallet and sign transferInternalToken(${tokenSymbol}, ${amount} → ${to.slice(0, 6)}…${to.slice(-4)})…`);
-        const txHash = await writeVaultContractAsync({
+        // @wagmi/core action — independent per call (no shared mutation).
+        const txHash = await writeContract(config, {
           address: getActiveContractAddress() as `0x${string}`,
           abi: VAULT_ABI,
           functionName: 'transferInternalToken',
           args: [tokenAddress, to, amountWei],
-          chain: getTargetChain(),
-          account: address,
           value: feeWei,
         });
         lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
@@ -3828,6 +3861,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         const finality = getChainFinalityDelay();
         lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
         await new Promise(resolve => setTimeout(resolve, finality));
+        // Single-asset hooks use @wagmi/core's writeContract action
+        // (no shared mutation state), which means the legacy
+        // isConfirmed useEffect that did these refetches doesn't fire
+        // for our hash. Do them here so balances/fee/token-lists land.
+        refreshAfterTx();
         lc.set(2, 'done', 'Balances updated ✓');
       } catch (innerError: any) {
         lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Transfer failed');
@@ -4498,14 +4536,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
       const lc = buildTxLifecycle(onProgress);
       try {
         lc.set(0, 'running', `Open your wallet and sign depositETH(${amount})…`);
-        const txHash = await writeVaultContractAsync({
+        // @wagmi/core action — independent per call (no shared mutation).
+        const txHash = await writeContract(config, {
           address: getActiveContractAddress() as `0x${string}`,
           abi: VAULT_ABI as any,
           functionName: 'depositETH',
           args: [],
           value: totalValue, // Send amount + fee together
-          chain: getTargetChain(),
-          account: address,
         });
 
         lc.set(0, 'done', `Signed & broadcast — tx ${String(txHash).slice(0, 10)}…`);
@@ -4535,6 +4572,11 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         const finality = getChainFinalityDelay();
         lc.set(2, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
         await new Promise(resolve => setTimeout(resolve, finality));
+        // Single-asset hooks use @wagmi/core's writeContract action
+        // (no shared mutation state), which means the legacy
+        // isConfirmed useEffect that did these refetches doesn't fire
+        // for our hash. Do them here so balances/fee/token-lists land.
+        refreshAfterTx();
         lc.set(2, 'done', 'Balances updated ✓');
       } catch (innerError: any) {
         lc.set(lc.getPhase(), 'failed', innerError?.shortMessage || innerError?.message || 'Deposit failed');
