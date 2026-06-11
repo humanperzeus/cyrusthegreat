@@ -1614,6 +1614,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           throw new Error(`withdrawETH reverted on-chain (block ${receipt.blockNumber})`);
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+        // Release the app-wide isLoading flag as soon as the chain
+        // says success — don't wait for the isConfirmed useEffect to
+        // catch up (it can lag the explicit waitForTransactionReceipt
+        // by hundreds of ms, leaving every per-token button on the
+        // home page greyed out during the 12s finality wait).
+        setIsLoading(false);
 
         if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
           toast({
@@ -1869,6 +1875,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           throw new Error(`transferInternalETH reverted on-chain (block ${receipt.blockNumber})`);
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+        // Release the app-wide isLoading flag as soon as the chain
+        // says success — don't wait for the isConfirmed useEffect to
+        // catch up (it can lag the explicit waitForTransactionReceipt
+        // by hundreds of ms, leaving every per-token button on the
+        // home page greyed out during the 12s finality wait).
+        setIsLoading(false);
 
         if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
           toast({
@@ -2642,6 +2654,10 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           throw new Error(`depositMultipleTokens reverted on-chain (block ${receipt.blockNumber})`);
         }
         _setStep(_confirmIdx, 'done', `Confirmed in block ${receipt.blockNumber}`);
+        // See the single-asset notes — release isLoading at receipt
+        // time so other actions aren't blocked during the 12s finality
+        // wait that follows.
+        setIsLoading(false);
 
         console.log('✅ Multi-token deposit confirmed on-chain');
         if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
@@ -2970,6 +2986,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           throw new Error(`depositToken reverted on-chain (block ${receipt.blockNumber})`);
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+        // Release the app-wide isLoading flag as soon as the chain
+        // says success — don't wait for the isConfirmed useEffect to
+        // catch up (it can lag the explicit waitForTransactionReceipt
+        // by hundreds of ms, leaving every per-token button on the
+        // home page greyed out during the 12s finality wait).
+        setIsLoading(false);
 
         if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
           toast({
@@ -3196,6 +3218,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           throw new Error(`withdrawToken reverted on-chain (block ${receipt.blockNumber})`);
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+        // Release the app-wide isLoading flag as soon as the chain
+        // says success — don't wait for the isConfirmed useEffect to
+        // catch up (it can lag the explicit waitForTransactionReceipt
+        // by hundreds of ms, leaving every per-token button on the
+        // home page greyed out during the 12s finality wait).
+        setIsLoading(false);
 
         if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
           toast({
@@ -3390,6 +3418,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
 
       console.log('✅ Multi-token withdrawal confirmed on-chain');
       _wSet(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+      setIsLoading(false);  // same fix as the other lifecycle helpers
 
       if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
         toast({
@@ -3603,6 +3632,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
 
       console.log('✅ Multi-token transfer confirmed on-chain');
       _tSet(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+      setIsLoading(false);  // same fix as the other lifecycle helpers
 
       if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
         toast({
@@ -3780,6 +3810,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           throw new Error(`transferInternalToken reverted on-chain (block ${receipt.blockNumber})`);
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+        // Release the app-wide isLoading flag as soon as the chain
+        // says success — don't wait for the isConfirmed useEffect to
+        // catch up (it can lag the explicit waitForTransactionReceipt
+        // by hundreds of ms, leaving every per-token button on the
+        // home page greyed out during the 12s finality wait).
+        setIsLoading(false);
 
         if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
           toast({
@@ -4462,6 +4498,12 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           throw new Error(`depositETH reverted on-chain (block ${receipt.blockNumber})`);
         }
         lc.set(1, 'done', `Confirmed in block ${receipt.blockNumber}`);
+        // Release the app-wide isLoading flag as soon as the chain
+        // says success — don't wait for the isConfirmed useEffect to
+        // catch up (it can lag the explicit waitForTransactionReceipt
+        // by hundreds of ms, leaving every per-token button on the
+        // home page greyed out during the 12s finality wait).
+        setIsLoading(false);
 
         if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
           toast({
