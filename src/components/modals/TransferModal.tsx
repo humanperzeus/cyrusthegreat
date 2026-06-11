@@ -75,6 +75,14 @@ export function TransferModal({
 }: TransferModalProps) {
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
+
+  // Reset form on fresh open / token swap — see DepositModal for why.
+  useEffect(() => {
+    if (open) {
+      setTo("");
+      setAmount("");
+    }
+  }, [open, tokenAddress]);
   // ProgressFlow session wiring — see DepositModal for the pattern
   // (no re-entry lock: wallet handles the queue, second submit just
   // replaces the active session in the popup).

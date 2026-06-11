@@ -79,6 +79,13 @@ export function WithdrawModal({
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
+  // Reset form on fresh open / token swap — see DepositModal for why.
+  useEffect(() => {
+    if (open) {
+      setAmount("");
+    }
+  }, [open, tokenAddress]);
+
   // Auto-close modal after successful transaction (now handled centrally in Index.tsx)
   // Removed to prevent conflicts with centralized modal management
 

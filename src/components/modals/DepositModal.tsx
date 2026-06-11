@@ -101,6 +101,18 @@ export function DepositModal({
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
+  // Reset the form whenever the dialog opens fresh OR the parent swaps
+  // the token target (e.g. user just submitted USD1 then clicks WLFI).
+  // The modal stays MOUNTED in Index.tsx, so useState("") at component
+  // declaration doesn't actually run between opens — without this
+  // effect, the previous submit's amount leaked into the next session's
+  // form ("Deposit 50 USD1, close, open WLFI → amount field shows 50").
+  useEffect(() => {
+    if (open) {
+      setAmount("");
+    }
+  }, [open, tokenAddress]);
+
   // Auto-close modal after successful transaction (now handled centrally in Index.tsx)
   // Removed to prevent conflicts with centralized modal management
 
