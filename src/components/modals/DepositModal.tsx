@@ -393,18 +393,20 @@ export function DepositModal({
                   onDeposit(amount, (steps) => updateProgress(sessionId, steps));
                 }
               }}
-              disabled={isLoading || !amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
+              // isLoading deliberately dropped from this check (2026-06-10):
+              // it was global across the whole hook (any tx anywhere), so
+              // opening THIS modal while an unrelated tx was in flight
+              // greyed the submit and showed "Depositing…" for the wrong
+              // tx. Modal closes immediately on submit anyway, so a
+              // brief mid-click race here is impossible. Wallet handles
+              // signature serialization in its own queue.
+              disabled={!amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
               className="w-full"
             >
               {isSimulating ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Checking...
-                </>
-              ) : isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Depositing...
                 </>
               ) : (
                 isTokenDeposit

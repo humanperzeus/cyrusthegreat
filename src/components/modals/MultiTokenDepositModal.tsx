@@ -464,14 +464,15 @@ export function MultiTokenDepositModal({
 
           {/* Action Buttons */}
           <div className="flex justify-between space-x-3 pt-4 border-t">
-            <Button variant="outline" onClick={onClose} disabled={isLoading || isValidating}>
+            <Button variant="outline" onClick={onClose} disabled={isValidating}>
               Cancel
             </Button>
+            {/* isLoading dropped — see DepositModal for the rationale. */}
             <Button
               onClick={handleDeposit}
-              disabled={!isFormValid() || isLoading || isValidating || (rateLimitStatus?.remaining === 0)}
+              disabled={!isFormValid() || isValidating || (rateLimitStatus?.remaining === 0)}
             >
-              {isValidating ? "Signing…" : isLoading ? "Depositing..." : `Deposit ${deposits.length} Tokens`}
+              {isValidating ? "Signing…" : `Deposit ${deposits.length} Tokens`}
             </Button>
           </div>
         </div>

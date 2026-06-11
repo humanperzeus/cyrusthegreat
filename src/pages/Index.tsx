@@ -138,19 +138,15 @@ const Index = () => {
   //   [refetchWalletTokens, refetchVaultTokens]
   // );
 
-  // Auto-close modals when transaction is confirmed
-  useEffect(() => {
-    if (isConfirmed) {
-      // Close all modals when transaction is confirmed
-      setDepositModalOpen(false);
-      setWithdrawModalOpen(false);
-      setTransferModalOpen(false);
-      
-      // DISABLED: All refresh logic to prevent RPC spam
-      // The useVault hook already handles smart refresh after transactions
-      // No need for duplicate refresh calls from Index.tsx
-    }
-  }, [isConfirmed]);
+  // REMOVED 2026-06-10: the "close every modal when ANY tx confirms"
+  // effect was a relic from the toast-only era. With our current modal
+  // pattern (the submit handler closes its own dialog immediately via
+  // onOpenChange(false) right after startProgress), this effect just
+  // killed unrelated modals — e.g. the user opens DepositModal for USD1
+  // while a WLFI tx is in flight; WLFI confirms and the USD1 modal
+  // they were filling in disappears. The ProgressFlow popup is the
+  // confirmation surface now; the modals don't need to react to
+  // isConfirmed at all.
 
   // DISABLED: Rate limit status fetching to prevent RPC spam
   // useEffect(() => {

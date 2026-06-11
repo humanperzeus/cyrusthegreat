@@ -418,14 +418,15 @@ export function MultiTokenTransferModal({
 
           {/* Action Buttons */}
           <div className="flex justify-between space-x-3 pt-4 border-t">
-            <Button variant="outline" onClick={onClose} disabled={isLoading || isValidating}>
+            <Button variant="outline" onClick={onClose} disabled={isValidating}>
               Cancel
             </Button>
+            {/* isLoading dropped — see DepositModal for the rationale. */}
             <Button
               onClick={handleTransfer}
-              disabled={!isFormValid() || isLoading || isValidating || (rateLimitStatus?.remaining === 0)}
+              disabled={!isFormValid() || isValidating || (rateLimitStatus?.remaining === 0)}
             >
-              {isValidating ? "Validating..." : isLoading ? "Transferring..." : `Transfer ${transfers.length} Tokens`}
+              {isValidating ? "Validating..." : `Transfer ${transfers.length} Tokens`}
             </Button>
           </div>
         </div>

@@ -264,18 +264,14 @@ export function WithdrawModal({
                       onWithdraw(amount, (steps) => updateProgress(sessionId, steps));
                     }
                   }}
-                  disabled={!amount || isLoading || isSimulating}
+                  // isLoading dropped — see DepositModal for the rationale.
+                  disabled={!amount || isSimulating}
                   className="flex-1"
                 >
                   {isSimulating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Checking...
-                    </>
-                  ) : isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Withdrawing...
                     </>
                   ) : (
                     isTokenWithdraw

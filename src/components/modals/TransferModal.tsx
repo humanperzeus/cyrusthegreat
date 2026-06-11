@@ -298,7 +298,8 @@ export function TransferModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!to || !amount || isLoading || isSimulating || isSelfTransfer}
+                // isLoading dropped — see DepositModal for the rationale.
+                disabled={!to || !amount || isSimulating || isSelfTransfer}
                 className="flex-1"
               >
                 {isSelfTransfer ? (
@@ -307,11 +308,6 @@ export function TransferModal({
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                     Checking...
-                  </>
-                ) : isLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Transferring...
                   </>
                 ) : (
                   isTokenTransfer
