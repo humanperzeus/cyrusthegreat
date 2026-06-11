@@ -68,7 +68,8 @@ export function MultiTokenTransferModal({
   const [isValidating, setIsValidating] = useState(false);
   // Progress sessions live in ProgressContext at App level. Each
   // submit opens its own session with a unique id.
-  const { startProgress, updateProgress, active: progressActive } = useProgress();
+  // No re-entry lock — see MultiTokenDepositModal for the rationale.
+  const { startProgress, updateProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -206,11 +207,6 @@ export function MultiTokenTransferModal({
 
   const handleTransfer = async () => {
     if (!isFormValid()) {
-      return;
-    }
-    // One tx at a time — a session is still in flight (button is also
-    // disabled; this is the backstop).
-    if (progressActive) {
       return;
     }
 
@@ -427,9 +423,9 @@ export function MultiTokenTransferModal({
             </Button>
             <Button
               onClick={handleTransfer}
-              disabled={!isFormValid() || isLoading || isValidating || progressActive || (rateLimitStatus?.remaining === 0)}
+              disabled={!isFormValid() || isLoading || isValidating || (rateLimitStatus?.remaining === 0)}
             >
-              {progressActive ? "Waiting for pending transaction…" : isValidating ? "Validating..." : isLoading ? "Transferring..." : `Transfer ${transfers.length} Tokens`}
+              {isValidating ? "Validating..." : isLoading ? "Transferring..." : `Transfer ${transfers.length} Tokens`}
             </Button>
           </div>
         </div>

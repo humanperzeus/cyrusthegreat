@@ -72,8 +72,10 @@ export function WithdrawModal({
   rateLimitStatus
 }: WithdrawModalProps) {
   const [amount, setAmount] = useState("");
-  // ProgressFlow session wiring — see DepositModal for the pattern.
-  const { startProgress, updateProgress, active: progressActive } = useProgress();
+  // ProgressFlow session wiring — see DepositModal for the pattern
+  // (no re-entry lock: wallet handles the queue, second submit just
+  // replaces the active session in the popup).
+  const { startProgress, updateProgress } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -262,12 +264,10 @@ export function WithdrawModal({
                       onWithdraw(amount, (steps) => updateProgress(sessionId, steps));
                     }
                   }}
-                  disabled={!amount || isLoading || isSimulating || progressActive}
+                  disabled={!amount || isLoading || isSimulating}
                   className="flex-1"
                 >
-                  {progressActive ? (
-                    "Waiting for pending transaction…"
-                  ) : isSimulating ? (
+                  {isSimulating ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Checking...

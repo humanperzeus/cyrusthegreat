@@ -67,7 +67,8 @@ export function MultiTokenWithdrawModal({
   // Progress sessions live in ProgressContext at App level. Each
   // submit opens its own session with a unique id so concurrent
   // withdraws / deposits / transfers can coexist as chips.
-  const { startProgress, updateProgress, active: progressActive } = useProgress();
+  // No re-entry lock — see MultiTokenDepositModal for the rationale.
+  const { startProgress, updateProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -190,11 +191,6 @@ export function MultiTokenWithdrawModal({
 
   const handleWithdraw = async () => {
     if (!isFormValid()) {
-      return;
-    }
-    // One tx at a time — a session is still in flight (button is also
-    // disabled; this is the backstop).
-    if (progressActive) {
       return;
     }
 
@@ -386,9 +382,9 @@ export function MultiTokenWithdrawModal({
             </Button>
             <Button
               onClick={handleWithdraw}
-              disabled={!isFormValid() || isLoading || isValidating || progressActive || (rateLimitStatus?.remaining === 0)}
+              disabled={!isFormValid() || isLoading || isValidating || (rateLimitStatus?.remaining === 0)}
             >
-              {progressActive ? "Waiting for pending transaction…" : isValidating ? "Signing…" : isLoading ? "Withdrawing..." : `Withdraw ${withdrawals.length} Tokens`}
+              {isValidating ? "Signing…" : isLoading ? "Withdrawing..." : `Withdraw ${withdrawals.length} Tokens`}
             </Button>
           </div>
         </div>

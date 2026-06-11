@@ -72,7 +72,11 @@ export function MultiTokenDepositModal({
   // start a new session per submit (unique id), then push step updates
   // through updateProgress. The session outlives this modal closing
   // and stacks alongside any other in-flight sessions.
-  const { startProgress, updateProgress, active: progressActive } = useProgress();
+  // No re-entry lock — second submit replaces the active session; the
+  // first lifecycle keeps running in the background (id-guarded
+  // updateProgress calls become no-ops). Wallet's own queue serializes
+  // signatures. Matches Uniswap/1inch/Aave UX.
+  const { startProgress, updateProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -224,11 +228,6 @@ export function MultiTokenDepositModal({
 
   const handleDeposit = async () => {
     if (!isFormValid()) {
-      return;
-    }
-    // One tx at a time — a session is still in flight (button is also
-    // disabled; this is the backstop).
-    if (progressActive) {
       return;
     }
 
@@ -470,9 +469,9 @@ export function MultiTokenDepositModal({
             </Button>
             <Button
               onClick={handleDeposit}
-              disabled={!isFormValid() || isLoading || isValidating || progressActive || (rateLimitStatus?.remaining === 0)}
+              disabled={!isFormValid() || isLoading || isValidating || (rateLimitStatus?.remaining === 0)}
             >
-              {progressActive ? "Waiting for pending transaction…" : isValidating ? "Signing…" : isLoading ? "Depositing..." : `Deposit ${deposits.length} Tokens`}
+              {isValidating ? "Signing…" : isLoading ? "Depositing..." : `Deposit ${deposits.length} Tokens`}
             </Button>
           </div>
         </div>

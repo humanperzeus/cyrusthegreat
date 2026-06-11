@@ -75,8 +75,10 @@ export function TransferModal({
 }: TransferModalProps) {
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
-  // ProgressFlow session wiring — see DepositModal for the pattern.
-  const { startProgress, updateProgress, active: progressActive } = useProgress();
+  // ProgressFlow session wiring — see DepositModal for the pattern
+  // (no re-entry lock: wallet handles the queue, second submit just
+  // replaces the active session in the popup).
+  const { startProgress, updateProgress } = useProgress();
   // Connected wallet address — used to reject self-transfers up-front.
   // The contract reverts on transferInternalETH/Token(self), and the
   // wallet may silently swallow that revert at the simulate stage,
@@ -296,13 +298,11 @@ export function TransferModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!to || !amount || isLoading || isSimulating || progressActive || isSelfTransfer}
+                disabled={!to || !amount || isLoading || isSimulating || isSelfTransfer}
                 className="flex-1"
               >
                 {isSelfTransfer ? (
                   "Recipient must differ from sender"
-                ) : progressActive ? (
-                  "Waiting for pending transaction…"
                 ) : isSimulating ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

@@ -90,12 +90,14 @@ export function DepositModal({
     availableTokensCount: availableTokens.length
   });
   const [amount, setAmount] = useState("");
-  // Single-asset deposit owns a ProgressFlow session in the same way
-  // the multi-token sub-modal does. startProgress() returns an id that
-  // scopes all subsequent updates so a stale prior session can't
-  // repaint a newer one. `progressActive` is the in-flight backstop —
-  // mirror of the lock used to disable the submit button.
-  const { startProgress, updateProgress, active: progressActive } = useProgress();
+  // Single-asset deposit opens a ProgressFlow session on submit. We
+  // intentionally do NOT block re-entry while one is pending (2026-06-10):
+  // matches Uniswap/1inch/Aave behavior, lets the wallet's own queue
+  // serialize signatures. Starting a second tx replaces the active
+  // session in the popup; the first one's lifecycle continues to run
+  // in the background — its updateProgress calls become no-ops thanks
+  // to the id-guard in ProgressContext.
+  const { startProgress, updateProgress } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -391,12 +393,10 @@ export function DepositModal({
                   onDeposit(amount, (steps) => updateProgress(sessionId, steps));
                 }
               }}
-              disabled={isLoading || progressActive || !amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
+              disabled={isLoading || !amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
               className="w-full"
             >
-              {progressActive ? (
-                "Waiting for pending transaction…"
-              ) : isSimulating ? (
+              {isSimulating ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Checking...
