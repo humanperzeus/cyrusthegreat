@@ -419,7 +419,11 @@ export function DepositModal({
               // tx. Modal closes immediately on submit anyway, so a
               // brief mid-click race here is impossible. Wallet handles
               // signature serialization in its own queue.
-              disabled={!amount || amount.trim() === '' || amount === '0' || amount === '0.0'}
+              // Number(amount) > 0 collapses the old 4-clause check
+              // and additionally catches "0.00", "0.000", " 0 ", "-1",
+              // "abc" — the contract still charges the fee on a
+              // 0-amount deposit, so block it at the UI.
+              disabled={!(Number(amount) > 0)}
               className="w-full"
             >
               {isSimulating ? (

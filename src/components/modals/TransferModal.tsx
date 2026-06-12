@@ -122,7 +122,9 @@ export function TransferModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!to || !amount) return;
+    // Number(amount) > 0 blocks "", "0", "0.00", " ", "abc", "-1" all
+    // at once — the contract takes the fee even on 0-amount calls.
+    if (!to || !(Number(amount) > 0)) return;
     // Bank8 reverts on self-transfer (require recipient != msg.sender).
     // Catch it here so we never open a popup for a tx the contract will
     // refuse — mirrors the debug UI b8-5 / b8-10 / b8-11 guards.
@@ -316,7 +318,7 @@ export function TransferModal({
                 type="button"
                 onClick={handleSubmit}
                 // isLoading dropped — see DepositModal for the rationale.
-                disabled={!to || !amount || isSimulating || isSelfTransfer}
+                disabled={!to || !(Number(amount) > 0) || isSimulating || isSelfTransfer}
                 className="flex-1"
               >
                 {isSelfTransfer ? (

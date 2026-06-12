@@ -120,7 +120,10 @@ export function WithdrawModal({
   // click-to-submit (matching TransferModal.handleSubmit at :123).
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount) return;
+    // Block empty / "0" / "0.00" / whitespace / non-numeric. Number()
+    // returns NaN for non-numeric and 0 for ""; NaN > 0 is false so
+    // a single comparison covers every bad case.
+    if (!(Number(amount) > 0)) return;
     const title = isTokenWithdraw && tokenSymbol
       ? `Single ${tokenSymbol} withdraw`
       : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} withdraw`;
@@ -308,7 +311,11 @@ export function WithdrawModal({
                     }
                   }}
                   // isLoading dropped — see DepositModal for the rationale.
-                  disabled={!amount || isSimulating}
+                  // amount gate uses Number(amount) > 0 so "0", "0.00",
+                  // whitespace, and non-numeric all keep the button
+                  // disabled — the contract still charges the fee on
+                  // a 0-amount withdraw, so we must block it at the UI.
+                  disabled={!(Number(amount) > 0) || isSimulating}
                   className="flex-1"
                 >
                   {isSimulating ? (
