@@ -75,7 +75,7 @@ export function WithdrawModal({
   // ProgressFlow session wiring — see DepositModal for the pattern
   // (no re-entry lock: wallet handles the queue, second submit just
   // replaces the active session in the popup).
-  const { startProgress, updateProgress } = useProgress();
+  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -264,7 +264,12 @@ export function WithdrawModal({
                       title,
                       [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${amount}…` }],
                     );
+                    // Start as corner chip so it doesn't overlap the
+                    // Radix DialogContent close animation (duration-200);
+                    // re-expand once the dialog has fully unmounted.
+                    setProgressExpanded(false);
                     onOpenChange(false);
+                    setTimeout(() => setProgressExpanded(true), 250);
                     if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
                       onTokenWithdraw(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
                     } else {

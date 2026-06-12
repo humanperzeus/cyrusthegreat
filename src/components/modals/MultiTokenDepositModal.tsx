@@ -76,7 +76,7 @@ export function MultiTokenDepositModal({
   // first lifecycle keeps running in the background (id-guarded
   // updateProgress calls become no-ops). Wallet's own queue serializes
   // signatures. Matches Uniswap/1inch/Aave UX.
-  const { startProgress, updateProgress } = useProgress();
+  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -254,11 +254,17 @@ export function MultiTokenDepositModal({
       'Multi-token batch deposit',
       [{ label: 'Preparing deposit…', status: 'running', detail: `Submitting ${depositData.length} token${depositData.length === 1 ? '' : 's'}…` }],
     );
+    // Start as corner chip so it doesn't overlap the Radix
+    // DialogContent close animation that onCommitted triggers
+    // (duration-200 on this dialog + its wrapping DepositModal);
+    // re-expand once both layers have unmounted.
+    setProgressExpanded(false);
 
     // Notify the parent (DepositModal) that we've committed — it
     // closes both this dialog and itself, freeing the page so the
     // user can keep working while the tx pends.
     onCommitted?.();
+    setTimeout(() => setProgressExpanded(true), 250);
 
     // Run the operation in the background; useVault.depositMultiple…
     // pushes step updates into this session via its onProgress

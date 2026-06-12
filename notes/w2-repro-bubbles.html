@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>W2 repro — two-bubble overlap</title>
+<title>W2 + W4 repro — two-bubble overlap</title>
 <style>
   /* Body bg + controls strip — only the test harness, NOT in production */
   body {
@@ -14,7 +14,8 @@
   .ctrl {
     position: fixed; top: 16px; left: 16px; z-index: 2000;
     background: #1a1a1f; border: 1px solid #444; border-radius: 8px;
-    padding: 14px 18px; max-width: 360px;
+    padding: 14px 18px; max-width: 420px;
+    max-height: calc(100vh - 32px); overflow-y: auto;
   }
   .ctrl h1 { font-size: 14px; margin: 0 0 8px; color: #FFC83D; }
   .ctrl p { font-size: 12px; color: #aaa; margin: 6px 0; }
@@ -25,6 +26,13 @@
   }
   .ctrl button:hover { background: #444; }
   .ctrl button.danger { background: #5a1a1a; border-color: #a33; }
+  .ctrl label.checkbox {
+    display: flex; align-items: center; gap: 8px;
+    margin: 10px 0 4px; padding: 8px 10px;
+    background: #221c12; border: 1px solid rgba(240, 180, 0, 0.4);
+    border-radius: 6px; font-size: 12px; color: #FFC83D; cursor: pointer;
+  }
+  .ctrl label.checkbox input { margin: 0; }
 
   /* ─── ProgressFlow styles — copied verbatim from
      src/components/shared/ProgressFlow.tsx so the visual result
@@ -121,18 +129,72 @@
   .pf-overlay.minimized .pf-controls .pf-hide { display: none; }
   .pf-overlay.minimized .pf-controls { position: static; margin-left: 12px; }
   .pf-overlay.minimized .pf-mini { display: flex; }
+
+  /* ─── Radix-style Dialog stand-in — matches shadcn dialog.tsx classes:
+     `data-[state=open]:animate-in data-[state=closed]:animate-out
+      data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0
+      data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95
+      data-[state=closed]:slide-out-to-left-1/2
+      data-[state=closed]:slide-out-to-top-[48%]
+      data-[state=open]:slide-in-from-left-1/2
+      data-[state=open]:slide-in-from-top-[48%]
+      sm:rounded-lg duration-200`
+     duration-200 = 200ms exit. The unmount happens only after the
+     CSS animation completes (Radix's Presence). That's the window
+     during which the ProgressFlow open-animation also runs centered.
+     ─── */
+  .rx-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 50;
+    animation: rxFadeIn 200ms ease forwards;
+  }
+  .rx-overlay[data-state="closed"] { animation: rxFadeOut 200ms ease forwards; }
+  @keyframes rxFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rxFadeOut { from { opacity: 1; } to { opacity: 0; } }
+  .rx-content {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 50;
+    width: 100%; max-width: 425px;
+    background: #fff; color: #111;
+    border: 1px solid #ccc; border-radius: 8px;
+    padding: 24px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    animation: rxIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .rx-content[data-state="closed"] {
+    animation: rxOut 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes rxIn {
+    from { opacity: 0;
+           transform: translate(-50%, -50%) translate(-50%, -48%) scale(0.95); }
+    to   { opacity: 1;
+           transform: translate(-50%, -50%) translate(0, 0) scale(1); }
+  }
+  @keyframes rxOut {
+    from { opacity: 1;
+           transform: translate(-50%, -50%) translate(0, 0) scale(1); }
+    to   { opacity: 0;
+           transform: translate(-50%, -50%) translate(-50%, -48%) scale(0.95); }
+  }
+  .rx-content h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+  .rx-content p { margin: 0 0 16px; font-size: 14px; color: #444; }
+  .rx-content .rx-btn {
+    background: #1a1a1f; color: #fff;
+    padding: 8px 16px; font-size: 14px; font-weight: 600;
+    border: none; border-radius: 6px; cursor: pointer;
+  }
 </style>
 </head>
 <body>
 
 <div class="ctrl">
-  <h1>W2 repro — two-bubble overlap</h1>
-  <p><strong>Production model</strong> — ProgressContext holds ONE session;
-     a second startProgress REPLACES the first. Click "Replace mode" buttons
-     to verify there's no overlap.</p>
-  <p><strong>Failure model</strong> — what if we forgot to replace and
-     instead appended a second overlay? Click "Append mode" buttons to see
-     what overlapping bubbles would look like (the bug the user described).</p>
+  <h1>W2 + W4 repro — two-bubble overlap</h1>
+
+  <p><strong>W2 — Replace vs Append (production semantics check)</strong>:
+     ProgressContext holds ONE session; a second startProgress REPLACES
+     the first. Use these to confirm the single-instance invariant.</p>
 
   <p style="color:#FFC83D;">Replace mode (production):</p>
   <button onclick="replaceWith('WLFI', false)">Open WLFI (expanded)</button>
@@ -140,20 +202,41 @@
   <button onclick="replaceWith('USD1', false)">Replace with USD1 (expanded)</button>
   <button onclick="closeAll()">Close all</button>
 
-  <p style="color:#ef4444;">Append mode (broken — for comparison):</p>
+  <p style="color:#ef4444;">Append mode (broken — for visual comparison):</p>
   <button onclick="appendNew('WLFI')">Append WLFI</button>
   <button onclick="appendNew('USD1')">Append USD1</button>
   <button onclick="appendNew('PYUSD')">Append PYUSD</button>
   <button class="danger" onclick="closeAll()">Close all</button>
 
-  <p>Watch behind this control panel. In Replace mode, you should see
-     exactly ONE modal at any time. In Append mode, you'll see multiple
-     stacked overlays.</p>
+  <hr style="border-color:#333; margin:14px 0;" />
+
+  <p><strong>W4 — Radix-close-overlap simulation (THE REAL BUG)</strong>:
+     Mimics the production submit handler:
+     <code>startProgress(...)</code> opens ProgressFlow centered, then
+     <code>onOpenChange(false)</code> triggers Radix's 200ms
+     <code>data-[state=closed]:animate-out</code> exit on the parent
+     DialogContent. For ~200ms BOTH cards are centered = "two bubbles
+     overlapping" the user reports.</p>
+
+  <label class="checkbox">
+    <input type="checkbox" id="fixToggle" />
+    <span>Apply W4 fix (start ProgressFlow as chip, expand after 250 ms)</span>
+  </label>
+
+  <p>Click below, then watch the centre of the page. Without the fix,
+     for ~200 ms the brown ProgressFlow card and the white Deposit
+     card are both centred → overlap. With the fix, the ProgressFlow
+     appears as a corner chip while the Deposit dialog closes; only
+     after Radix is done does the chip morph into the centered modal.</p>
+
+  <button onclick="simulateSubmit()">Simulate Deposit submit</button>
+  <button class="danger" onclick="resetAll()">Reset</button>
 </div>
 
 <script>
-  // Stand-in for what the real ProgressContext renders. Matches the
-  // DOM structure of src/components/shared/ProgressFlow.tsx render().
+  // ──────────────────────────────────────────────────────────────────
+  // Section 1 — W2 ProgressFlow stand-in (unchanged)
+  // ──────────────────────────────────────────────────────────────────
   function renderOverlay(title, minimized) {
     const overlay = document.createElement('div');
     overlay.className = 'pf-overlay open' + (minimized ? ' minimized' : '');
@@ -188,10 +271,6 @@
     return overlay;
   }
 
-  // PRODUCTION model: one session at a time. Removing the existing overlay
-  // (if any) before mounting the new one is what ProgressContext does
-  // implicitly via React diffing — `session` state is replaced in setSession,
-  // the same <ProgressFlow> instance just re-renders with new props.
   function replaceWith(title, minimized) {
     closeAll();
     const overlay = renderOverlay(title, minimized);
@@ -206,16 +285,105 @@
   function closeAll() {
     document.querySelectorAll('[data-role="progress-flow"]').forEach(o => o.remove());
   }
-
-  // BROKEN model (for visual comparison): mount a new overlay WITHOUT
-  // closing the prior one. This is the only way to actually get two
-  // bubbles on screen with the current CSS.
   function appendNew(title) {
     const overlay = renderOverlay(title, false);
     overlay.dataset.role = 'progress-flow';
-    // Slight offset so the user can see they're stacked
     overlay.style.opacity = '0.85';
     document.body.appendChild(overlay);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // Section 2 — W4 Radix-close-overlap simulation
+  //
+  // mounts a stand-in for a shadcn DialogContent (open state), then on
+  // simulateSubmit():
+  //
+  //   1.   startProgress(...)   →  ProgressFlow appears centered
+  //   2.   onOpenChange(false)  →  DialogContent transitions to closed,
+  //                                runs the 200ms slide+zoom+fade exit,
+  //                                THEN unmounts (mirrors Radix Presence)
+  //
+  // With the fix toggle on, step 1 mounts the ProgressFlow MINIMIZED
+  // (corner chip — no center bubble). At T=250ms (>= 200ms Radix exit),
+  // the chip morphs into the centered modal. The overlap window is
+  // eliminated.
+  // ──────────────────────────────────────────────────────────────────
+
+  let rxOverlay = null;
+  let rxContent = null;
+
+  function mountFakeRadixDialog() {
+    if (rxContent) return;
+    rxOverlay = document.createElement('div');
+    rxOverlay.className = 'rx-overlay';
+    rxOverlay.dataset.state = 'open';
+    rxContent = document.createElement('div');
+    rxContent.className = 'rx-content';
+    rxContent.dataset.state = 'open';
+    rxContent.innerHTML = `
+      <h3>Deposit USD1 to Vault</h3>
+      <p>Amount: 50 USD1</p>
+      <p>This is a stand-in for the real shadcn DialogContent.
+         duration-200 + data-[state=closed]:animate-out exits run
+         when we flip data-state to "closed".</p>
+      <button class="rx-btn" type="button">Deposit USD1</button>
+    `;
+    document.body.appendChild(rxOverlay);
+    document.body.appendChild(rxContent);
+  }
+
+  function closeFakeRadixDialog() {
+    if (!rxContent) return;
+    // Flip both nodes' data-state to "closed". The CSS animation runs
+    // for 200ms; we unmount after it completes (Radix Presence does
+    // the same internally).
+    rxOverlay.dataset.state = 'closed';
+    rxContent.dataset.state = 'closed';
+    const oldOverlay = rxOverlay;
+    const oldContent = rxContent;
+    rxOverlay = null;
+    rxContent = null;
+    setTimeout(() => {
+      oldOverlay.remove();
+      oldContent.remove();
+    }, 200); // matches duration-200 in src/components/ui/dialog.tsx
+  }
+
+  function simulateSubmit() {
+    resetAll();
+    mountFakeRadixDialog();
+    // tiny pause so you see the dialog mounted before the submit fires.
+    setTimeout(() => {
+      const useFix = document.getElementById('fixToggle').checked;
+      if (useFix) {
+        // ── WITH FIX ── (candidate A from notes/worker-w4.md)
+        // Mount ProgressFlow as a corner chip first, then re-expand
+        // after Radix's 200 ms close animation completes.
+        const overlay = renderOverlay('USD1', /* minimized */ true);
+        overlay.dataset.role = 'progress-flow';
+        document.body.appendChild(overlay);
+        closeFakeRadixDialog();
+        setTimeout(() => setMinimized(false), 250);
+      } else {
+        // ── WITHOUT FIX ── (current production behavior)
+        // ProgressFlow mounts CENTERED while the Radix DialogContent
+        // is still running its 200 ms exit animation → overlap.
+        const overlay = renderOverlay('USD1', /* minimized */ false);
+        overlay.dataset.role = 'progress-flow';
+        document.body.appendChild(overlay);
+        closeFakeRadixDialog();
+      }
+    }, 400);
+  }
+
+  function resetAll() {
+    closeAll();
+    if (rxContent) {
+      rxContent.remove();
+      rxOverlay.remove();
+      rxContent = null;
+      rxOverlay = null;
+    }
   }
 </script>
 

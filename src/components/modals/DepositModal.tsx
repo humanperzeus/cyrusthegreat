@@ -97,7 +97,7 @@ export function DepositModal({
   // session in the popup; the first one's lifecycle continues to run
   // in the background — its updateProgress calls become no-ops thanks
   // to the id-guard in ProgressContext.
-  const { startProgress, updateProgress } = useProgress();
+  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -394,9 +394,18 @@ export function DepositModal({
                   title,
                   [{ label: 'Preparing deposit…', status: 'running', detail: `Submitting ${amount}…` }],
                 );
+                // Start the session as a corner chip so it doesn't
+                // collide with the Radix DialogContent close animation
+                // (duration-200 in src/components/ui/dialog.tsx). Both
+                // setSession + setExpanded(false) batch in this tick;
+                // ProgressFlow mounts straight into the minimized state.
+                setProgressExpanded(false);
                 // Close the dialog so the App-level ProgressFlow is the
                 // only floating UI and the page is interactive again.
                 onOpenChange(false);
+                // Re-expand AFTER Radix's exit animation has unmounted
+                // its DialogContent. 250ms > 200ms close window.
+                setTimeout(() => setProgressExpanded(true), 250);
                 // Fire the deposit in the background — useVault pushes
                 // step updates through the onProgress callback we hand it.
                 if (isTokenDeposit && tokenAddress && tokenSymbol && onTokenDeposit) {

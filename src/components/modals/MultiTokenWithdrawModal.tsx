@@ -68,7 +68,7 @@ export function MultiTokenWithdrawModal({
   // submit opens its own session with a unique id so concurrent
   // withdraws / deposits / transfers can coexist as chips.
   // No re-entry lock — see MultiTokenDepositModal for the rationale.
-  const { startProgress, updateProgress } = useProgress();
+  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -208,8 +208,14 @@ export function MultiTokenWithdrawModal({
       'Multi-token batch withdraw',
       [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${withdrawalData.length} token${withdrawalData.length === 1 ? '' : 's'}…` }],
     );
+    // Start as corner chip so it doesn't overlap the Radix
+    // DialogContent close animation that onCommitted triggers
+    // (duration-200 on this dialog + its wrapping WithdrawModal);
+    // re-expand once both layers have unmounted.
+    setProgressExpanded(false);
 
     onCommitted?.();
+    setTimeout(() => setProgressExpanded(true), 250);
 
     onWithdraw(withdrawalData, (steps) => {
       updateProgress(sessionId, steps);

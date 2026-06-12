@@ -47,6 +47,13 @@ interface ProgressContextValue {
   startProgress: (title: string, initialSteps: ProgressStep[]) => string;
   updateProgress: (id: string, steps: ProgressStep[]) => void;
   closeProgress: () => void;
+  // Toggle the live session between centered modal (true) and corner
+  // chip (false). Used by the 6 submit handlers to start a session as
+  // a chip while the parent Radix Dialog runs its 200ms close
+  // animation, then re-expand once the dialog has unmounted — without
+  // this, both cards are centered at the same time and the user sees
+  // "two bubbles overlapping". See W4 brief notes/worker-w4.md.
+  setProgressExpanded: (expanded: boolean) => void;
 }
 
 const ProgressContext = createContext<ProgressContextValue | null>(null);
@@ -96,6 +103,10 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSession(null);
   }, []);
 
+  const setProgressExpanded = useCallback((next: boolean) => {
+    setExpanded(next);
+  }, []);
+
   // Auto-close 30s after the session went terminal. Checked every 2s —
   // precision doesn't matter here.
   useEffect(() => {
@@ -122,7 +133,7 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const active = session !== null && session.terminalAt === null;
 
   return (
-    <ProgressContext.Provider value={{ active, startProgress, updateProgress, closeProgress }}>
+    <ProgressContext.Provider value={{ active, startProgress, updateProgress, closeProgress, setProgressExpanded }}>
       {children}
       {session && (
         <ProgressFlow
