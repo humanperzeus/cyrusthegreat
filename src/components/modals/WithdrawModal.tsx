@@ -108,11 +108,35 @@ export function WithdrawModal({
     }
   };
 
+  // 2026-06-12: handleSubmit fires on form-level submit (pressing Enter
+  // in the amount input, or any default-typed button inside the <form>).
+  // Until now it called onWithdraw(amount) unconditionally — that's
+  // withdrawETHWagmi, which then ran the ETH-vault balance check and
+  // toasted "You only have X ETH in vault. Cannot withdraw Y ETH" even
+  // when the modal was open for an ERC-20 (user reports pressing Enter
+  // during a USD1 withdraw and seeing the ETH toast). The button's
+  // onClick handler already branched on isTokenWithdraw correctly;
+  // this mirrors that path so Enter-to-submit takes the same route as
+  // click-to-submit (matching TransferModal.handleSubmit at :123).
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (amount) {
-      onWithdraw(amount);
-      // Don't reset amount here - wait for transaction confirmation
+    if (!amount) return;
+    const title = isTokenWithdraw && tokenSymbol
+      ? `Single ${tokenSymbol} withdraw`
+      : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} withdraw`;
+    const sessionId = startProgress(
+      title,
+      [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${amount}…` }],
+    );
+    // Open as chip during the 200ms Radix close animation, re-expand
+    // after — mirrors the W4 fix at the button-click site.
+    setProgressExpanded(false);
+    onOpenChange(false);
+    setTimeout(() => setProgressExpanded(true), 250);
+    if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
+      onTokenWithdraw(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
+    } else {
+      onWithdraw(amount, (steps) => updateProgress(sessionId, steps));
     }
   };
 
