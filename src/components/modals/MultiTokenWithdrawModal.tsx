@@ -120,11 +120,14 @@ export function MultiTokenWithdrawModal({
       return { isValid: false, error: `Minimum withdrawal is ${minWithdraw} ${token.symbol}` };
     }
 
-    // CRITICAL FIX: Compare amounts as BigInt to avoid precision loss - PRECISION SAFE
-    // Convert both amounts to the smallest unit (wei) for exact comparison using decimal.js
+    // Compare wei to wei. token.balance is already a raw-wei decimal-integer
+    // string at every call site (useVault.ts wallet/vault native + ERC-20
+    // paths all produce BigInt.toString()), so parse it directly. Passing it
+    // through convertToWei would multiply by 10**decimals a second time and
+    // silently disable the check for any non-zero balance.
     const amountInSmallestUnit = convertToWei(amount, token.decimals);
-    const balanceInSmallestUnit = convertToWei(token.balance, token.decimals);
-    
+    const balanceInSmallestUnit = BigInt(token.balance);
+
     if (amountInSmallestUnit > balanceInSmallestUnit) {
       return { isValid: false, error: `Insufficient vault balance. Max: ${formatTokenBalance(token.balance, token.decimals)}` };
     }

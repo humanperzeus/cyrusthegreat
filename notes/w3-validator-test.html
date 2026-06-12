@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>W3 validator math sanity check</title>
+  <style>
+    body { font: 14px/1.5 ui-monospace, Menlo, monospace; padding: 20px; max-width: 900px; }
+    h1 { font-size: 16px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    .pass { color: #066;  font-weight: 700; }
+    .fail { color: #b00; font-weight: 700; }
+    .old  { color: #888; }
+    .note { background: #fff8d8; padding: 8px 12px; border-left: 4px solid #d6a800; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <h1>W3 validator math sanity check</h1>
+
+  <p>
+    Reproduces the inline validator comparison for
+    <code>MultiTokenDepositModal.validateDeposit</code> /
+    <code>MultiTokenWithdrawModal.validateWithdrawal</code> /
+    <code>MultiTokenTransferModal.validateTransfer</code>.
+    The validator now reads <code>balance := BigInt(token.balance)</code>
+    instead of <code>balance := convertToWei(token.balance, token.decimals)</code>
+    because <code>token.balance</code> is already a raw-wei decimal-integer
+    string at every call site in <code>useVault.ts</code>.
+  </p>
+
+  <p class="note">
+    A page-level <code>amount</code> like <code>"1.5"</code> is a
+    <em>human-decimal</em> string (the user typed it). A page-level
+    <code>balance</code> like <code>"1000000000000000000"</code> is a
+    <em>raw-wei integer</em> string (it comes from
+    <code>BigInt.toString()</code>). The fix's whole point: don't treat
+    those two strings the same way.
+  </p>
+
+  <div id="out"></div>
+
+  <script>
+    // Mirror src/lib/utils.ts::convertToWei *without* its decimal.js
+    // precision machinery — we don't need 100-digit precision for these
+    // tiny cases, and we don't want to load decimal.js into a static page.
+    // The semantics that matter for this test: "0"/""/"0.0" short-circuits
+    // to 0n; anything else is amount * 10**decimals as BigInt.
+    function convertToWei(amount, decimals) {
+      const s = String(amount).trim();
+      if (s === '' || s === '0' || s === '0.0') return 0n;
+      const [whole, frac = ''] = s.split('.');
+      if (frac.length > decimals) {
+        throw new Error('frac wider than decimals — not exercised by these test cases');
+      }
+      const padded = frac + '0'.repeat(decimals - frac.length);
+      return BigInt(whole + padded);
+    }
+
+    // ---------- under-test comparison (the fix) ----------
+    function isInsufficient_FIXED(amount, balanceRawWei, decimals) {
+      const a = convertToWei(amount, decimals);
+      const b = BigInt(balanceRawWei);
+      return a > b;
+    }
+
+    // ---------- prior (buggy) comparison, for contrast ----------
+    function isInsufficient_PRIOR(amount, balanceRawWei, decimals) {
+      const a = convertToWei(amount, decimals);
+      const b = convertToWei(balanceRawWei, decimals);   // <-- double-multiplied
+      return a > b;
+    }
+
+    const cases = [
+      {
+        name: 'overdraft: 1.5 ETH typed vs 1.0 ETH in vault',
+        amount: '1.5',
+        balanceRawWei: '1000000000000000000',           // 1 ETH in wei
+        decimals: 18,
+        expectInsufficient: true,
+      },
+      {
+        name: 'within balance: 0.5 ETH typed vs 1.0 ETH in vault',
+        amount: '0.5',
+        balanceRawWei: '1000000000000000000',           // 1 ETH in wei
+        decimals: 18,
+        expectInsufficient: false,
+      },
+      {
+        name: 'zero balance: any positive amount must fail',
+        amount: '0.0001',
+        balanceRawWei: '0',
+        decimals: 18,
+        expectInsufficient: true,
+      },
+    ];
+
+    const out = document.getElementById('out');
+    const rows = ['<table>',
+      '<tr><th>case</th><th>expected</th><th>FIXED (under test)</th><th class="old">PRIOR (for contrast)</th></tr>'];
+    let allPass = true;
+    for (const c of cases) {
+      const fixed = isInsufficient_FIXED(c.amount, c.balanceRawWei, c.decimals);
+      const prior = isInsufficient_PRIOR(c.amount, c.balanceRawWei, c.decimals);
+      const pass = (fixed === c.expectInsufficient);
+      if (!pass) allPass = false;
+      const verdict = pass
+        ? '<span class="pass">PASS</span>'
+        : '<span class="fail">FAIL</span>';
+      rows.push(`<tr>
+        <td>${c.name}<br><small>amount=${c.amount}, balanceRawWei=${c.balanceRawWei}, decimals=${c.decimals}</small></td>
+        <td>insufficient = <b>${c.expectInsufficient}</b></td>
+        <td>${verdict} — insufficient = ${fixed}</td>
+        <td class="old">insufficient = ${prior}</td>
+      </tr>`);
+    }
+    rows.push('</table>');
+    rows.push(`<p>Overall: <b class="${allPass ? 'pass' : 'fail'}">${allPass ? 'ALL PASS' : 'FAIL'}</b></p>`);
+    rows.push(`<p class="old">
+      Note the PRIOR column: case 1 says <b>insufficient = false</b> for an
+      actual overdraft — that's the bug. The contract was the only thing
+      stopping the user from submitting an overdraft tx that would revert.
+    </p>`);
+    out.innerHTML = rows.join('\n');
+
+    // also write to console for headless verification
+    console.log(allPass ? 'ALL PASS' : 'FAIL');
+    for (const c of cases) {
+      const fixed = isInsufficient_FIXED(c.amount, c.balanceRawWei, c.decimals);
+      console.log(`[${fixed === c.expectInsufficient ? 'PASS' : 'FAIL'}] ${c.name}: fixed=${fixed}, expected=${c.expectInsufficient}`);
+    }
+  </script>
+</body>
+</html>
