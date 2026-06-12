@@ -207,6 +207,7 @@ export function TransferModal({
                   {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
                 </span>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-xs"
@@ -312,6 +313,7 @@ export function TransferModal({
                 Cancel
               </Button>
               <Button
+                type="button"
                 onClick={handleSubmit}
                 // isLoading dropped — see DepositModal for the rationale.
                 disabled={!to || !amount || isSimulating || isSelfTransfer}
@@ -345,6 +347,7 @@ export function TransferModal({
                 Cancel
               </Button>
               <Button
+                type="button"
                 onClick={() => setShowMultiTokenModal(true)}
                 disabled={isLoading}
                 className="flex-1"

@@ -192,6 +192,7 @@ export function WithdrawModal({
                     {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
                   </span>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="sm"
                     className="h-6 px-2 text-xs"
@@ -282,6 +283,7 @@ export function WithdrawModal({
                   Cancel
                 </Button>
                 <Button
+                  type="button"
                   onClick={() => {
                     const title = isTokenWithdraw && tokenSymbol
                       ? `Single ${tokenSymbol} withdraw`
@@ -335,6 +337,7 @@ export function WithdrawModal({
                   Cancel
                 </Button>
                 <Button
+                  type="button"
                   onClick={() => setShowMultiTokenModal(true)}
                   disabled={isLoading}
                   className="flex-1"
