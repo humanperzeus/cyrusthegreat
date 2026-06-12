@@ -62,6 +62,10 @@ interface ProgressFlowProps {
   // whether this shows as the centered modal (`expanded: true`) or as
   // the corner chip (`expanded: false`).
   expanded: boolean;
+  // Stacking position when this instance renders as a chip. Index 0
+  // sits at the corner; each higher index stacks ~60px upward. Has
+  // no effect when expanded.
+  chipIndex?: number;
   // Click on the chip body → request expansion.
   onExpand?: () => void;
   // Click on Hide → request minimization to corner chip.
@@ -76,6 +80,7 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
   title,
   steps,
   expanded,
+  chipIndex = 0,
   onExpand,
   onMinimize,
   onClose,
@@ -225,6 +230,14 @@ export const ProgressFlow: React.FC<ProgressFlowProps> = ({
     <div
       ref={overlayRef}
       className={`pf-overlay open ${minimized ? "minimized" : ""} ${className ?? ""}`}
+      // Stack chips upward from the bottom-right corner. Index 0 sits
+      // ~16px from the edge (CSS default in .pf-overlay.minimized);
+      // each higher index lifts ~60px (chip ≈ 48px + 12px gap). The
+      // inline `bottom` only overrides that single edge in the
+      // .pf-overlay.minimized rule's `inset: auto 16px 16px auto`
+      // shorthand — left/right/top stay where the CSS put them. No
+      // effect when expanded.
+      style={minimized && chipIndex > 0 ? { bottom: `${16 + chipIndex * 60}px` } : undefined}
       onClick={handleOverlayClick}
     >
       <style>{`

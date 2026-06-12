@@ -84,9 +84,9 @@ export function TransferModal({
     }
   }, [open, tokenAddress]);
   // ProgressFlow session wiring — see DepositModal for the pattern
-  // (no re-entry lock: wallet handles the queue, second submit just
-  // replaces the active session in the popup).
-  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
+  // (no re-entry lock: wallet handles the queue; concurrent submits
+  // stack as chips in the App-level ProgressFlow registry).
+  const { startProgress, updateProgress, expandProgress } = useProgress();
   // Connected wallet address — used to reject self-transfers up-front.
   // The contract reverts on transferInternalETH/Token(self), and the
   // wallet may silently swallow that revert at the simulate stage,
@@ -137,11 +137,13 @@ export function TransferModal({
       [{ label: 'Preparing transfer…', status: 'running', detail: `Submitting ${amount} → ${to.slice(0, 6)}…${to.slice(-4)}…` }],
     );
     // Start as corner chip so it doesn't overlap the Radix
-    // DialogContent close animation (duration-200); re-expand once
-    // the dialog has fully unmounted.
-    setProgressExpanded(false);
+    // DialogContent close animation (duration-200); re-expand THIS
+    // session once the dialog has fully unmounted. expandProgress(id)
+    // keeps focus on this submit's chip even if a sibling submit
+    // arrives during the 250ms window.
+    expandProgress(null);
     onOpenChange(false);
-    setTimeout(() => setProgressExpanded(true), 250);
+    setTimeout(() => expandProgress(sessionId), 250);
     if (isTokenTransfer && onTokenTransfer) {
       onTokenTransfer(to, amount, (steps) => updateProgress(sessionId, steps));
     } else {

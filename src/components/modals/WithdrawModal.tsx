@@ -73,9 +73,9 @@ export function WithdrawModal({
 }: WithdrawModalProps) {
   const [amount, setAmount] = useState("");
   // ProgressFlow session wiring — see DepositModal for the pattern
-  // (no re-entry lock: wallet handles the queue, second submit just
-  // replaces the active session in the popup).
-  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
+  // (no re-entry lock: wallet handles the queue; concurrent submits
+  // stack as chips in the App-level ProgressFlow registry).
+  const { startProgress, updateProgress, expandProgress } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -129,10 +129,12 @@ export function WithdrawModal({
       [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${amount}…` }],
     );
     // Open as chip during the 200ms Radix close animation, re-expand
-    // after — mirrors the W4 fix at the button-click site.
-    setProgressExpanded(false);
+    // THIS session after — mirrors the W4 fix at the button-click
+    // site; the new API takes id|null so the re-expand stays correct
+    // even if another submit lands in the interim.
+    expandProgress(null);
     onOpenChange(false);
-    setTimeout(() => setProgressExpanded(true), 250);
+    setTimeout(() => expandProgress(sessionId), 250);
     if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
       onTokenWithdraw(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
     } else {
@@ -290,10 +292,13 @@ export function WithdrawModal({
                     );
                     // Start as corner chip so it doesn't overlap the
                     // Radix DialogContent close animation (duration-200);
-                    // re-expand once the dialog has fully unmounted.
-                    setProgressExpanded(false);
+                    // re-expand THIS session once the dialog has fully
+                    // unmounted. expandProgress(id) keeps the focus on
+                    // this submit's chip even if a sibling submit lands
+                    // in the 250ms window.
+                    expandProgress(null);
                     onOpenChange(false);
-                    setTimeout(() => setProgressExpanded(true), 250);
+                    setTimeout(() => expandProgress(sessionId), 250);
                     if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
                       onTokenWithdraw(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
                     } else {

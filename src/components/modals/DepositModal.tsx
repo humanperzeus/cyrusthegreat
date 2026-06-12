@@ -90,14 +90,11 @@ export function DepositModal({
     availableTokensCount: availableTokens.length
   });
   const [amount, setAmount] = useState("");
-  // Single-asset deposit opens a ProgressFlow session on submit. We
-  // intentionally do NOT block re-entry while one is pending (2026-06-10):
-  // matches Uniswap/1inch/Aave behavior, lets the wallet's own queue
-  // serialize signatures. Starting a second tx replaces the active
-  // session in the popup; the first one's lifecycle continues to run
-  // in the background — its updateProgress calls become no-ops thanks
-  // to the id-guard in ProgressContext.
-  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
+  // Single-asset deposit opens a ProgressFlow session on submit.
+  // Concurrent submits coexist (each gets its own id and chip) —
+  // wallet's signature queue is the real serializer; the UI just
+  // stacks chips so the user can see what's pending where.
+  const { startProgress, updateProgress, expandProgress } = useProgress();
   const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
   const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
 
@@ -394,18 +391,19 @@ export function DepositModal({
                   title,
                   [{ label: 'Preparing deposit…', status: 'running', detail: `Submitting ${amount}…` }],
                 );
-                // Start the session as a corner chip so it doesn't
-                // collide with the Radix DialogContent close animation
-                // (duration-200 in src/components/ui/dialog.tsx). Both
-                // setSession + setExpanded(false) batch in this tick;
-                // ProgressFlow mounts straight into the minimized state.
-                setProgressExpanded(false);
-                // Close the dialog so the App-level ProgressFlow is the
-                // only floating UI and the page is interactive again.
+                // W4 chip-during-close timing: collapse everything to
+                // chips so this new session mounts as a corner chip
+                // while Radix runs its 200ms DialogContent exit
+                // animation. Without this, both cards are centered at
+                // once and the user sees them overlap.
+                expandProgress(null);
                 onOpenChange(false);
-                // Re-expand AFTER Radix's exit animation has unmounted
-                // its DialogContent. 250ms > 200ms close window.
-                setTimeout(() => setProgressExpanded(true), 250);
+                // Re-expand THIS session after Radix has fully
+                // unmounted (250 > 200ms). Passing the new id (not
+                // boolean) is what makes this safe under multi-session:
+                // even if another session arrives in between, we still
+                // expand the one this submit started.
+                setTimeout(() => expandProgress(sessionId), 250);
                 // Fire the deposit in the background — useVault pushes
                 // step updates through the onProgress callback we hand it.
                 if (isTokenDeposit && tokenAddress && tokenSymbol && onTokenDeposit) {

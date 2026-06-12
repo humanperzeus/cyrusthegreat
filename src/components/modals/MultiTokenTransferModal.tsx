@@ -69,7 +69,7 @@ export function MultiTokenTransferModal({
   // Progress sessions live in ProgressContext at App level. Each
   // submit opens its own session with a unique id.
   // No re-entry lock — see MultiTokenDepositModal for the rationale.
-  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
+  const { startProgress, updateProgress, expandProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -227,11 +227,11 @@ export function MultiTokenTransferModal({
     // Start as corner chip so it doesn't overlap the Radix
     // DialogContent close animation that onCommitted triggers
     // (duration-200 on this dialog + its wrapping TransferModal);
-    // re-expand once both layers have unmounted.
-    setProgressExpanded(false);
+    // re-expand THIS session once both layers have unmounted.
+    expandProgress(null);
 
     onCommitted?.();
-    setTimeout(() => setProgressExpanded(true), 250);
+    setTimeout(() => expandProgress(sessionId), 250);
 
     onTransfer(transferData, recipientAddress, (steps) => {
       updateProgress(sessionId, steps);
