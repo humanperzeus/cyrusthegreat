@@ -1,69 +1,93 @@
 /**
- * ProgressContext — App-level state for the single in-flight progress
- * session.
+ * ProgressContext — App-level registry of in-flight progress sessions.
  *
- * ONE session at a time, on purpose (2026-06-10): a wallet serializes
- * signature requests anyway, and "fire several batches concurrently"
- * just produced piles of chips that didn't match what the chain was
- * actually doing. The honest model we advertise is:
+ * Each multi-X or single-asset submit opens its own ProgressSession with
+ * a unique id. Multiple sessions coexist: start a Sepolia multi-token
+ * deposit, then a Base single-asset transfer — both are visible. The
+ * most-recent submit is the centered modal; older sessions are corner
+ * chips, stacked vertically.
  *
- *   1 click → 1 signature chain → 1 confirmation → 1 ✓
+ * Why this matters (2026-06-12, after the W4 chip-during-close fix
+ * landed and the single-session walk-back from 2026-06-10 was undone):
  *
- * While a session is active (steps exist and none failed / not all
- * done), `active` is true — the multi-X modals use it to disable their
- * submit buttons, so a new batch can only start after the current one
- * truly finished (on-chain receipt) or failed.
+ *   The single-session model lost user context. A second submit
+ *   replaced the first session's state; the older tx was still in
+ *   flight on-chain but had vanished from the UI. The user couldn't
+ *   tell which signature the wallet was prompting for.
  *
- * Display:
- *   • Expanded — centered modal with backdrop, body scroll locked.
- *   • Minimized (Hide) — corner chip, page fully interactive.
- *   • Close — dismiss tracking; the underlying tx is NOT cancelled,
- *     the wallet still resolves it on-chain.
- *   • Terminal sessions (all-done or any-failed) auto-close 30s after
- *     reaching that state.
+ *   The honest UI matches reality: every submit is its own session
+ *   until its terminal state is reached or the user closes it.
  *
- * API (id-guarded so a stale flow can't repaint a newer session):
- *   const id = startProgress(title, initialSteps);
- *   updateProgress(id, steps);   // ignored if id isn't the live session
- *   closeProgress();             // manual dismiss
+ * Display rules:
+ *   • At most ONE session is "expanded" (centered modal). Starting a
+ *     new session expands it and minimizes whatever was expanded
+ *     before. Clicking a chip body expands that session.
+ *   • All other sessions render as chips in the bottom-right. Most
+ *     recent at the corner (chipIndex 0), older chips stacked upward.
+ *   • Body scroll is locked iff something is expanded. Provider-owned
+ *     so the multiple ProgressFlow instances can't race on
+ *     document.body.style.overflow.
+ *   • Terminal sessions (all-done OR any-failed) auto-close 30s after
+ *     reaching that state. User can Close earlier to dismiss now.
+ *     The underlying tx is NOT cancelled by closing — the wallet's
+ *     pending tx still resolves on-chain; we just stop tracking it.
+ *
+ * Submit-handler pattern (with the W4 chip-during-close timing):
+ *   const id = startProgress(title, [{label, status:'running'}]);
+ *   expandProgress(null);                                  // 0ms — collapse to chip
+ *   onOpenChange(false);                                   // Radix runs its 200ms close
+ *   setTimeout(() => expandProgress(id), 250);             // re-expand THIS session
+ *   doTheTx({ onProgress: steps => updateProgress(id, steps) });
+ *
+ *   The 0ms collapse keeps the ProgressFlow rendered as a corner chip
+ *   while the parent Radix Dialog runs its exit animation, so the two
+ *   cards never overlap. The re-expand fires AFTER the Radix dialog
+ *   has fully unmounted (250 > 200ms close window), bringing the new
+ *   session forward as the centered modal.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { ProgressFlow, ProgressStep } from "@/components/shared/ProgressFlow";
 
 interface ProgressSession {
   id: string;
   title: string;
   steps: ProgressStep[];
-  // Latched the first time the session reaches terminal state
-  // (all done or any failed); drives the 30s auto-close.
+  // Latched the first time the session reaches terminal state (all
+  // done or any failed); drives the 30s auto-close. null while still
+  // in flight. Later detail-line edits must NOT restart this clock.
   terminalAt: number | null;
 }
 
 interface ProgressContextValue {
-  // True while a session exists that has NOT reached terminal state.
-  // Modals use this to block starting a second batch.
+  // True iff ANY session has not yet reached terminal state. Kept on
+  // the API for parity with prior multi-X disable semantics; no current
+  // call site reads it (the wallet's signature queue is the real
+  // serializer), but it's cheap to derive and a future "block while
+  // pending" toggle wants it ready.
   active: boolean;
+  // Returns the new session id so subsequent updateProgress(id, …)
+  // calls scope cleanly across concurrent submits.
   startProgress: (title: string, initialSteps: ProgressStep[]) => string;
+  // No-op if id is no longer in the array (session already closed).
   updateProgress: (id: string, steps: ProgressStep[]) => void;
-  closeProgress: () => void;
-  // Toggle the live session between centered modal (true) and corner
-  // chip (false). Used by the 6 submit handlers to start a session as
-  // a chip while the parent Radix Dialog runs its 200ms close
-  // animation, then re-expand once the dialog has unmounted — without
-  // this, both cards are centered at the same time and the user sees
-  // "two bubbles overlapping". See W4 brief notes/worker-w4.md.
-  setProgressExpanded: (expanded: boolean) => void;
+  // Removes one session. If it was expanded, expandedId becomes null.
+  closeProgress: (id: string) => void;
+  // Sets which session is the centered modal. Passing null collapses
+  // everything to chips. Unknown id is a no-op (don't throw).
+  expandProgress: (id: string | null) => void;
 }
 
 const ProgressContext = createContext<ProgressContextValue | null>(null);
 
-// Auto-close delay for finished/failed sessions. Long enough to read
-// the final tx hash + block number; Close dismisses earlier.
+// Auto-close delay for terminal sessions — long enough to read the
+// final tx hash + block number; Close dismisses earlier.
 const AUTO_CLOSE_MS = 30_000;
 
+// Monotonic id generator. The Date.now() suffix keeps logs readable
+// across hot-reloads (which reset __pfCounter to 0).
 let __pfCounter = 0;
-const genId = () => `pf_${++__pfCounter}`;
+const genId = () => `pf_${++__pfCounter}_${Date.now()}`;
 
 const isTerminal = (steps: ProgressStep[]): boolean => {
   if (steps.length === 0) return false;
@@ -72,79 +96,99 @@ const isTerminal = (steps: ProgressStep[]): boolean => {
 };
 
 export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<ProgressSession | null>(null);
-  const [expanded, setExpanded] = useState(true);
-  // Mirror of the live session id for the id-guard in updateProgress.
-  const liveIdRef = useRef<string | null>(null);
+  const [sessions, setSessions] = useState<ProgressSession[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const startProgress = useCallback((title: string, initialSteps: ProgressStep[]): string => {
     const id = genId();
-    liveIdRef.current = id;
-    setSession({ id, title, steps: initialSteps, terminalAt: null });
-    setExpanded(true); // a new session always opens centered
+    setSessions(prev => [...prev, { id, title, steps: initialSteps, terminalAt: null }]);
+    setExpandedId(id);
     return id;
   }, []);
 
   const updateProgress = useCallback((id: string, steps: ProgressStep[]) => {
-    // Stale-flow guard: a background flow from a session the user
-    // already closed (or that was replaced) must not repaint the UI.
-    if (liveIdRef.current !== id) return;
-    setSession(prev => {
-      if (!prev || prev.id !== id) return prev;
-      // Latch terminalAt on first terminal observation — later detail
-      // edits must not restart the 30s auto-close clock.
-      const terminalAt = prev.terminalAt ?? (isTerminal(steps) ? Date.now() : null);
-      return { ...prev, steps, terminalAt };
-    });
+    setSessions(prev => prev.map(s => {
+      if (s.id !== id) return s;
+      // Latch terminalAt on first terminal observation — subsequent
+      // updates (tx-hash fills, block-number reveals) must not reset
+      // the auto-close clock.
+      const terminalAt = s.terminalAt ?? (isTerminal(steps) ? Date.now() : null);
+      return { ...s, steps, terminalAt };
+    }));
   }, []);
 
-  const closeProgress = useCallback(() => {
-    liveIdRef.current = null;
-    setSession(null);
+  const closeProgress = useCallback((id: string) => {
+    setSessions(prev => prev.filter(s => s.id !== id));
+    setExpandedId(prev => (prev === id ? null : prev));
   }, []);
 
-  const setProgressExpanded = useCallback((next: boolean) => {
-    setExpanded(next);
+  const expandProgress = useCallback((id: string | null) => {
+    setExpandedId(id);
   }, []);
 
-  // Auto-close 30s after the session went terminal. Checked every 2s —
-  // precision doesn't matter here.
+  // Auto-close terminal sessions after AUTO_CLOSE_MS. Polled every 2s —
+  // precision doesn't matter here. Applies in both expanded and chip
+  // modes; the toast already provides a lasting record of the outcome.
   useEffect(() => {
-    if (!session?.terminalAt) return;
+    if (sessions.length === 0) return;
     const interval = setInterval(() => {
-      if (session.terminalAt && Date.now() - session.terminalAt > AUTO_CLOSE_MS) {
-        closeProgress();
+      const now = Date.now();
+      const expiredIds = new Set<string>();
+      for (const s of sessions) {
+        if (s.terminalAt !== null && now - s.terminalAt > AUTO_CLOSE_MS) {
+          expiredIds.add(s.id);
+        }
       }
+      if (expiredIds.size === 0) return;
+      setSessions(prev => prev.filter(s => !expiredIds.has(s.id)));
+      setExpandedId(prev => (prev !== null && expiredIds.has(prev) ? null : prev));
     }, 2000);
     return () => clearInterval(interval);
-  }, [session?.terminalAt, closeProgress]);
+  }, [sessions]);
 
-  // Body scroll lock while the modal is expanded (provider-owned so
-  // it can't race with anything else).
+  // Body scroll lock — provider-owned so the multiple ProgressFlow
+  // instances can't fight over document.body.style.overflow. Locked
+  // iff something is expanded; chips don't block page interaction.
   useEffect(() => {
-    if (!session || !expanded) return;
+    if (expandedId === null) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prevOverflow;
     };
-  }, [session, expanded]);
+  }, [expandedId]);
 
-  const active = session !== null && session.terminalAt === null;
+  // Chip stack indices — among the non-expanded sessions, assign 0 to
+  // the most recent (sits at the corner), 1 above it, etc. The
+  // expanded session is centered and doesn't participate.
+  const chips = sessions.filter(s => s.id !== expandedId);
+  const chipIndexFor = (id: string): number => {
+    const ix = chips.findIndex(s => s.id === id);
+    return ix < 0 ? 0 : chips.length - 1 - ix;
+  };
+
+  const active = sessions.some(s => s.terminalAt === null);
 
   return (
-    <ProgressContext.Provider value={{ active, startProgress, updateProgress, closeProgress, setProgressExpanded }}>
+    <ProgressContext.Provider
+      value={{ active, startProgress, updateProgress, closeProgress, expandProgress }}
+    >
       {children}
-      {session && (
-        <ProgressFlow
-          title={session.title}
-          steps={session.steps}
-          expanded={expanded}
-          onExpand={() => setExpanded(true)}
-          onMinimize={() => setExpanded(false)}
-          onClose={closeProgress}
-        />
-      )}
+      {sessions.map(s => {
+        const expanded = s.id === expandedId;
+        return (
+          <ProgressFlow
+            key={s.id}
+            title={s.title}
+            steps={s.steps}
+            expanded={expanded}
+            chipIndex={expanded ? 0 : chipIndexFor(s.id)}
+            onExpand={() => setExpandedId(s.id)}
+            onMinimize={() => setExpandedId(prev => (prev === s.id ? null : prev))}
+            onClose={() => closeProgress(s.id)}
+          />
+        );
+      })}
     </ProgressContext.Provider>
   );
 };

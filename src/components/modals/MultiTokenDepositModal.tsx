@@ -71,12 +71,11 @@ export function MultiTokenDepositModal({
   // Progress sessions are owned by ProgressContext at App level. We
   // start a new session per submit (unique id), then push step updates
   // through updateProgress. The session outlives this modal closing
-  // and stacks alongside any other in-flight sessions.
-  // No re-entry lock — second submit replaces the active session; the
-  // first lifecycle keeps running in the background (id-guarded
-  // updateProgress calls become no-ops). Wallet's own queue serializes
-  // signatures. Matches Uniswap/1inch/Aave UX.
-  const { startProgress, updateProgress, setProgressExpanded } = useProgress();
+  // and stacks alongside any other in-flight sessions as a corner chip
+  // — the user can see a Sepolia multi-deposit and a Base transfer
+  // running at the same time. Wallet's own queue serializes signatures;
+  // we do not block re-entry. Matches Uniswap/1inch/Aave UX.
+  const { startProgress, updateProgress, expandProgress } = useProgress();
 
   const MAX_TOKENS = 25; // CrossChainBank8 limit
   
@@ -257,14 +256,16 @@ export function MultiTokenDepositModal({
     // Start as corner chip so it doesn't overlap the Radix
     // DialogContent close animation that onCommitted triggers
     // (duration-200 on this dialog + its wrapping DepositModal);
-    // re-expand once both layers have unmounted.
-    setProgressExpanded(false);
+    // re-expand THIS session once both layers have unmounted.
+    // expandProgress(id) — not boolean — keeps focus on the right
+    // chip if a sibling submit arrives during the 250ms gap.
+    expandProgress(null);
 
     // Notify the parent (DepositModal) that we've committed — it
     // closes both this dialog and itself, freeing the page so the
     // user can keep working while the tx pends.
     onCommitted?.();
-    setTimeout(() => setProgressExpanded(true), 250);
+    setTimeout(() => expandProgress(sessionId), 250);
 
     // Run the operation in the background; useVault.depositMultiple…
     // pushes step updates into this session via its onProgress
