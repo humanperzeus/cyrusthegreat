@@ -889,14 +889,6 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
               
             }, [activeChain]); // This will run on EVERY chain switch
   
-  // State for tracking pending approvals that should trigger auto-deposit
-  const [pendingApprovalForDeposit, setPendingApprovalForDeposit] = useState<{
-    tokenAddress: string;
-    amount: bigint;
-    tokenSymbol: string;
-    approvalHash: string;
-  } | null>(null);
-  
   // Token detection state
   const [walletTokens, setWalletTokens] = useState<Array<{address: string, symbol: string, balance: string, decimals: number}>>([]);
   const [vaultTokens, setVaultTokens] = useState<Array<{address: string, symbol: string, balance: string, decimals: number}>>([]);
@@ -2162,14 +2154,13 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     // Remove the finally block - let transaction confirmation handle loading state
   };
 
-  // NEW: Smart token deposit with automatic allowance checking and auto-deposit
+  // Smart token deposit with automatic allowance checking.
   //
-  // onProgress (2026-06-10): forwarded to executeTokenDeposit when the
-  // token is already approved (the common case — max-approve is sticky).
-  // For the FIRST deposit of a token that needs a fresh approve, the
-  // legacy executeTokenApprovalAndDeposit setTimeout state machine
-  // still owns the flow and shows only its toast-based feedback. That
-  // path is a separate refactor — flagged in the commit message.
+  // onProgress is forwarded into BOTH branches. The already-approved
+  // path uses executeTokenDeposit's 3-step lifecycle (Sign → Confirm →
+  // Finalize). The needs-approval path uses executeTokenApprovalAndDeposit's
+  // 4-step lifecycle (Approve → Sign → Confirm → Finalize) — same App-level
+  // ProgressFlow popup, no toast-only fallback.
   const depositTokenSmartWagmi = async (
     tokenAddress: string,
     amount: string,
@@ -2241,8 +2232,9 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         await executeTokenDeposit(tokenAddress, amountWei, tokenSymbol, onProgress);
       } else {
         debugLog(`❌ Insufficient allowance (${currentAllowance} < ${amountWei}), approval needed`);
-        // Need approval first, then auto-deposit after confirmation
-        await executeTokenApprovalAndDeposit(tokenAddress, amountWei, tokenSymbol);
+        // Need approval first — 4-step lifecycle handles approve + deposit
+        // in a single linear flow, driving the same ProgressFlow popup.
+        await executeTokenApprovalAndDeposit(tokenAddress, amountWei, tokenSymbol, onProgress);
       }
 
     } catch (error) {
@@ -3051,71 +3043,135 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     }
   };
 
-  // Helper: Execute approval then auto-deposit after confirmation
-  const executeTokenApprovalAndDeposit = async (tokenAddress: string, amount: bigint, tokenSymbol: string) => {
+  // 4-step lifecycle: Approve TOKEN → Sign in wallet → Confirm on-chain → Finalize & refresh.
+  //
+  // Mirrors tools/contract-debug/index.html test b8-8 exactly. Uses
+  // @wagmi/core's writeContract action (independent per call — no shared
+  // mutation, unlike useWriteContract().writeContract), so each call's
+  // approveHash/depositHash stay local and concurrent flows can't race.
+  //
+  // Replaces the legacy bridge that used setPendingApprovalForDeposit +
+  // the shared isConfirmed useEffect — that pattern was fragile because
+  // the bridge never actually stored the approval hash, so the useEffect
+  // simply assumed "next confirmed tx == this approval", which broke
+  // under any concurrent activity.
+  //
+  // buildTxLifecycle is hardcoded 3-step and used by 7 other hooks; we
+  // build the 4-step shape inline here rather than reshape the helper.
+  const executeTokenApprovalAndDeposit = async (
+    tokenAddress: string,
+    amount: bigint,
+    tokenSymbol: string,
+    onProgress?: (steps: _PS[]) => void,
+  ) => {
     try {
-      debugLog(`🔐 Executing approval + auto-deposit for ${tokenSymbol}...`);
-      
-      // Step 1: Send unlimited approval per the unified policy (2026-06-07).
-      // We no longer try to approve "exact amount + buffer" — the decimal-comma
-      // typo risk + the need to re-approve every deposit isn't worth the
-      // theoretical safety improvement. User approves once per token; future
-      // deposits skip the approval step entirely (currentAllowance >= amountWei).
-      const approvalAmount = 2n ** 256n - 1n; // MAX_UINT256 — one-time, then never again
-      debugLog(`🔐 Approval amount (max):`, approvalAmount.toString());
-      
-      await writeVaultContract({
-        address: tokenAddress as `0x${string}`,
-        abi: [
-          {
-            "constant": false,
-            "inputs": [
-              {"name": "spender", "type": "address"},
-              {"name": "amount", "type": "uint256"}
-            ],
-            "name": "approve",
-            "outputs": [{"name": "", "type": "bool"}],
-            "payable": false,
-            "stateMutability": "nonpayable",
-            "type": "function"
-          }
-        ],
-        functionName: 'approve',
-        args: [
-          getActiveContractAddress() as `0x${string}`,
-          approvalAmount // Use buffered amount for approval
-        ],
-        chain: getTargetChain(),
-        account: address,
-      });
+      debugLog(`🔐 Executing approve + deposit (4-step) for ${tokenSymbol}...`);
 
-      debugLog(`✅ Approval transaction sent`);
-      
-      toast({
-        title: "Token Approval Sent",
-        description: `Approving ${formatEther(amount)} ${tokenSymbol} for vault...`,
-      });
+      // Fresh fee for the deposit half (same pattern as executeTokenDeposit).
+      debugLog('💰 Getting fresh fee before token approve+deposit...');
+      const freshFee = await getCurrentFee();
+      if (!freshFee) {
+        throw new Error('Failed to get fresh fee');
+      }
+      setCurrentFee(freshFee);
+      const feeWei = freshFee;
+      debugLog(`✅ Fresh fee obtained: ${formatEther(feeWei)} ETH`);
 
-      // Step 2: Wait for approval confirmation
-      debugLog(`⏳ Waiting for approval confirmation...`);
-      
-      // Use the transaction confirmation system to auto-trigger deposit
-      // We'll set a flag to indicate this is an approval transaction
-      // The hash will be available in the hook state after the transaction is sent
-      setPendingApprovalForDeposit({
-        tokenAddress,
-        amount,
-        tokenSymbol,
-        approvalHash: '' // Will be set when transaction is sent
-      });
+      // MAX_UINT256 — unified policy (2026-06-07): user approves once per
+      // token; future deposits skip approval entirely (currentAllowance >= amountWei).
+      const approvalAmount = 2n ** 256n - 1n;
 
-      // DON'T set isLoading(false) here - let the approval confirmation trigger deposit
-      
+      const steps: _PS[] = [
+        { label: `Approve ${tokenSymbol}`, status: 'pending' },
+        { label: 'Sign in wallet',        status: 'pending' },
+        { label: 'Confirm on-chain',      status: 'pending' },
+        { label: 'Finalize & refresh',    status: 'pending' },
+      ];
+      let phase = 0;
+      const emit = () => onProgress?.(steps.map(s => ({ ...s })));
+      const setStep = (i: number, status: _PSStatus, detail?: string) => {
+        steps[i] = { ...steps[i], status, ...(detail !== undefined ? { detail } : {}) };
+        emit();
+      };
+
+      try {
+        // STEP 0 — Approve. writeContract throws if user rejects; receipt
+        // is awaited so a reverted approval surfaces here before deposit.
+        setStep(0, 'running', `Open your wallet and sign approve(${tokenSymbol}, MAX)…`);
+        const approveHash = await writeContract(config, {
+          address: tokenAddress as `0x${string}`,
+          abi: [
+            {
+              "constant": false,
+              "inputs": [
+                {"name": "spender", "type": "address"},
+                {"name": "amount", "type": "uint256"}
+              ],
+              "name": "approve",
+              "outputs": [{"name": "", "type": "bool"}],
+              "payable": false,
+              "stateMutability": "nonpayable",
+              "type": "function"
+            }
+          ],
+          functionName: 'approve',
+          args: [getActiveContractAddress() as `0x${string}`, approvalAmount],
+        });
+        setStep(0, 'running', `Approve tx submitted: ${String(approveHash).slice(0, 10)}… — waiting for confirmation…`);
+        const approveReceipt = await waitForTransactionReceipt(config, { hash: approveHash });
+        if (approveReceipt.status !== 'success') {
+          throw new Error(`approve reverted on-chain (block ${approveReceipt.blockNumber})`);
+        }
+        setStep(0, 'done', `🔓 Approved ${tokenSymbol} (MAX) in block ${approveReceipt.blockNumber}`);
+
+        // STEP 1 — Sign deposit.
+        phase = 1;
+        setStep(1, 'running', `Open your wallet and sign depositToken(${tokenSymbol})…`);
+        const depositHash = await writeContract(config, {
+          address: getActiveContractAddress() as `0x${string}`,
+          abi: VAULT_ABI,
+          functionName: 'depositToken',
+          args: [tokenAddress, amount],
+          value: feeWei,
+        });
+        setStep(1, 'done', `Signed & broadcast — tx ${String(depositHash).slice(0, 10)}…`);
+
+        // STEP 2 — Confirm on-chain.
+        phase = 2;
+        setStep(2, 'running', 'Waiting for on-chain confirmation…');
+        const depositReceipt = await waitForTransactionReceipt(config, { hash: depositHash });
+        if (depositReceipt.status !== 'success') {
+          throw new Error(`depositToken reverted on-chain (block ${depositReceipt.blockNumber})`);
+        }
+        setStep(2, 'done', `Confirmed in block ${depositReceipt.blockNumber}`);
+        // Release the app-wide isLoading flag the instant the chain says
+        // success — same pattern as executeTokenDeposit.
+        setIsLoading(false);
+
+        if (SHOW_LIFECYCLE_CONFIRMATION_TOASTS) {
+          toast({
+            title: "Token Deposit Confirmed",
+            description: `Deposited ${formatEther(amount)} ${tokenSymbol} to vault`,
+          });
+        }
+
+        // STEP 3 — Finalize & refresh.
+        phase = 3;
+        const finality = getChainFinalityDelay();
+        setStep(3, 'running', `Waiting ${finality / 1000}s for ${activeChain} chain finality, then updating balances…`);
+        await new Promise(resolve => setTimeout(resolve, finality));
+        refreshAfterTx();
+        setStep(3, 'done', 'Balances updated ✓');
+      } catch (innerError: any) {
+        setStep(phase, 'failed', innerError?.shortMessage || innerError?.message || 'Approve+deposit failed');
+        throw innerError;
+      }
+
     } catch (error) {
-      debugError('❌ Token approval error:', error);
+      debugError('❌ Token approve+deposit error:', error);
       toast({
         title: "Error",
-        description: `Failed to approve ${tokenSymbol}`,
+        description: `Failed to deposit ${tokenSymbol}`,
         variant: "destructive",
       });
       setIsLoading(false);
@@ -3935,29 +3991,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         });
       }
       setIsLoading(false);
-      
-      // Check if this was an approval transaction that should trigger auto-deposit
-      if (pendingApprovalForDeposit) {
-        if (process.env.NODE_ENV === 'development') {
-          debugLog('🔐 Approval confirmed, automatically proceeding to deposit...');
-        }
-        
-        // Auto-execute the deposit
-        executeTokenDeposit(
-          pendingApprovalForDeposit.tokenAddress,
-          pendingApprovalForDeposit.amount,
-          pendingApprovalForDeposit.tokenSymbol
-        );
-        
-        // Clear the pending approval
-        setPendingApprovalForDeposit(null);
-        
-        toast({
-          title: "Approval Confirmed!",
-          description: `Automatically proceeding to deposit ${pendingApprovalForDeposit.tokenSymbol}...`,
-        });
-      }
-      
+
       // CRITICAL FIX: Add chain-specific delay for blockchain finality
       // All chains benefit from delays to ensure proper state propagation
       const finalityDelay = getChainFinalityDelay();
@@ -4026,7 +4060,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         executeRefresh();
       }
     }
-  }, [isConfirmed, hasRefreshedAfterConfirmation, toast, refetchVaultBalance, refetchWalletBalance, refetchFee, fetchWalletTokens, fetchVaultTokensSigned, pendingApprovalForDeposit, hash, activeChain, getChainFinalityDelay]);
+  }, [isConfirmed, hasRefreshedAfterConfirmation, toast, refetchVaultBalance, refetchWalletBalance, refetchFee, fetchWalletTokens, fetchVaultTokensSigned, hash, activeChain, getChainFinalityDelay]);
 
   // FIX: Reset loading state when transaction is cancelled or fails
   React.useEffect(() => {
