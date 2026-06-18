@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lock, ExternalLink, Copy, Check, AlertTriangle, ShieldCheck, User, Send, ShieldHalf } from "lucide-react";
+import { Lock, ExternalLink, Copy, Check, AlertTriangle, ShieldCheck, Send, ShieldHalf } from "lucide-react";
 import {
   usePool,
   usePoolBucketSizes,
@@ -82,20 +82,29 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const [withdrawTo, setWithdrawTo] = useState<string>("");
   const [result, setResult] = useState<{ txHash: string; claimURL: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  // Mode tab — UI framing only. The contract sees one thing (whatever
-  // withdrawTo holds at submit). 'self-pay' = withdrawTo is your own
-  // wallet (anonymize your own funds); 'teleport' = arbitrary recipient
-  // (you commit, they claim); 'escrow' = same as teleport but framed
-  // for OTC/freelance/intermediary flows. Clicking a tab updates the
-  // copy + button label but doesn't lock the address input — users
-  // can still paste anything if their flow doesn't fit a tab.
-  const [mode, setMode] = useState<'self-pay' | 'teleport' | 'escrow'>('self-pay');
+  // Mode tab — UI framing for the two HONEST use cases this contract
+  // supports. The contract sees one thing (whatever withdrawTo holds
+  // at submit); the mode just shapes the copy + button label.
+  //
+  // 2026-06-18: 'self-pay' tab removed. It implied that committing
+  // from wallet A and revealing to the same wallet A provided
+  // anonymity — it does not. The commitment_hash is computable from
+  // the public withdrawTo address, so chain analysis trivially links
+  // A→pool and pool→A. To actually anonymize your own funds you have
+  // to withdraw to a SECOND wallet you control (no on-chain link to
+  // the first); that case is covered by the Teleport tab — paste your
+  // other wallet's address. A red warning shows below if the user
+  // pastes their connected wallet's address regardless.
+  const [mode, setMode] = useState<'teleport' | 'escrow'>('teleport');
 
-  // Default withdrawTo to user's connected address. Only set on initial mount
-  // so the user can edit it after.
-  useMemo(() => {
-    if (!withdrawTo && account) setWithdrawTo(account);
-  }, [account, withdrawTo]);
+  // 2026-06-18: removed the auto-fill that pre-populated withdrawTo
+  // with the connected wallet on mount. It was a convenience that
+  // pushed users into the no-anonymity case (commit → reveal to the
+  // same address = chain analysis trivially links the two via the
+  // public commitment hash). The "Use my address" button is still
+  // available for users who want it for non-anonymity reasons (e.g.
+  // parking funds for a delay), and the same-address red warning
+  // below the input flags the bad-anonymity case explicitly.
 
   // Reset bucketIdx when token changes (different schedules may have fewer buckets)
   useMemo(() => { setBucketIdx(0); }, [token]);
@@ -238,30 +247,18 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         )}
       </div>
 
-      {/* Mode tabs — UX framing for three real use cases the contract
-          already supports. Clicking Self-pay auto-fills your wallet
-          into withdrawTo (the most common intent); Teleport and Escrow
-          leave the address alone so you can paste the recipient or
-          agent. The contract call is identical across all three. */}
+      {/* Mode tabs — UX framing for the two HONEST use cases this
+          contract supports. (Self-pay-to-same-address was removed
+          2026-06-18 — it provided no anonymity, see state comment.) */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground uppercase tracking-wide">
           Flow
         </Label>
         <Tabs
           value={mode}
-          onValueChange={(v) => {
-            const next = v as 'self-pay' | 'teleport' | 'escrow';
-            setMode(next);
-            if (next === 'self-pay' && account) setWithdrawTo(account);
-          }}
+          onValueChange={(v) => setMode(v as 'teleport' | 'escrow')}
         >
-          <TabsList className="grid grid-cols-3 w-full bg-vault-primary/5 border border-vault-primary/20 h-auto p-1">
-            <TabsTrigger
-              value="self-pay"
-              className="gap-1.5 text-xs py-1.5 data-[state=active]:bg-vault-primary/20 data-[state=active]:text-vault-primary"
-            >
-              <User className="w-3.5 h-3.5" /> Self-pay
-            </TabsTrigger>
+          <TabsList className="grid grid-cols-2 w-full bg-vault-primary/5 border border-vault-primary/20 h-auto p-1">
             <TabsTrigger
               value="teleport"
               className="gap-1.5 text-xs py-1.5 data-[state=active]:bg-vault-primary/20 data-[state=active]:text-vault-primary"
@@ -281,9 +278,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
       {/* withdrawTo — label + helper text adjust to the selected mode */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-          {mode === 'self-pay' ? 'Your withdraw address'
-            : mode === 'escrow' ? 'Escrow agent address'
-            : 'Recipient address'} (withdrawTo)
+          {mode === 'escrow' ? 'Escrow agent address' : 'Recipient address'} (withdrawTo)
         </Label>
         <div className="flex gap-2">
           <Input
@@ -304,13 +299,28 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
             </Button>
           )}
         </div>
-        {mode === 'self-pay' ? (
-          <p className="text-xs text-muted-foreground">
-            Self-pay: you send funds in, you withdraw them. Same wallet on both ends — but the
-            commit→reveal path goes through the pool's epoch+bucket cohort, so a casual chain
-            analyst can't trivially link them. Address baked into the commitment hash (MEV-safe).
-          </p>
-        ) : mode === 'escrow' ? (
+        {/* Same-address warning: chain analysis can compute the
+            commitment_hash from the public withdrawTo and trivially
+            link your A→pool deposit with your pool→A reveal. Surface
+            this loud so users don't pay the fee thinking they got
+            anonymity. Doesn't block submission — there are legitimate
+            non-anonymity reasons to send to yourself (parking funds,
+            delay, paying the protocol fee as a donation). */}
+        {account && withdrawTo && account.toLowerCase() === withdrawTo.toLowerCase() && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs">
+            <p className="text-red-300 font-medium">
+              This is your sending address — provides no anonymity.
+            </p>
+            <p className="text-red-200/80 mt-1 leading-relaxed">
+              The commitment hash is computable from the public withdrawTo, so a chain analyst
+              can trivially link your <span className="font-mono">A → pool</span> deposit with
+              the <span className="font-mono">pool → A</span> reveal. To actually anonymize
+              your own funds, paste a SECOND wallet you control (one with no on-chain link to
+              this one). Same-address commits still go through and cost the protocol fee.
+            </p>
+          </div>
+        )}
+        {mode === 'escrow' ? (
           <p className="text-xs text-muted-foreground">
             Funds land at the <span className="text-vault-primary">agent's</span> address. They
             forward to the final recipient out-of-band once the off-chain condition is verified
@@ -322,8 +332,9 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Funds will be claimable AT this exact address. The address is baked into the commitment
-            hash (MEV-safe — an attacker who sees the secret cannot redirect funds).
+            Recipient can be a SECOND wallet you control (to anonymize your own funds) or
+            someone else's address (to teleport value to them). Address is baked into the
+            commitment hash (MEV-safe — an attacker who sees the secret cannot redirect funds).
           </p>
         )}
       </div>
@@ -393,14 +404,12 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
           if (!isConnected) return "Connect wallet first";
           if (!withdrawToValid) {
             return mode === 'escrow' ? "Enter a valid agent address"
-              : mode === 'self-pay' ? "Enter your withdraw address"
               : "Enter a valid recipient address";
           }
           const amountLabel = bucketSize != null
             ? `${formatUnits(bucketSize, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`
             : '';
-          if (mode === 'self-pay') return `Anonymize ${amountLabel}`;
-          if (mode === 'escrow')   return `Commit ${amountLabel} to escrow`;
+          if (mode === 'escrow') return `Commit ${amountLabel} to escrow`;
           return `Commit & teleport ${amountLabel}`;
         })()}
       </Button>
