@@ -76,11 +76,15 @@ export const NATIVE_TOKEN_ADDRESS: Address = '0x00000000000000000000000000000000
  *  known tokens — for unknown tokens, use useTokenDecimals(token) to read on-chain. */
 export interface PoolTokenEntry { address: Address; symbol: string; decimals: number; }
 export const POOL_TOKENS_BY_CHAIN: Record<number, PoolTokenEntry[]> = {
-  // Sepolia (current deploy has ETH+USD1+WLFI configured; WLFI hidden in UI per
-  // 2026-05-18 stablecoin-only UX decision — can re-enable by adding it back here).
+  // Sepolia — ETH + USD1 + WLFI all live in the pool deploy. WLFI was
+  // hidden from the picker 2026-05-18 under a "stablecoin-only UX"
+  // decision; re-enabled 2026-06-18 per user request (WLFI is World
+  // Liberty Financial's governance token and is a legitimate teleport
+  // target alongside USD1).
   11155111: [
     { address: NATIVE_TOKEN_ADDRESS, symbol: 'ETH',  decimals: 18 },
     { address: '0xD649712915595bcE7A4BA3a821C64850853FcD02', symbol: 'USD1', decimals: 18 },
+    { address: '0x4Ed43Ca34731696caa2B813070AB65F18510eaA1', symbol: 'WLFI', decimals: 18 },
   ],
   97: [
     { address: NATIVE_TOKEN_ADDRESS, symbol: 'tBNB', decimals: 18 },
@@ -656,6 +660,23 @@ export function useTokenAllowance(token: Address | undefined, owner: Address | u
     ? (2n ** 256n - 1n)
     : ((data as bigint | undefined) ?? 0n);
   return { allowance, isLoading, refetch: () => { refetch(); } };
+}
+
+/** Read the user's ERC-20 token balance. Returns 0n for the native sentinel
+ *  (caller should use wagmi's useBalance for native — different RPC method).
+ *  Live-refreshes every 8s so the UI catches external transfers without a
+ *  manual reload. Pure read; safe to call regardless of ENABLE_POOL. */
+export function usePoolTokenBalance(token: Address | undefined, owner: Address | undefined): { balance: bigint; isLoading: boolean; refetch: () => void } {
+  const isNative = token === NATIVE_TOKEN_ADDRESS;
+  const { data, isLoading, refetch } = useReadContract({
+    address: isNative ? undefined : token,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: owner ? [owner] : undefined,
+    query: { enabled: !!owner && !!token && !isNative, refetchInterval: 8_000 },
+  });
+  const balance = isNative ? 0n : ((data as bigint | undefined) ?? 0n);
+  return { balance, isLoading, refetch: () => { refetch(); } };
 }
 
 /** Read ERC-20 decimals() on-chain. Returns 18 for native sentinel without an RPC call. */

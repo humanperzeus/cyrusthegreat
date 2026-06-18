@@ -15,20 +15,21 @@
  */
 
 import { useState, useMemo } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useBalance } from "wagmi";
 import { formatUnits, type Address } from "viem";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lock, ExternalLink, Copy, Check, AlertTriangle, ShieldCheck, Send, ShieldHalf } from "lucide-react";
+import { Lock, ExternalLink, Copy, Check, AlertTriangle, ShieldCheck, Send, ShieldHalf, Coins } from "lucide-react";
 import {
   usePool,
   usePoolBucketSizes,
   usePoolCurrentFee,
   usePoolCurrentEpoch,
   useTokenAllowance,
+  usePoolTokenBalance,
   POOL_TOKENS_BY_CHAIN,
   NATIVE_TOKEN_ADDRESS,
   type PoolTokenEntry,
@@ -85,6 +86,17 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const { feeWei, isLoading: loadingFee } = usePoolCurrentFee();
   const { epoch: currentEpoch } = usePoolCurrentEpoch();
   const { allowance, refetch: refetchAllowance } = useTokenAllowance(token, account);
+  // Pre-flight balance read. For ERC-20s: balanceOf on-chain (8s
+  // refetch). For native: wagmi's useBalance. The button disables
+  // when balance < bucketSize so the user doesn't sign an approve
+  // and then watch the commit revert at transferFrom with the
+  // (correct but unhelpful) "transfer amount exceeds balance"
+  // message — same UX pattern as Bank8's deposit flow.
+  const { balance: tokenBalance } = usePoolTokenBalance(token, account);
+  const { data: nativeBalanceData } = useBalance({ address: account, query: { enabled: !!account && isNative } });
+  const effectiveBalance: bigint = isNative
+    ? (nativeBalanceData?.value ?? 0n)
+    : tokenBalance;
 
   const [bucketIdx, setBucketIdx] = useState<number>(0);
   const [withdrawTo, setWithdrawTo] = useState<string>("");
@@ -137,6 +149,17 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   // step count in handleCommit's seed. The button's enabled state no
   // longer depends on it; the commit hook handles the approval inline.
   const needsApproval = !isNative && bucketSize != null && allowance < bucketSize;
+  // Pre-flight: do we actually have the funds to commit? For native,
+  // bucketSize + feeWei must fit in wallet balance (commit puts both
+  // into msg.value). For ERC-20, just bucketSize in token balance —
+  // fee is paid in native separately and gas + native-fee shortfall
+  // surfaces through the wallet's own simulation toast.
+  const requiredBalance: bigint | undefined = bucketSize != null && feeWei != null
+    ? (isNative ? bucketSize + feeWei : bucketSize)
+    : undefined;
+  const hasEnoughBalance: boolean = requiredBalance == null
+    ? true
+    : effectiveBalance >= requiredBalance;
 
   const canCommit =
     isConnected &&
@@ -145,7 +168,8 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
     feeWei != null &&
     withdrawToValid &&
     !isCommitting &&
-    !isApproving;
+    !isApproving &&
+    hasEnoughBalance;
 
   const handleCommit = async () => {
     if (!canCommit || bucketSize == null || feeWei == null) return;
@@ -418,6 +442,31 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         </div>
       )}
 
+      {/* Balance pre-flight: catches the most common cause of a
+          commitToPool revert AFTER a successful approve — wallet just
+          doesn't hold enough of the token. Approve doesn't check
+          balance; transferFrom does. Without this row, the lifecycle
+          would burn an approve tx (fee on-chain) and then fail at
+          step 3 with the unhelpful "transfer amount exceeds balance"
+          from the ERC-20 standard. */}
+      {bucketSize != null && account && (
+        <div className={`rounded-md border px-3 py-2 text-xs font-mono flex items-center gap-2 ${hasEnoughBalance ? 'border-vault-primary/15 bg-vault-primary/5' : 'border-red-500/40 bg-red-500/10'}`}>
+          <Coins className={`w-3.5 h-3.5 ${hasEnoughBalance ? 'text-emerald-400' : 'text-red-400'}`} />
+          <span className="text-muted-foreground">Balance:</span>
+          <span className={hasEnoughBalance ? 'text-emerald-200' : 'text-red-300'}>
+            {formatUnits(effectiveBalance, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
+          </span>
+          {!hasEnoughBalance && requiredBalance != null && (
+            <span className="text-red-300/90 ml-auto">
+              need {formatUnits(requiredBalance, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
+            </span>
+          )}
+          {hasEnoughBalance && (
+            <span className="text-emerald-200/70 ml-auto">enough to commit</span>
+          )}
+        </div>
+      )}
+
       {/* Action button — single Commit button now. The hook handles the
           approve step internally when allowance is insufficient. Folds
           two clicks (Approve, then Commit) into one, with a 4-step
@@ -436,6 +485,9 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
           if (!withdrawToValid) {
             return mode === 'escrow' ? "Enter a valid agent address"
               : "Enter a valid recipient address";
+          }
+          if (!hasEnoughBalance && requiredBalance != null) {
+            return `Need ${formatUnits(requiredBalance, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`;
           }
           const amountLabel = bucketSize != null
             ? `${formatUnits(bucketSize, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`
