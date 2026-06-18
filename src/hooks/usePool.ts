@@ -76,15 +76,17 @@ export const NATIVE_TOKEN_ADDRESS: Address = '0x00000000000000000000000000000000
  *  known tokens — for unknown tokens, use useTokenDecimals(token) to read on-chain. */
 export interface PoolTokenEntry { address: Address; symbol: string; decimals: number; }
 export const POOL_TOKENS_BY_CHAIN: Record<number, PoolTokenEntry[]> = {
-  // Sepolia — ETH + USD1 + WLFI all live in the pool deploy. WLFI was
-  // hidden from the picker 2026-05-18 under a "stablecoin-only UX"
-  // decision; re-enabled 2026-06-18 per user request (WLFI is World
-  // Liberty Financial's governance token and is a legitimate teleport
-  // target alongside USD1).
+  // Sepolia — ETH + USD1 in the picker. WLFI is deployed in the pool
+  // contract (env: VITE_WLFI_ETH_TESTNET_CONTRACT) but hidden from
+  // the UI under the "stablecoin-only UX" decision (originally
+  // 2026-05-18; briefly re-enabled 2026-06-18; hidden again same day
+  // per user: "Just stablecoins — USDT USDC USD1 ETH").
+  // USDT/USDC will appear here once they're added to the testnet
+  // deploy (currently testnet has ETH + USD1 + WLFI only; mainnet
+  // entries arrive with MAINNET_DEPLOY_CHECKLIST.md).
   11155111: [
     { address: NATIVE_TOKEN_ADDRESS, symbol: 'ETH',  decimals: 18 },
     { address: '0xD649712915595bcE7A4BA3a821C64850853FcD02', symbol: 'USD1', decimals: 18 },
-    { address: '0x4Ed43Ca34731696caa2B813070AB65F18510eaA1', symbol: 'WLFI', decimals: 18 },
   ],
   97: [
     { address: NATIVE_TOKEN_ADDRESS, symbol: 'tBNB', decimals: 18 },
