@@ -230,17 +230,85 @@ export const usePool = (): UsePoolHook => {
     _requireEnabled();
     setIsCommitting(true);
     setLastError(null);
-    // 3-step lifecycle mirrors the Bank8 flow shape so the App-level
-    // ProgressFlow renders identically (Sign → Confirm → Saved).
-    // The long "wait for epoch boundary" step is NOT in here — it
-    // lives in the Notebook entry after this session terminates.
-    // Two-act pattern: this is the commit ACT; the reveal ACT runs
-    // later as its own ProgressFlow session (see reveal() below).
-    const lc = buildPoolLifecycle(
-      ['Sign in wallet', 'Confirm on-chain', 'Saved to notebook'],
-      onProgress,
-    );
+
+    const isNative = token === NATIVE_TOKEN_ADDRESS;
+    const value = isNative ? bucketSize + feeWei : feeWei;
+
+    // Token registry lookup hoisted up-front: we need the symbol +
+    // decimals BOTH to label the approve step and to render the
+    // amount in the lifecycle details (and later to save into the
+    // notebook entry — kept here too so we don't read twice).
+    const tokenEntry = (POOL_TOKENS_BY_CHAIN[chainId as number] || [])
+      .find((t) => t.address.toLowerCase() === token.toLowerCase());
+    const tokenDecimals = tokenEntry?.decimals ?? 18;
+    const tokenSymbol = tokenEntry?.symbol ?? (isNative ? "ETH" : "TOKEN");
+
+    // Approval gate (4-step lifecycle): read the FRESH on-chain
+    // allowance for ERC-20 tokens. We don't trust the React state
+    // useTokenAllowance carries because the user may have revoked /
+    // re-approved externally (Revoke.cash, another dapp) since the
+    // page rendered. If the on-chain read fails for any reason, fall
+    // through to the commit attempt and let the contract decide.
+    let needsApproval = false;
+    if (!isNative && publicClient && account) {
+      try {
+        const currentAllowance = await publicClient.readContract({
+          address: token,
+          abi: erc20Abi,
+          functionName: 'allowance',
+          args: [account, contractAddress as Address],
+        }) as bigint;
+        needsApproval = currentAllowance < bucketSize;
+      } catch {
+        // Allowance read failed — best to attempt the commit anyway.
+        // On-chain transferFrom will revert with a clear message and
+        // the lifecycle's step-2 catch block surfaces it.
+      }
+    }
+
+    // Lifecycle: 4 steps when approval needed, 3 when not.
+    //  - approve step (index 0, when present): wallet sign of the
+    //    ERC-20 approve(spender=pool, amount=bucketSize) tx, plus the
+    //    receipt wait so the subsequent commitToPool sees the new
+    //    allowance.
+    //  - The remaining 3 steps mirror the Bank8 commit/deposit shape:
+    //    Sign → Confirm → Saved. Two-act pattern: this is the commit
+    //    ACT; the reveal ACT runs as its own session (see reveal()).
+    const approveOffset = needsApproval ? 1 : 0;
+    const labels = needsApproval
+      ? [`Approve ${tokenSymbol}`, 'Sign commit in wallet', 'Confirm commit on-chain', 'Saved to notebook']
+      : ['Sign commit in wallet', 'Confirm commit on-chain', 'Saved to notebook'];
+    const lc = buildPoolLifecycle(labels, onProgress);
     try {
+      // Step 0: Approve (only when needed)
+      if (needsApproval) {
+        setIsApproving(true);
+        try {
+          lc.set(0, 'running', `Open your wallet and sign approve(${formatUnits(bucketSize, tokenDecimals)} ${tokenSymbol})…`);
+          const approveTxHash = (await writeContractAsync({
+            address: token,
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [contractAddress as Address, bucketSize],
+          })) as Hex;
+          if (publicClient) {
+            try {
+              const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
+              if (approveReceipt.status !== 'success') {
+                throw new Error(`approve reverted on-chain (block ${approveReceipt.blockNumber})`);
+              }
+            } catch (e) {
+              lc.set(0, 'failed', e instanceof Error ? e.message : String(e));
+              throw e;
+            }
+          }
+          lc.set(0, 'done', `Approved ${formatUnits(bucketSize, tokenDecimals)} ${tokenSymbol}`);
+          lc.advance(1);
+        } finally {
+          setIsApproving(false);
+        }
+      }
+
       // Build the claim (generates entropy, normalizes addresses, computes commitment)
       const { claim, commitment } = newClaim({
         withdrawTo,
@@ -250,16 +318,11 @@ export const usePool = (): UsePoolHook => {
         chainId: chainId as number,
       });
 
-      // Native vs ERC-20 distinction:
-      //  - native (address(0)): msg.value = bucketSize + fee
-      //  - erc20:                msg.value = fee only; tokens pulled via transferFrom.
-      //    Allowance MUST be set ≥ bucketSize via approveToken() BEFORE calling commit().
-      //    The CommitForm UI enforces this via the live useTokenAllowance hook;
-      //    if a caller bypasses it, the on-chain transferFrom will revert.
-      const isNative = token === NATIVE_TOKEN_ADDRESS;
-      const value = isNative ? bucketSize + feeWei : feeWei;
+      const signStepIdx = approveOffset;       // 0 (no approve) or 1 (with approve)
+      const confirmStepIdx = approveOffset + 1; // 1 or 2
+      const savedStepIdx = approveOffset + 2;   // 2 or 3
 
-      lc.set(0, 'running', 'Open your wallet and sign commitToPool…');
+      lc.set(signStepIdx, 'running', 'Open your wallet and sign commitToPool…');
       const txHash = (await writeContractAsync({
         address: contractAddress as Address,
         abi: CTGTRESOR_ABI,
@@ -267,14 +330,14 @@ export const usePool = (): UsePoolHook => {
         args: [commitment, token, bucketIdx],
         value,
       })) as Hex;
-      lc.set(0, 'done', `Signed & broadcast — tx ${txHash.slice(0, 10)}…`);
-      lc.advance(1);
-      lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+      lc.set(signStepIdx, 'done', `Signed & broadcast — tx ${txHash.slice(0, 10)}…`);
+      lc.advance(confirmStepIdx);
+      lc.set(confirmStepIdx, 'running', 'Waiting for on-chain confirmation…');
 
       // Wait for the actual receipt before advancing the lifecycle past
-      // step 2. Without this, the UI would jump to "Saved" before the
-      // commit was actually mined, and a revert would surface later
-      // through lastError instead of as a failed step.
+      // the confirm step. Without this, the UI would jump to "Saved"
+      // before the commit was actually mined, and a revert would
+      // surface later through lastError instead of as a failed step.
       let blockNumber: bigint | undefined;
       if (publicClient) {
         try {
@@ -284,14 +347,14 @@ export const usePool = (): UsePoolHook => {
           }
           blockNumber = receipt.blockNumber;
         } catch (e) {
-          lc.set(1, 'failed', e instanceof Error ? e.message : String(e));
+          lc.set(confirmStepIdx, 'failed', e instanceof Error ? e.message : String(e));
           throw e;
         }
       }
-      lc.set(1, 'done', blockNumber != null ? `Confirmed in block ${blockNumber}` : 'Confirmed');
+      lc.set(confirmStepIdx, 'done', blockNumber != null ? `Confirmed in block ${blockNumber}` : 'Confirmed');
 
-      lc.advance(2);
-      lc.set(2, 'running', 'Saving to notebook…');
+      lc.advance(savedStepIdx);
+      lc.set(savedStepIdx, 'running', 'Saving to notebook…');
 
       // Read currentEpoch AFTER the receipt resolves so depositEpoch
       // reflects what the contract actually stored.
@@ -309,13 +372,9 @@ export const usePool = (): UsePoolHook => {
         // Best effort — if RPC is flaky, notebook can be patched up by re-running ct-1.
       }
 
-      // Look up the token's display metadata from the per-chain registry so we
-      // can render decimal-aware amounts in the notebook + claim URL UI later
-      // (this matters on mainnet where USDC/USDT use 6 decimals — formatEther
-      // would render their amounts as ~1e-12 of expected).
-      const tokenEntry = (POOL_TOKENS_BY_CHAIN[chainId as number] || [])
-        .find((t) => t.address.toLowerCase() === token.toLowerCase());
-
+      // tokenEntry was hoisted to the top of commit() so the approve
+      // step can label itself with the correct symbol + decimals.
+      // Reuse here for the notebook entry — single source of truth.
       const entry: NotebookEntry = {
         claim,
         commitment,
@@ -324,15 +383,15 @@ export const usePool = (): UsePoolHook => {
         savedAt: new Date().toISOString(),
         spent: false,
         bucketSizeWei: bucketSize.toString(),
-        tokenDecimals: tokenEntry?.decimals ?? 18,
-        tokenSymbol: tokenEntry?.symbol ?? (isNative ? "ETH" : "???"),
+        tokenDecimals,
+        tokenSymbol,
       };
       const next = [entry, ..._loadNotebook()];
       _saveNotebook(next);
       setNotebook(next);
 
       const claimURL = buildClaimURL(`${window.location.origin}/claim`, claim);
-      lc.set(2, 'done', `Saved — eligible to reveal at epoch ${depositEpoch + 1}`);
+      lc.set(savedStepIdx, 'done', `Saved — eligible to reveal at epoch ${depositEpoch + 1}`);
       return { claimURL, commitment, txHash };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -345,7 +404,7 @@ export const usePool = (): UsePoolHook => {
     } finally {
       setIsCommitting(false);
     }
-  }, [_requireEnabled, writeContractAsync, contractAddress, chainId, publicClient]);
+  }, [_requireEnabled, writeContractAsync, contractAddress, chainId, publicClient, account]);
 
   const reveal: UsePoolHook['reveal'] = useCallback(async (entry, onProgress) => {
     _requireEnabled();

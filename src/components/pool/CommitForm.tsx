@@ -54,7 +54,7 @@ const CHAIN_ID_FOR: Record<"ETH" | "BSC" | "BASE" | "HYPER" | "ARB", number> = {
 
 export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const { address: account, isConnected } = useAccount();
-  const { commit, approveToken, isCommitting, isApproving, lastError, contractAddress } = usePool();
+  const { commit, isCommitting, isApproving, lastError, contractAddress } = usePool();
   // App-level ProgressFlow wiring — same pattern as Bank8 modals.
   // Phase B "two-act ProgressFlow": this is the COMMIT act; the Notebook
   // owns the wait countdown; the Notebook's Reveal button kicks off
@@ -132,10 +132,12 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const eligibleAtMs = eligibleEpoch != null ? eligibleEpoch * 3600 * 1000 : undefined;
 
   const withdrawToValid = /^0x[a-fA-F0-9]{40}$/.test(withdrawTo);
+  // needsApproval is now PURELY informational — drives the allowance
+  // status row's "approve step will run first" hint and the lifecycle
+  // step count in handleCommit's seed. The button's enabled state no
+  // longer depends on it; the commit hook handles the approval inline.
   const needsApproval = !isNative && bucketSize != null && allowance < bucketSize;
 
-  const canApprove =
-    isConnected && contractAddress && !isNative && bucketSize != null && !isApproving && needsApproval;
   const canCommit =
     isConnected &&
     contractAddress &&
@@ -143,18 +145,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
     feeWei != null &&
     withdrawToValid &&
     !isCommitting &&
-    !needsApproval;
-
-  const handleApprove = async () => {
-    if (!canApprove || bucketSize == null) return;
-    try {
-      await approveToken({ token, amount: bucketSize });
-      // After mining, wagmi's useReadContract polls; nudge it for instant UX.
-      refetchAllowance();
-    } catch (e) {
-      // hook recorded lastError
-    }
-  };
+    !isApproving;
 
   const handleCommit = async () => {
     if (!canCommit || bucketSize == null || feeWei == null) return;
@@ -163,11 +154,25 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
     const sessionTitle = mode === 'escrow'
       ? `Escrow commit · ${amountLabel}`
       : `Teleport commit · ${amountLabel}`;
-    const sessionId = startProgress(sessionTitle, [
-      { label: 'Sign in wallet',     status: 'running', detail: `Preparing commit for ${amountLabel}…` },
-      { label: 'Confirm on-chain',   status: 'pending' },
-      { label: 'Saved to notebook',  status: 'pending' },
-    ]);
+    // Seed the lifecycle with 4 steps when an approve will run, 3 when
+    // not. Mirrors usePool.commit's internal lifecycle so the modal
+    // shows the right number of dots from frame 1 instead of a layout
+    // shift after the hook publishes its first onProgress emission.
+    // The hook re-publishes the canonical step list immediately on
+    // first set() so the user-visible labels stay accurate either way.
+    const seed = needsApproval
+      ? [
+          { label: `Approve ${tokenSymbol}`,       status: 'running' as const, detail: `Allowance ${formatUnits(allowance, tokenDecimals)} ${tokenSymbol} → need ${formatUnits(bucketSize, tokenDecimals)}` },
+          { label: 'Sign commit in wallet',        status: 'pending' as const },
+          { label: 'Confirm commit on-chain',      status: 'pending' as const },
+          { label: 'Saved to notebook',            status: 'pending' as const },
+        ]
+      : [
+          { label: 'Sign commit in wallet',        status: 'running' as const, detail: `Preparing commit for ${amountLabel}…` },
+          { label: 'Confirm commit on-chain',      status: 'pending' as const },
+          { label: 'Saved to notebook',            status: 'pending' as const },
+        ];
+    const sessionId = startProgress(sessionTitle, seed);
     try {
       const { txHash, claimURL } = await commit({
         withdrawTo: withdrawTo as Address,
@@ -178,6 +183,10 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         onProgress: (steps) => updateProgress(sessionId, steps),
       });
       setResult({ txHash, claimURL });
+      // Refresh allowance so the status row updates immediately. The
+      // hook already waits for the approve receipt, so the new value
+      // is on-chain by now — wagmi's cache just needs a nudge.
+      if (needsApproval) refetchAllowance();
     } catch (e) {
       // commit() already records lastError AND marks the lifecycle step
       // failed via onProgress, so no extra UI work needed here.
@@ -389,7 +398,11 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         </div>
       )}
 
-      {/* Allowance status row — only relevant for ERC-20 tokens */}
+      {/* Allowance status row — informational only. The commit button
+          folds the approve step into its 4-step lifecycle when needed
+          (see usePool.commit), so this is no longer a gate; it just
+          tells the user whether their next commit will need to sign
+          an additional approve tx first. */}
       {!isNative && bucketSize != null && (
         <div className="rounded-md border border-vault-primary/15 bg-vault-primary/5 px-3 py-2 text-xs font-mono flex items-center gap-2">
           <ShieldCheck className={`w-3.5 h-3.5 ${needsApproval ? 'text-yellow-500' : 'text-emerald-400'}`} />
@@ -397,28 +410,27 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
           <span className={needsApproval ? "text-yellow-200" : "text-emerald-200"}>
             {formatUnits(allowance, tokenDecimals)} {tokenSymbol}
           </span>
-          {needsApproval && (
-            <span className="text-yellow-200/70 ml-auto">need ≥ {formatUnits(bucketSize, tokenDecimals)}</span>
+          {needsApproval ? (
+            <span className="text-yellow-200/70 ml-auto">approve step will run first</span>
+          ) : (
+            <span className="text-emerald-200/70 ml-auto">no approve needed</span>
           )}
         </div>
       )}
 
-      {/* Action button(s) — Approve when allowance insufficient, else Commit */}
-      {!isNative && needsApproval ? (
-        <Button
-          onClick={handleApprove}
-          disabled={!canApprove}
-          className="w-full bg-vault-primary text-background hover:bg-vault-primary/90"
-        >
-          {isApproving ? "Approving…" : !isConnected ? "Connect wallet first" : `Approve ${formatUnits(bucketSize!, tokenDecimals)} ${tokenSymbol}`}
-        </Button>
-      ) : (
+      {/* Action button — single Commit button now. The hook handles the
+          approve step internally when allowance is insufficient. Folds
+          two clicks (Approve, then Commit) into one, with a 4-step
+          ProgressFlow (Approve → Sign commit → Confirm commit → Saved)
+          instead of two separate flows. Matches Bank8's approve+deposit
+          UX shape (depositTokenSmartWagmi). */}
       <Button
         onClick={handleCommit}
         disabled={!canCommit}
         className="w-full bg-vault-primary text-background hover:bg-vault-primary/90"
       >
         {(() => {
+          if (isApproving) return "Approving…";
           if (isCommitting) return "Committing…";
           if (!isConnected) return "Connect wallet first";
           if (!withdrawToValid) {
@@ -428,11 +440,14 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
           const amountLabel = bucketSize != null
             ? `${formatUnits(bucketSize, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`
             : '';
+          // Button copy reflects total intent (commit & teleport / commit
+          // to escrow). The fact that an approve step runs first when
+          // allowance is insufficient shows up in the ProgressFlow's 4-step
+          // lifecycle — no need to clutter the button label with it.
           if (mode === 'escrow') return `Commit ${amountLabel} to escrow`;
           return `Commit & teleport ${amountLabel}`;
         })()}
       </Button>
-      )}
 
       {/* Error surface */}
       {lastError && !result && (
