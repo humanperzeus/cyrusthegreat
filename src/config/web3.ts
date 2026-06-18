@@ -112,12 +112,19 @@ export const WEB3_CONFIG = {
     ? import.meta.env.VITE_ANKR_BASE_MAINNET_RPC_URL
     : import.meta.env.VITE_ANKR_BASE_TESTNET_RPC_URL,
 
-  // HyperEVM RPC URLs. No managed-provider tier (Alchemy/Ankr) yet — we point
-  // at the canonical Hyperliquid endpoints by default and let users override
-  // via .env if they have a private RPC. Mainnet defaults to the public RPC.
+  // HyperEVM RPC URLs.
+  //   • Mainnet default: official Hyperliquid public RPC (working as of
+  //     2026-06-18). Override with VITE_HYPER_MAINNET_RPC_URL.
+  //   • Testnet default: dRPC public endpoint. The official
+  //     rpc.hyperliquid-testnet.xyz/evm started returning 502 Bad Gateway
+  //     around 2026-06-18, which made Rabby reject "add chain" requests
+  //     ("RPC invalid or currently unavailable"). dRPC's public endpoint
+  //     returns the same chain id (0x3e6 / 998) and works for both
+  //     eth_chainId and the addEthereumChain handshake. Override with
+  //     VITE_HYPER_TESTNET_RPC_URL if you have a private RPC.
   HYPER_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
     ? (import.meta.env.VITE_HYPER_MAINNET_RPC_URL || 'https://rpc.hyperliquid.xyz/evm')
-    : (import.meta.env.VITE_HYPER_TESTNET_RPC_URL || 'https://rpc.hyperliquid-testnet.xyz/evm'),
+    : (import.meta.env.VITE_HYPER_TESTNET_RPC_URL || 'https://hyperliquid-testnet.drpc.org'),
 
   // Arbitrum RPC URLs — canonical Arbitrum endpoints. Override via .env if
   // you have a private RPC (Alchemy/Infura/etc.).
