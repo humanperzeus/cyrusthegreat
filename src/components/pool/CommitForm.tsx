@@ -161,7 +161,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-yellow-200">CyrusTresor1 not deployed on {activeChain}</p>
+            <p className="text-sm font-medium text-yellow-200">CyrusTeleport not deployed on {activeChain}</p>
             <p className="text-xs text-muted-foreground mt-1">
               Currently testnet-only. Switch the chain selector above to Sepolia/BSC Testnet/Base Sepolia,
               or wait for the mainnet deployment.
@@ -176,7 +176,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
     <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30 space-y-5">
       <div className="flex items-center gap-2">
         <Lock className="w-5 h-5 text-vault-primary" />
-        <h3 className="text-base font-semibold">Commit to Anonymity Pool</h3>
+        <h3 className="text-base font-semibold">Commit to CyrusTeleport</h3>
       </div>
 
       {/* Token picker (shows only if >1 token is available on this chain) */}

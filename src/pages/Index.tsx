@@ -296,11 +296,11 @@ const Index = () => {
             <TabsList className="bg-card/80 backdrop-blur border border-border/50">
               <TabsTrigger value="v1" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-foreground">
                 <Shield className="w-4 h-4" />
-                <span>v1 — Vault</span>
+                <span>v1 — CyrusTresor</span>
               </TabsTrigger>
               <TabsTrigger value="v2" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-foreground">
                 <Lock className="w-4 h-4" />
-                <span>v2 — Anonymity Pool</span>
+                <span>v2 — CyrusTeleport</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>

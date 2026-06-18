@@ -53,8 +53,8 @@ export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
             <Lock className="w-5 h-5 text-vault-primary" />
           </div>
           <div>
-            <h2 className="text-xl font-bold">Anonymity Pool</h2>
-            <p className="text-xs text-muted-foreground">CyrusTresor1 · time-windowed batching · per-bucket commitments</p>
+            <h2 className="text-xl font-bold">CyrusTeleport</h2>
+            <p className="text-xs text-muted-foreground">Anonymity pool · time-windowed batching · per-bucket commitments</p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -94,7 +94,7 @@ export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
         <div className="text-muted-foreground">
           Active chain: <span className="text-foreground">{activeChain}</span>
           {" · "}
-          CyrusTresor1: <span className="text-foreground">{contractAddress || "—"}</span>
+          CyrusTeleport: <span className="text-foreground">{contractAddress || "—"}</span>
         </div>
       </Card>
     </div>

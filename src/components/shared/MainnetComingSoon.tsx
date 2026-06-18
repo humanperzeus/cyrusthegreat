@@ -30,7 +30,7 @@ export const MainnetComingSoon = () => {
         </div>
         <h1 className="text-xl font-semibold mb-2">Mainnet not yet deployed</h1>
         <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-          Bank8 and CyrusTresor1 contracts aren't deployed on any mainnet chain yet.
+          CyrusTresor and CyrusTeleport contracts aren't deployed on any mainnet chain yet.
           Switch back to testnet to use the dapp, or wait for the mainnet launch.
         </p>
         <Button

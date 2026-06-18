@@ -236,7 +236,7 @@ const Claim = () => {
             <p className="text-xs text-muted-foreground">
               {bucketHumanAmount
                 ? <>You can claim <span className="text-foreground font-semibold">{bucketHumanAmount} {displaySymbol}</span> to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span></>
-                : <>A CyrusTresor1 commit is waiting to be revealed to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span></>}
+                : <>A CyrusTeleport commit is waiting to be revealed to <span className="font-mono">{claim.withdrawTo.slice(0, 8)}…{claim.withdrawTo.slice(-6)}</span></>}
             </p>
           </div>
         </div>
