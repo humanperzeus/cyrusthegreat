@@ -23,7 +23,13 @@ export const getEffectiveNetworkMode = (): 'mainnet' | 'testnet' => {
       // SSR / disabled-storage / privacy mode — fall through to env.
     }
   }
-  return _IS_MAINNET ? 'mainnet' : 'testnet';
+  // Fall back to the build-time env var. MUST read import.meta.env
+  // directly here — _IS_MAINNET is DERIVED from this function (line
+  // ~70 below) and isn't initialized when this function is first
+  // called at module-eval time. A circular reference here crashes
+  // with "Cannot access '_IS_MAINNET' before initialization" (the
+  // bug shipped briefly in f69c831 and fixed in this commit).
+  return import.meta.env.VITE_NETWORK_MODE === 'mainnet' ? 'mainnet' : 'testnet';
 };
 export const setNetworkMode = (mode: 'mainnet' | 'testnet') => {
   if (typeof window === 'undefined') return;
