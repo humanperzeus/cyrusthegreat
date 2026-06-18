@@ -7,6 +7,8 @@ import { WagmiProvider } from "wagmi";
 import { config } from "@/lib/wagmi";
 import { ProgressProvider } from "@/contexts/ProgressContext";
 import { BuildBadge } from "@/components/shared/BuildBadge";
+import { MainnetComingSoon } from "@/components/shared/MainnetComingSoon";
+import { getEffectiveNetworkMode, isMainnetDeployedAnywhere } from "@/config/web3";
 import Index from "./pages/Index";
 import Claim from "./pages/Claim";
 import NotFound from "./pages/NotFound";
@@ -18,6 +20,13 @@ const queryClient = new QueryClient();
 // sibling of every Radix <Dialog> opened by the routes, never trapped
 // inside one. That's what lets the progress chip outlive the parent
 // modal closing while a tx is still pending.
+// Mainnet guard: if the user picked mainnet mode (localStorage) but
+// no mainnet contracts exist in the build, render MainnetComingSoon
+// in place of the whole route tree. Evaluated once at app boot — a
+// mode switch reloads the page, so this re-runs with the new mode.
+const _showMainnetGuard =
+  getEffectiveNetworkMode() === "mainnet" && !isMainnetDeployedAnywhere();
+
 const App = () => (
   <WagmiProvider config={config}>
     <QueryClientProvider client={queryClient}>
@@ -26,15 +35,21 @@ const App = () => (
         <Sonner />
         <ProgressProvider>
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/claim" element={<Claim />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            {_showMainnetGuard ? (
+              <MainnetComingSoon />
+            ) : (
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/claim" element={<Claim />} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            )}
             {/* Build badge: fixed bottom-left (bottom-right is the
                 ProgressFlow chip stack). Mounted outside Routes so it
-                shows on every route including the 404. */}
+                shows on every route including the 404 and the mainnet
+                guard — handy when reporting "I clicked mainnet on
+                commit X". */}
             <BuildBadge />
           </BrowserRouter>
         </ProgressProvider>

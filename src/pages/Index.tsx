@@ -10,6 +10,7 @@ import { debugLog } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Shield, Lock } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
+import { NetworkModeSwitch } from "@/components/shared/NetworkModeSwitch";
 
   // DISABLED: Debounce utility function to prevent RPC spam
   // const debounce = <T extends (...args: any[]) => any>(
@@ -283,8 +284,14 @@ const Index = () => {
 
   return (
     <>
+      {/* Network mode switch sits ABOVE the v1/v2 tabs. Always visible
+          (no isConnected gate) so the user can flip mainnet ↔ testnet
+          before connecting a wallet. Page reloads on change; if the
+          target is mainnet and no contracts are deployed, App.tsx's
+          guard renders MainnetComingSoon instead of the route tree. */}
+      <NetworkModeSwitch />
       {showModeToggle && (
-        <div className="w-full pt-6 pb-2 flex justify-center">
+        <div className="w-full pt-2 pb-2 flex justify-center">
           <Tabs value={mode} onValueChange={(v) => setMode(v as 'v1' | 'v2')}>
             <TabsList className="bg-card/80 backdrop-blur border border-border/50">
               <TabsTrigger value="v1" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-foreground">

@@ -1,7 +1,73 @@
 // Cyrus The Great Vault Configuration
-// Dynamic network configuration based on VITE_NETWORK_MODE
+// Dynamic network configuration. Effective mode comes from
+// getEffectiveNetworkMode() below — localStorage first, build-time
+// VITE_NETWORK_MODE second.
 
 import vaultAbiJson from '../contracts/abis/vaultAbi.json';
+
+// Runtime network-mode override (added 2026-06-18). Reads localStorage
+// first so the user can flip mainnet ↔ testnet from the UI without a
+// rebuild; falls back to the build-time VITE_NETWORK_MODE env var
+// (which is what cyrusthegreat.dev currently bakes in, "testnet").
+//
+// WEB3_CONFIG and every helper below evaluate ONCE at module-import
+// time, so switching the mode forces a page reload — that re-imports
+// this module and the new mode propagates everywhere.
+const RUNTIME_MODE_KEY = 'ctg.networkMode.v1';
+export const getEffectiveNetworkMode = (): 'mainnet' | 'testnet' => {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = window.localStorage.getItem(RUNTIME_MODE_KEY);
+      if (saved === 'mainnet' || saved === 'testnet') return saved;
+    } catch {
+      // SSR / disabled-storage / privacy mode — fall through to env.
+    }
+  }
+  return _IS_MAINNET ? 'mainnet' : 'testnet';
+};
+export const setNetworkMode = (mode: 'mainnet' | 'testnet') => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RUNTIME_MODE_KEY, mode);
+  } catch {
+    // If we can't persist, the reload below will re-read VITE env and
+    // the toggle becomes a no-op — preferable to throwing in the UI.
+  }
+  // Reload is the simplest way to re-evaluate every WEB3_CONFIG
+  // consumer (contract addresses, RPC URLs, wagmi config) without
+  // refactoring 50+ files to read the mode as reactive state.
+  window.location.reload();
+};
+
+// Tells the runtime guard whether ANY mainnet contract address is
+// present in the build. Reads env vars directly (not WEB3_CONFIG, which
+// is mode-dependent) — we want "does mainnet have anything deployed"
+// regardless of which mode the user picked. If this returns false and
+// the user picked mainnet, App.tsx shows MainnetComingSoon instead of
+// letting them poke around a row of "not deployed" cards.
+const _isRealAddress = (addr: unknown): boolean => {
+  if (typeof addr !== 'string') return false;
+  if (!addr || addr === 'notdeployednow' || addr === '0x' || addr === '0x0') return false;
+  return /^0x[a-fA-F0-9]{40}$/.test(addr);
+};
+export const isMainnetDeployedAnywhere = (): boolean => {
+  const slots: unknown[] = [
+    import.meta.env.VITE_CTGVAULT_ETH_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGVAULT_BSC_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGVAULT_BASE_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGVAULT_ARB_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGVAULT_HYPER_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGTRESOR_ETH_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGTRESOR_BSC_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGTRESOR_BASE_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGTRESOR_ARB_MAINNET_CONTRACT,
+    import.meta.env.VITE_CTGTRESOR_HYPER_MAINNET_CONTRACT,
+  ];
+  return slots.some(_isRealAddress);
+};
+
+const _NETWORK_MODE: 'mainnet' | 'testnet' = getEffectiveNetworkMode();
+const _IS_MAINNET = _NETWORK_MODE === 'mainnet';
 
 // Import MetaMask chain switching functions
 import { 
@@ -18,22 +84,22 @@ import { debugLog, debugError } from '@/lib/utils';
 
 export const WEB3_CONFIG = {
   // Network Mode (mainnet or testnet)
-  NETWORK_MODE: import.meta.env.VITE_NETWORK_MODE || 'testnet',
+  NETWORK_MODE: _NETWORK_MODE,
   
   // Reown Project ID
   REOWN_PROJECT_ID: import.meta.env.VITE_REOWN_PROJECT_ID,
   
   // Contract Addresses
-  CTGVAULT_ETH_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet' 
+  CTGVAULT_ETH_CONTRACT: _IS_MAINNET 
     ? import.meta.env.VITE_CTGVAULT_ETH_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGVAULT_ETH_TESTNET_CONTRACT,
     
-  CTGVAULT_BSC_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGVAULT_BSC_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGVAULT_BSC_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGVAULT_BSC_TESTNET_CONTRACT,
   
   // BASE Contract Addresses
-  CTGVAULT_BASE_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGVAULT_BASE_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGVAULT_BASE_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGVAULT_BASE_TESTNET_CONTRACT,
 
@@ -41,15 +107,15 @@ export const WEB3_CONFIG = {
   // testnets 2026-05-14; mainnet slots are 'notdeployednow' until launch.
   // Frontend code path is GATED by VITE_ENABLE_POOL (see below) — even
   // with valid addresses here, the pool UI stays hidden until the flag flips.
-  CTGTRESOR_ETH_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGTRESOR_ETH_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGTRESOR_ETH_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_ETH_TESTNET_CONTRACT,
 
-  CTGTRESOR_BSC_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGTRESOR_BSC_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGTRESOR_BSC_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_BSC_TESTNET_CONTRACT,
 
-  CTGTRESOR_BASE_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGTRESOR_BASE_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGTRESOR_BASE_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_BASE_TESTNET_CONTRACT,
 
@@ -57,11 +123,11 @@ export const WEB3_CONFIG = {
   // deployed on testnet (2026-05-30). Native HYPE has 18 decimals.
   // Testnet uses MockV3Aggregator for HYPE/USD — see deployMockPriceFeed.ts.
   // Mainnet slots stay empty pending Pyth-adapter work for a real HYPE/USD feed.
-  CTGVAULT_HYPER_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGVAULT_HYPER_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGVAULT_HYPER_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGVAULT_HYPER_TESTNET_CONTRACT,
 
-  CTGTRESOR_HYPER_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGTRESOR_HYPER_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGTRESOR_HYPER_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_HYPER_TESTNET_CONTRACT,
 
@@ -69,11 +135,11 @@ export const WEB3_CONFIG = {
   // deployed on Arbitrum Sepolia testnet 2026-05-30 (mainnet slots stay
   // "notdeployednow" until launch). Native is ETH (18 dec). Real Chainlink
   // ETH/USD feed available (no Mock needed).
-  CTGVAULT_ARB_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGVAULT_ARB_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGVAULT_ARB_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGVAULT_ARB_TESTNET_CONTRACT,
 
-  CTGTRESOR_ARB_CONTRACT: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  CTGTRESOR_ARB_CONTRACT: _IS_MAINNET
     ? import.meta.env.VITE_CTGTRESOR_ARB_MAINNET_CONTRACT
     : import.meta.env.VITE_CTGTRESOR_ARB_TESTNET_CONTRACT,
 
@@ -86,29 +152,29 @@ export const WEB3_CONFIG = {
   ENABLE_POOL: import.meta.env.VITE_ENABLE_POOL === 'true',
 
   // Ethereum RPC URLs
-  ALCHEMY_ETH_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ALCHEMY_ETH_RPC_URL: _IS_MAINNET
     ? import.meta.env.VITE_ALCHEMY_ETH_MAINNET_RPC_URL
     : import.meta.env.VITE_ALCHEMY_ETH_TESTNET_RPC_URL,
     
-  ANKR_ETH_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ANKR_ETH_RPC_URL: _IS_MAINNET
     ? import.meta.env.VITE_ANKR_ETH_MAINNET_RPC_URL
     : import.meta.env.VITE_ANKR_ETH_TESTNET_RPC_URL,
   
   // Binance Smart Chain RPC URLs
-  ALCHEMY_BSC_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ALCHEMY_BSC_RPC_URL: _IS_MAINNET
     ? import.meta.env.VITE_ALCHEMY_BSC_MAINNET_RPC_URL
     : import.meta.env.VITE_ALCHEMY_BSC_TESTNET_RPC_URL,
     
-  ANKR_BSC_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ANKR_BSC_RPC_URL: _IS_MAINNET
     ? import.meta.env.VITE_ANKR_BSC_MAINNET_RPC_URL
     : import.meta.env.VITE_ANKR_BSC_TESTNET_RPC_URL,
   
   // BASE RPC URLs
-  ALCHEMY_BASE_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ALCHEMY_BASE_RPC_URL: _IS_MAINNET
     ? import.meta.env.VITE_ALCHEMY_BASE_MAINNET_RPC_URL
     : import.meta.env.VITE_ALCHEMY_BASE_TESTNET_RPC_URL,
     
-  ANKR_BASE_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ANKR_BASE_RPC_URL: _IS_MAINNET
     ? import.meta.env.VITE_ANKR_BASE_MAINNET_RPC_URL
     : import.meta.env.VITE_ANKR_BASE_TESTNET_RPC_URL,
 
@@ -122,17 +188,17 @@ export const WEB3_CONFIG = {
   //     returns the same chain id (0x3e6 / 998) and works for both
   //     eth_chainId and the addEthereumChain handshake. Override with
   //     VITE_HYPER_TESTNET_RPC_URL if you have a private RPC.
-  HYPER_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  HYPER_RPC_URL: _IS_MAINNET
     ? (import.meta.env.VITE_HYPER_MAINNET_RPC_URL || 'https://rpc.hyperliquid.xyz/evm')
     : (import.meta.env.VITE_HYPER_TESTNET_RPC_URL || 'https://hyperliquid-testnet.drpc.org'),
 
   // Arbitrum RPC URLs — canonical Arbitrum endpoints. Override via .env if
   // you have a private RPC (Alchemy/Infura/etc.).
-  ALCHEMY_ARB_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ALCHEMY_ARB_RPC_URL: _IS_MAINNET
     ? import.meta.env.VITE_ALCHEMY_ARB_MAINNET_RPC_URL
     : import.meta.env.VITE_ALCHEMY_ARB_TESTNET_RPC_URL,
 
-  ANKR_ARB_RPC_URL: import.meta.env.VITE_NETWORK_MODE === 'mainnet'
+  ANKR_ARB_RPC_URL: _IS_MAINNET
     ? (import.meta.env.VITE_ANKR_ARB_MAINNET_RPC_URL || 'https://arb1.arbitrum.io/rpc')
     : (import.meta.env.VITE_ANKR_ARB_TESTNET_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'),
 
