@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { WagmiProvider } from "wagmi";
 import { config } from "@/lib/wagmi";
 import { ProgressProvider } from "@/contexts/ProgressContext";
+import { BuildBadge } from "@/components/shared/BuildBadge";
 import Index from "./pages/Index";
 import Claim from "./pages/Claim";
 import NotFound from "./pages/NotFound";
@@ -31,6 +32,10 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            {/* Build badge: fixed bottom-left (bottom-right is the
+                ProgressFlow chip stack). Mounted outside Routes so it
+                shows on every route including the 404. */}
+            <BuildBadge />
           </BrowserRouter>
         </ProgressProvider>
       </TooltipProvider>
