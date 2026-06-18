@@ -21,7 +21,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, ExternalLink, Copy, Check, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Lock, ExternalLink, Copy, Check, AlertTriangle, ShieldCheck, User, Send, ShieldHalf } from "lucide-react";
 import {
   usePool,
   usePoolBucketSizes,
@@ -81,6 +82,14 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const [withdrawTo, setWithdrawTo] = useState<string>("");
   const [result, setResult] = useState<{ txHash: string; claimURL: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // Mode tab — UI framing only. The contract sees one thing (whatever
+  // withdrawTo holds at submit). 'self-pay' = withdrawTo is your own
+  // wallet (anonymize your own funds); 'teleport' = arbitrary recipient
+  // (you commit, they claim); 'escrow' = same as teleport but framed
+  // for OTC/freelance/intermediary flows. Clicking a tab updates the
+  // copy + button label but doesn't lock the address input — users
+  // can still paste anything if their flow doesn't fit a tab.
+  const [mode, setMode] = useState<'self-pay' | 'teleport' | 'escrow'>('self-pay');
 
   // Default withdrawTo to user's connected address. Only set on initial mount
   // so the user can edit it after.
@@ -229,16 +238,58 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         )}
       </div>
 
-      {/* withdrawTo */}
+      {/* Mode tabs — UX framing for three real use cases the contract
+          already supports. Clicking Self-pay auto-fills your wallet
+          into withdrawTo (the most common intent); Teleport and Escrow
+          leave the address alone so you can paste the recipient or
+          agent. The contract call is identical across all three. */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-          Recipient address (withdrawTo)
+          Flow
+        </Label>
+        <Tabs
+          value={mode}
+          onValueChange={(v) => {
+            const next = v as 'self-pay' | 'teleport' | 'escrow';
+            setMode(next);
+            if (next === 'self-pay' && account) setWithdrawTo(account);
+          }}
+        >
+          <TabsList className="grid grid-cols-3 w-full bg-vault-primary/5 border border-vault-primary/20 h-auto p-1">
+            <TabsTrigger
+              value="self-pay"
+              className="gap-1.5 text-xs py-1.5 data-[state=active]:bg-vault-primary/20 data-[state=active]:text-vault-primary"
+            >
+              <User className="w-3.5 h-3.5" /> Self-pay
+            </TabsTrigger>
+            <TabsTrigger
+              value="teleport"
+              className="gap-1.5 text-xs py-1.5 data-[state=active]:bg-vault-primary/20 data-[state=active]:text-vault-primary"
+            >
+              <Send className="w-3.5 h-3.5" /> Teleport
+            </TabsTrigger>
+            <TabsTrigger
+              value="escrow"
+              className="gap-1.5 text-xs py-1.5 data-[state=active]:bg-vault-primary/20 data-[state=active]:text-vault-primary"
+            >
+              <ShieldHalf className="w-3.5 h-3.5" /> Escrow
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* withdrawTo — label + helper text adjust to the selected mode */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+          {mode === 'self-pay' ? 'Your withdraw address'
+            : mode === 'escrow' ? 'Escrow agent address'
+            : 'Recipient address'} (withdrawTo)
         </Label>
         <div className="flex gap-2">
           <Input
             value={withdrawTo}
             onChange={(e) => setWithdrawTo(e.target.value)}
-            placeholder="0x…"
+            placeholder={mode === 'escrow' ? '0x… (your trusted agent)' : '0x…'}
             className="font-mono text-xs"
           />
           {account && account !== withdrawTo && (
@@ -253,10 +304,28 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
             </Button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Funds will be claimable AT this exact address. The address is baked into the commitment hash
-          (MEV-safe — an attacker who sees the secret cannot redirect funds).
-        </p>
+        {mode === 'self-pay' ? (
+          <p className="text-xs text-muted-foreground">
+            Self-pay: you send funds in, you withdraw them. Same wallet on both ends — but the
+            commit→reveal path goes through the pool's epoch+bucket cohort, so a casual chain
+            analyst can't trivially link them. Address baked into the commitment hash (MEV-safe).
+          </p>
+        ) : mode === 'escrow' ? (
+          <p className="text-xs text-muted-foreground">
+            Funds land at the <span className="text-vault-primary">agent's</span> address. They
+            forward to the final recipient out-of-band once the off-chain condition is verified
+            (delivery, KYC, signed contract). You and the agent both hold the claim URL — the
+            agent broadcasts the reveal; the final recipient never appears on this transaction.
+            <span className="block mt-1 text-yellow-200/80">
+              Treat the agent as if they hold the cash. Pick someone with reputation.
+            </span>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Funds will be claimable AT this exact address. The address is baked into the commitment
+            hash (MEV-safe — an attacker who sees the secret cannot redirect funds).
+          </p>
+        )}
       </div>
 
       {/* Summary */}
@@ -319,7 +388,21 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         disabled={!canCommit}
         className="w-full bg-vault-primary text-background hover:bg-vault-primary/90"
       >
-        {isCommitting ? "Committing…" : !isConnected ? "Connect wallet first" : !withdrawToValid ? "Enter a valid recipient address" : "Commit"}
+        {(() => {
+          if (isCommitting) return "Committing…";
+          if (!isConnected) return "Connect wallet first";
+          if (!withdrawToValid) {
+            return mode === 'escrow' ? "Enter a valid agent address"
+              : mode === 'self-pay' ? "Enter your withdraw address"
+              : "Enter a valid recipient address";
+          }
+          const amountLabel = bucketSize != null
+            ? `${formatUnits(bucketSize, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`
+            : '';
+          if (mode === 'self-pay') return `Anonymize ${amountLabel}`;
+          if (mode === 'escrow')   return `Commit ${amountLabel} to escrow`;
+          return `Commit & teleport ${amountLabel}`;
+        })()}
       </Button>
       )}
 
