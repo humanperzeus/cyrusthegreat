@@ -41,6 +41,27 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   // Get current network configuration
   const currentNetwork = getCurrentNetwork();
 
+  // 2026-06-18: derived chainId for the dapp's selected activeChain
+  // (NOT the wallet's chain). Used to pin every useReadContract below
+  // to the right chain regardless of which network the wallet is on.
+  //
+  // Bug this fixes: without an explicit chainId, wagmi falls back to
+  // the wallet's current chain. If the user picked ARB in the chain
+  // switcher but Rabby didn't switch (or they cancelled the prompt),
+  // the dapp would query the ARB contract address on the wallet's
+  // (wrong) chain → no contract at that address → 0n → "insufficient
+  // vault balance" toast even though the actual ARB vault holds funds.
+  // Reported on tARB withdraw 2026-06-18.
+  const expectedChainId = activeChain === 'ETH'
+    ? (currentNetwork.mode === 'mainnet' ? 1 : 11155111)
+    : activeChain === 'BSC'
+    ? (currentNetwork.mode === 'mainnet' ? 56 : 97)
+    : activeChain === 'BASE'
+    ? (currentNetwork.mode === 'mainnet' ? 8453 : 84532)
+    : activeChain === 'ARB'
+    ? (currentNetwork.mode === 'mainnet' ? 42161 : 421614)
+    : (currentNetwork.mode === 'mainnet' ? 999 : 998);  // HYPER
+
   // State for network switching
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   
@@ -463,6 +484,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     abi: VAULT_ABI,
     functionName: 'getBalance', // Changed from 'getETHBalance' to 'getBalance'
     args: address ? [address, '0x0000000000000000000000000000000000000000'] : undefined, // ETH is represented as address(0)
+    chainId: expectedChainId, // pin to dapp's activeChain — see comment at expectedChainId declaration
     query: {
       enabled: !!address,
       // Only refetch when user returns to tab (no constant polling)
@@ -505,6 +527,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     address: getActiveContractAddress() as `0x${string}`,
     abi: VAULT_ABI,
     functionName: 'getCurrentFeeInWei',
+    chainId: expectedChainId, // pin to dapp's activeChain — see comment at expectedChainId declaration
     query: {
       enabled: !!address,
       // Only refetch when user returns to tab (no constant polling)
@@ -557,6 +580,7 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
     abi: VAULT_ABI,
     functionName: 'getMyVaultedTokens',
     args: address ? [address] : undefined,
+    chainId: expectedChainId, // pin to dapp's activeChain — see comment at expectedChainId declaration
     query: {
       enabled: !!address,
       refetchOnWindowFocus: true,
