@@ -77,11 +77,22 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
   // Clear vault tokens and transaction states whenever activeChain changes
   useEffect(() => {
     debugLog(`🔄 Active chain changed to: ${activeChain}`);
-    
+
     // Force clear vault tokens immediately
     setVaultTokens([]);
     debugLog(`🧹 Vault tokens cleared for chain switch to ${activeChain}`);
-    
+
+    // Also clear wallet tokens on chain switch. Bug fixed 2026-06-18:
+    // when switching to a chain whose RPC doesn't expose Alchemy's
+    // alchemy_getTokenBalances method (e.g. tARB on the public Arbitrum
+    // endpoint), the fetch returned a JSON-RPC error without an HTTP
+    // failure, the code's `data.result && data.result.tokenBalances`
+    // check skipped processing, and the old chain's tokens stayed
+    // visible. Clearing here guarantees no stale carry-over regardless
+    // of whether the per-chain fetch succeeds, errors, or no-ops.
+    setWalletTokens([]);
+    debugLog(`🧹 Wallet tokens cleared for chain switch to ${activeChain}`);
+
     // CRITICAL FIX: Clear transaction states to prevent stuck modals
     // Note: This is now handled by chain-specific state management below
     debugLog(`🧹 Transaction states will be cleared for chain switch to ${activeChain}`);
@@ -1106,8 +1117,14 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
           await processAlchemyTokens(data.result.tokenBalances, alchemyUrl);
         }
       } else if (activeChain === 'BASE' || activeChain === 'ARB') {
-        // Use Alchemy API for BASE + ARB chains (Alchemy supports both —
-        // same method as ETH/BSC, just different RPC URL).
+        // Use Alchemy API for BASE + ARB chains. Falls through to
+        // empty-token-list when the configured RPC is NOT a real
+        // Alchemy endpoint (e.g. tARB defaulting to the public
+        // sepolia-rollup.arbitrum.io/rpc which returns
+        // -32601 "method not found" for alchemy_getTokenBalances).
+        // To get token discovery on tARB / tBASE, set
+        // VITE_ALCHEMY_{ARB,BASE}_TESTNET_RPC_URL in .env to your
+        // own Alchemy API key.
         const alchemyUrl = getActiveRpcUrl();
 
         const response = await fetch(alchemyUrl, {
@@ -1130,6 +1147,18 @@ export const useVault = (activeChain: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER' =
         }
 
         const data = await response.json();
+
+        // JSON-RPC error path (HTTP 200, but error in body). Public RPC
+        // endpoints return -32601 for alchemy_getTokenBalances. Log it
+        // explicitly so future investigations have a breadcrumb rather
+        // than a silent no-op, and leave walletTokens empty (which the
+        // chain-switch effect already set).
+        if (data.error) {
+          debugError(`❌ alchemy_getTokenBalances unavailable on ${activeChain} RPC:`, data.error);
+          debugLog(`💡 To enable token discovery on ${activeChain}, set VITE_ALCHEMY_${activeChain}_TESTNET_RPC_URL to your Alchemy key`);
+          // walletTokens stays at [] (set by the chain-switch effect above).
+          return;
+        }
 
         if (data.result && data.result.tokenBalances) {
           debugLog('✅ Token balances found:', data.result.tokenBalances);
