@@ -34,6 +34,7 @@ import {
   type PoolTokenEntry,
 } from "@/hooks/usePool";
 import { ClaimQR } from "@/components/pool/ClaimQR";
+import { useProgress } from "@/contexts/ProgressContext";
 
 interface CommitFormProps {
   activeChain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB";
@@ -54,6 +55,13 @@ const CHAIN_ID_FOR: Record<"ETH" | "BSC" | "BASE" | "HYPER" | "ARB", number> = {
 export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const { address: account, isConnected } = useAccount();
   const { commit, approveToken, isCommitting, isApproving, lastError, contractAddress } = usePool();
+  // App-level ProgressFlow wiring — same pattern as Bank8 modals.
+  // Phase B "two-act ProgressFlow": this is the COMMIT act; the Notebook
+  // owns the wait countdown; the Notebook's Reveal button kicks off
+  // act 2 with its own session. No chip-during-close pattern here
+  // because CommitForm isn't inside a Radix Dialog (it's a Card in
+  // PoolView), so there's no 200ms close animation to dodge.
+  const { startProgress, updateProgress } = useProgress();
 
   // Available tokens for the active chain (filtered to pool-supported ones).
   // Defaults to the first entry (native), but user can switch.
@@ -151,6 +159,15 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   const handleCommit = async () => {
     if (!canCommit || bucketSize == null || feeWei == null) return;
     setResult(null);
+    const amountLabel = `${formatUnits(bucketSize, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`;
+    const sessionTitle = mode === 'escrow'
+      ? `Escrow commit · ${amountLabel}`
+      : `Teleport commit · ${amountLabel}`;
+    const sessionId = startProgress(sessionTitle, [
+      { label: 'Sign in wallet',     status: 'running', detail: `Preparing commit for ${amountLabel}…` },
+      { label: 'Confirm on-chain',   status: 'pending' },
+      { label: 'Saved to notebook',  status: 'pending' },
+    ]);
     try {
       const { txHash, claimURL } = await commit({
         withdrawTo: withdrawTo as Address,
@@ -158,10 +175,12 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         bucketIdx,
         bucketSize,
         feeWei,
+        onProgress: (steps) => updateProgress(sessionId, steps),
       });
       setResult({ txHash, claimURL });
     } catch (e) {
-      // commit() already records lastError
+      // commit() already records lastError AND marks the lifecycle step
+      // failed via onProgress, so no extra UI work needed here.
     }
   };
 

@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Clock, Check, ExternalLink, Copy, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { usePool, usePoolCurrentEpoch } from "@/hooks/usePool";
+import { useProgress } from "@/contexts/ProgressContext";
 import { buildClaimURL, type TeleportClaim } from "@/lib/poolURI";
 import type { NotebookEntry } from "@/hooks/usePool";
 import { ClaimQR } from "@/components/pool/ClaimQR";
@@ -54,6 +55,7 @@ const formatCountdown = (msUntil: number): string => {
 export const Notebook = ({ activeChain }: NotebookProps) => {
   const { notebook, isRevealing, reveal, clearNotebook } = usePool();
   const { epoch: currentEpoch } = usePoolCurrentEpoch();
+  const { startProgress, updateProgress } = useProgress();
   const [expandedClaim, setExpandedClaim] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
@@ -98,8 +100,20 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
 
   const handleReveal = async (entry: NotebookEntry) => {
     setRevealError(null);
+    // Two-act ProgressFlow act 2 — kicked off when the user clicks
+    // Reveal in the Notebook (commit act ended when the previous
+    // session went terminal + auto-closed). Decimal-aware amount
+    // label for the session title, using fields stored at commit time.
+    const displayAmount = entry.bucketSizeWei && entry.tokenDecimals != null
+      ? `${formatUnits(BigInt(entry.bucketSizeWei), entry.tokenDecimals)} ${entry.tokenSymbol ?? ''}`.trim()
+      : `bucket ${entry.claim.bucketIdx}`;
+    const sessionId = startProgress(`Reveal · ${displayAmount}`, [
+      { label: 'Sign in wallet',     status: 'running', detail: `Preparing reveal of ${displayAmount}…` },
+      { label: 'Confirm on-chain',   status: 'pending' },
+      { label: 'Finalize & refresh', status: 'pending' },
+    ]);
     try {
-      await reveal(entry);
+      await reveal(entry, (steps) => updateProgress(sessionId, steps));
     } catch (e) {
       setRevealError(e instanceof Error ? e.message : String(e));
     }

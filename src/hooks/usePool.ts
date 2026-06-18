@@ -40,6 +40,35 @@ const CTGTRESOR_ABI = (CyrusTresor1Artifact as { abi: readonly unknown[] }).abi;
 // Notebook persistence key — versioned so future schema changes don't clobber.
 const NOTEBOOK_KEY = 'ctg.tresor1.commits.v1';
 
+// Lifecycle step shape — kept structurally identical to the Bank8
+// hooks' `_PS` type (useVault.ts:2282) so a shared App-level
+// ProgressFlow can consume both. Duplicated rather than extracted to
+// a shared module to keep this commit scope-clean; future cleanup can
+// hoist to src/lib/txLifecycle.ts.
+type _PSStatus = 'pending' | 'running' | 'done' | 'failed';
+type _PS = { label: string; status: _PSStatus; detail?: string };
+
+// Tiny driver mirroring useVault.ts's buildTxLifecycle. Takes the
+// labels for THIS flow (commit or reveal) and an onProgress callback,
+// returns set/advance/getPhase. Each step emits a fresh snapshot
+// (spread copy) so React's state setters see new references.
+const buildPoolLifecycle = (
+  labels: readonly string[],
+  onProgress?: (steps: _PS[]) => void,
+) => {
+  const steps: _PS[] = labels.map(label => ({ label, status: 'pending' as _PSStatus }));
+  let phase = 0;
+  const emit = () => onProgress?.(steps.map(s => ({ ...s })));
+  return {
+    advance(i: number) { phase = i; },
+    getPhase() { return phase; },
+    set(i: number, status: _PSStatus, detail?: string) {
+      steps[i] = { ...steps[i], status, ...(detail !== undefined ? { detail } : {}) };
+      emit();
+    },
+  };
+};
+
 /** Sentinel for native (ETH/BNB) — must match the contract's address(0) check. */
 export const NATIVE_TOKEN_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
 
@@ -148,13 +177,13 @@ export interface UsePoolHook {
    * ERC-20s — that path is TODO until we add token approval handling).
    * @returns the claim URL the depositor can share with the recipient
    */
-  commit: (args: { withdrawTo: Address; token: Address; bucketIdx: number; bucketSize: bigint; feeWei: bigint; }) => Promise<{ claimURL: string; commitment: Hex; txHash: Hex }>;
+  commit: (args: { withdrawTo: Address; token: Address; bucketIdx: number; bucketSize: bigint; feeWei: bigint; onProgress?: (steps: _PS[]) => void; }) => Promise<{ claimURL: string; commitment: Hex; txHash: Hex }>;
 
   /** Reveal an existing notebook entry's commitment. Marks it spent on success. */
-  reveal: (entry: NotebookEntry) => Promise<{ txHash: Hex }>;
+  reveal: (entry: NotebookEntry, onProgress?: (steps: _PS[]) => void) => Promise<{ txHash: Hex }>;
 
   /** Convenience: decode a teleport claim URL and reveal it. */
-  revealFromURL: (claimURL: string) => Promise<{ txHash: Hex }>;
+  revealFromURL: (claimURL: string, onProgress?: (steps: _PS[]) => void) => Promise<{ txHash: Hex }>;
 
   /** Clear the entire notebook. DESTRUCTIVE: unrevealed commits become unrecoverable. */
   clearNotebook: () => void;
@@ -197,10 +226,20 @@ export const usePool = (): UsePoolHook => {
     if (!account) throw new Error('Wallet not connected');
   }, [enabled, contractAddress, chainId, account]);
 
-  const commit: UsePoolHook['commit'] = useCallback(async ({ withdrawTo, token, bucketIdx, bucketSize, feeWei }) => {
+  const commit: UsePoolHook['commit'] = useCallback(async ({ withdrawTo, token, bucketIdx, bucketSize, feeWei, onProgress }) => {
     _requireEnabled();
     setIsCommitting(true);
     setLastError(null);
+    // 3-step lifecycle mirrors the Bank8 flow shape so the App-level
+    // ProgressFlow renders identically (Sign → Confirm → Saved).
+    // The long "wait for epoch boundary" step is NOT in here — it
+    // lives in the Notebook entry after this session terminates.
+    // Two-act pattern: this is the commit ACT; the reveal ACT runs
+    // later as its own ProgressFlow session (see reveal() below).
+    const lc = buildPoolLifecycle(
+      ['Sign in wallet', 'Confirm on-chain', 'Saved to notebook'],
+      onProgress,
+    );
     try {
       // Build the claim (generates entropy, normalizes addresses, computes commitment)
       const { claim, commitment } = newClaim({
@@ -220,6 +259,7 @@ export const usePool = (): UsePoolHook => {
       const isNative = token === NATIVE_TOKEN_ADDRESS;
       const value = isNative ? bucketSize + feeWei : feeWei;
 
+      lc.set(0, 'running', 'Open your wallet and sign commitToPool…');
       const txHash = (await writeContractAsync({
         address: contractAddress as Address,
         abi: CTGTRESOR_ABI,
@@ -227,10 +267,34 @@ export const usePool = (): UsePoolHook => {
         args: [commitment, token, bucketIdx],
         value,
       })) as Hex;
+      lc.set(0, 'done', `Signed & broadcast — tx ${txHash.slice(0, 10)}…`);
+      lc.advance(1);
+      lc.set(1, 'running', 'Waiting for on-chain confirmation…');
 
-      // Read currentEpoch AFTER the tx is in flight; we'll capture the on-chain
-      // depositEpoch later when the receipt resolves. For the notebook UX, use
-      // the current epoch as best-effort estimate.
+      // Wait for the actual receipt before advancing the lifecycle past
+      // step 2. Without this, the UI would jump to "Saved" before the
+      // commit was actually mined, and a revert would surface later
+      // through lastError instead of as a failed step.
+      let blockNumber: bigint | undefined;
+      if (publicClient) {
+        try {
+          const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+          if (receipt.status !== 'success') {
+            throw new Error(`commitToPool reverted on-chain (block ${receipt.blockNumber})`);
+          }
+          blockNumber = receipt.blockNumber;
+        } catch (e) {
+          lc.set(1, 'failed', e instanceof Error ? e.message : String(e));
+          throw e;
+        }
+      }
+      lc.set(1, 'done', blockNumber != null ? `Confirmed in block ${blockNumber}` : 'Confirmed');
+
+      lc.advance(2);
+      lc.set(2, 'running', 'Saving to notebook…');
+
+      // Read currentEpoch AFTER the receipt resolves so depositEpoch
+      // reflects what the contract actually stored.
       let depositEpoch = 0;
       try {
         if (publicClient) {
@@ -268,20 +332,32 @@ export const usePool = (): UsePoolHook => {
       setNotebook(next);
 
       const claimURL = buildClaimURL(`${window.location.origin}/claim`, claim);
+      lc.set(2, 'done', `Saved — eligible to reveal at epoch ${depositEpoch + 1}`);
       return { claimURL, commitment, txHash };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setLastError(msg);
+      // Only mark the current phase failed if we haven't already
+      // flagged step 1 above. The receipt-fail path already set step 1
+      // to 'failed' before throwing.
+      lc.set(lc.getPhase(), 'failed', msg);
       throw e;
     } finally {
       setIsCommitting(false);
     }
   }, [_requireEnabled, writeContractAsync, contractAddress, chainId, publicClient]);
 
-  const reveal: UsePoolHook['reveal'] = useCallback(async (entry) => {
+  const reveal: UsePoolHook['reveal'] = useCallback(async (entry, onProgress) => {
     _requireEnabled();
     setIsRevealing(true);
     setLastError(null);
+    // Two-act pattern act 2: this is the REVEAL act, run as its own
+    // ProgressFlow session after the user comes back from the wait
+    // (visible in the Notebook entry).
+    const lc = buildPoolLifecycle(
+      ['Sign in wallet', 'Confirm on-chain', 'Finalize & refresh'],
+      onProgress,
+    );
     try {
       // Sanity check: claim's contract+chain should match the active connection.
       if (entry.claim.contractAddress.toLowerCase() !== (contractAddress as string).toLowerCase()) {
@@ -291,6 +367,7 @@ export const usePool = (): UsePoolHook => {
         throw new Error(`Claim is for chainId ${entry.claim.chainId} but wallet is on ${chainId}`);
       }
 
+      lc.set(0, 'running', 'Open your wallet and sign revealFromPool…');
       const txHash = (await writeContractAsync({
         address: contractAddress as Address,
         abi: CTGTRESOR_ABI,
@@ -304,6 +381,27 @@ export const usePool = (): UsePoolHook => {
           '0x', // zkProof: empty in v1
         ],
       })) as Hex;
+      lc.set(0, 'done', `Signed & broadcast — tx ${txHash.slice(0, 10)}…`);
+      lc.advance(1);
+      lc.set(1, 'running', 'Waiting for on-chain confirmation…');
+
+      let blockNumber: bigint | undefined;
+      if (publicClient) {
+        try {
+          const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+          if (receipt.status !== 'success') {
+            throw new Error(`revealFromPool reverted on-chain (block ${receipt.blockNumber})`);
+          }
+          blockNumber = receipt.blockNumber;
+        } catch (e) {
+          lc.set(1, 'failed', e instanceof Error ? e.message : String(e));
+          throw e;
+        }
+      }
+      lc.set(1, 'done', blockNumber != null ? `Confirmed in block ${blockNumber}` : 'Confirmed');
+
+      lc.advance(2);
+      lc.set(2, 'running', 'Marking entry spent in your notebook…');
 
       // Mark entry spent in the notebook
       const all = _loadNotebook();
@@ -312,18 +410,20 @@ export const usePool = (): UsePoolHook => {
       );
       _saveNotebook(updated);
       setNotebook(updated);
+      lc.set(2, 'done', `Funds delivered to ${entry.claim.withdrawTo.slice(0, 8)}…${entry.claim.withdrawTo.slice(-6)}`);
 
       return { txHash };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setLastError(msg);
+      lc.set(lc.getPhase(), 'failed', msg);
       throw e;
     } finally {
       setIsRevealing(false);
     }
-  }, [_requireEnabled, writeContractAsync, contractAddress, chainId]);
+  }, [_requireEnabled, writeContractAsync, contractAddress, chainId, publicClient]);
 
-  const revealFromURL: UsePoolHook['revealFromURL'] = useCallback(async (claimURL) => {
+  const revealFromURL: UsePoolHook['revealFromURL'] = useCallback(async (claimURL, onProgress) => {
     const claim = decodeTeleportClaim(claimURL);
     const commitment = computeCommitment(claim);
     // Dedup: if this commitment is ALREADY in the notebook (e.g. user is both
@@ -343,7 +443,9 @@ export const usePool = (): UsePoolHook => {
       savedAt: new Date().toISOString(),
       spent: false,
     };
-    const result = await reveal(entry);
+    // Forward onProgress so the recipient-side /claim page sees the
+    // same 3-step lifecycle that the depositor-side Notebook does.
+    const result = await reveal(entry, onProgress);
     // reveal() above already updated the existing entry (or no-op'd if not present).
     // Only add a NEW entry if it wasn't already in the notebook.
     if (!existing) {

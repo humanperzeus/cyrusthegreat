@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Lock, ExternalLink, AlertTriangle, Check, ChevronLeft, Clock } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
 import { usePool, usePoolCurrentEpoch, usePoolBucketSizes, useTokenDecimals, POOL_TOKENS_BY_CHAIN, NATIVE_TOKEN_ADDRESS } from "@/hooks/usePool";
+import { useProgress } from "@/contexts/ProgressContext";
 import { decodeTeleportClaim, computeCommitment, type TeleportClaim } from "@/lib/poolURI";
 import CyrusTresor1Artifact from "@/contracts/abis/CyrusTresor1.json";
 
@@ -49,6 +50,7 @@ const Claim = () => {
   const { isConnected, address: account } = useAccount();
   const walletChainId = useChainId();
   const { revealFromURL, isRevealing, lastError } = usePool();
+  const { startProgress, updateProgress } = useProgress();
 
   const [parseError, setParseError] = useState<string | null>(null);
   const [claim, setClaim] = useState<TeleportClaim | null>(null);
@@ -197,14 +199,30 @@ const Claim = () => {
   const handleClaim = async () => {
     if (!canClaim) return;
     setResult(null);
+    // Same 3-step session shape as the depositor-side Notebook reveal
+    // — the recipient gets identical lifecycle feedback. App-level
+    // ProgressFlow renders this as a centered modal; if the user
+    // already has an in-flight Bank8 tx, it stacks as a chip.
+    const displayAmount = bucketHumanAmount
+      ? `${bucketHumanAmount} ${displaySymbol}`
+      : `bucket ${claim.bucketIdx}`;
+    const sessionId = startProgress(`Claim · ${displayAmount}`, [
+      { label: 'Sign in wallet',     status: 'running', detail: `Preparing claim of ${displayAmount}…` },
+      { label: 'Confirm on-chain',   status: 'pending' },
+      { label: 'Finalize & refresh', status: 'pending' },
+    ]);
     try {
-      const { txHash } = await revealFromURL(window.location.href);
+      const { txHash } = await revealFromURL(
+        window.location.href,
+        (steps) => updateProgress(sessionId, steps),
+      );
       setResult({ txHash });
       // Refresh the on-chain commitment state — should now read spent=true.
       // Without this, the button would show "Claim" again until next refetch.
       refetchCommitment();
     } catch (e) {
-      // lastError captured by the hook
+      // lastError captured by the hook AND the lifecycle step is
+      // already marked failed via the onProgress callback.
     }
   };
 
