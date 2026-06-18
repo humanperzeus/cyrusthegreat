@@ -83,8 +83,9 @@ npx hardhat run scripts/deployCyrusTresor1.ts --network hyperEvmTestnet
 VITE_CTGTRESOR_HYPER_TESTNET_CONTRACT=0xDEAD...     # ← the CyrusTresor1 address
 
 # Then sync to Cloudflare Pages:
-./tools/cf-sync-env.sh    # alias: ctg-sync-env
-# Cloudflare auto-deploys on push, so the live site picks it up next deploy.
+../tools/cf-sync-env.sh    # alias: ctg-sync-env. Lives in CYRUS/tools/, NOT inside this repo.
+# After the sync, Cloudflare→Pages→cyrusthegreat→Deployments→latest→⋯→Retry
+# deployment. Env updates alone don't auto-redeploy.
 ```
 
 Optional: also add the mock address to `.env` for grep-ability —

@@ -97,7 +97,10 @@ These are NON-NEGOTIABLE. Skip any and you risk a Roman-Storm-style outcome.
   testnet endpoints).
 - [ ] **Cloudflare Pages env vars updated** with mainnet contract
   addresses BEFORE the frontend's "mainnet" toggle flips. Use
-  `tools/cf-sync-env.sh` (alias `ctg-sync-env`).
+  `../tools/cf-sync-env.sh` (alias `ctg-sync-env`). The script lives in
+  `CYRUS/tools/`, NOT inside this repo. After running it, manually
+  retry the latest deployment in the Cloudflare dashboard — env
+  updates alone don't trigger a rebuild.
 - [ ] **Frontend gated** by a feature flag (e.g., `VITE_ENABLE_MAINNET`
   in `.env`). Default off. Flip on only after all above checks pass.
 
@@ -198,9 +201,13 @@ WLFI: 0x… (check current token registry)
 3. Run `verify.ts` against the same network
 4. Update `cyrusthegreat/.env` with `VITE_CTGTRESOR_ETH_MAINNET_CONTRACT=0x...`
    (no longer `notdeployednow`)
-5. Run `ctg-sync-env` to push to Cloudflare
+5. Run `../tools/cf-sync-env.sh` (alias `ctg-sync-env`) to push env to
+   Cloudflare, then manually retry the latest deployment in the
+   Cloudflare dashboard so the new env vars actually load
 6. Frontend: flip `VITE_ENABLE_MAINNET=true`, commit, push to main
-7. Cloudflare auto-deploys
+7. Cloudflare auto-deploys (the push triggers a rebuild; this one IS
+   automatic because the source code changed, unlike step 5 which is
+   env-only)
 8. cyrusthegreat.dev offers the mainnet pool
 
 There's no "soft launch" — once step 7 lands, anyone on the open internet
