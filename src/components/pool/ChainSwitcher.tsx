@@ -57,8 +57,8 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
   const buttonClass = (label: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB") =>
     `w-10 h-8 px-1 flex items-center justify-center text-[10px] font-mono rounded cursor-pointer transition-all duration-200 ` +
     (effectiveActive === label
-      ? "text-white bg-primary border border-primary"
-      : "text-muted-foreground/60 bg-transparent border border-muted/30 hover:bg-background/20");
+      ? "text-background bg-vault-primary border border-vault-primary font-semibold"
+      : "text-muted-foreground/60 bg-transparent border border-vault-primary/25 hover:bg-vault-primary/10 hover:border-vault-primary/50");
 
   const chainMismatch = walletChainLabel && walletChainLabel !== activeChain;
 
@@ -85,7 +85,7 @@ export const ChainSwitcher = ({ activeChain, setActiveChain }: ChainSwitcherProp
           {isSwitching === "ARB" ? "…" : (isTestnet ? "tARB" : "ARB")}
         </button>
         <div
-          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-muted/30 rounded cursor-not-allowed"
+          className="w-10 h-8 flex items-center justify-center text-[10px] font-mono text-muted-foreground/40 bg-transparent border border-vault-primary/15 rounded cursor-not-allowed"
           title="Solana — not yet integrated"
         >
           SOL

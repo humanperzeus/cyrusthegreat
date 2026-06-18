@@ -149,7 +149,7 @@ const Claim = () => {
   if (!WEB3_CONFIG.ENABLE_POOL) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12">
-        <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+        <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
           <h1 className="text-xl font-bold mb-2">Pool feature disabled</h1>
           <p className="text-sm text-muted-foreground">
             The anonymity pool isn't currently enabled on this build. Contact whoever sent you
@@ -166,7 +166,7 @@ const Claim = () => {
         <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
           <ChevronLeft className="w-4 h-4 mr-1" /> Back to vault
         </Button>
-        <Card className="p-6 bg-card/80 backdrop-blur border-red-500/30">
+        <Card className="p-6 bg-gradient-card backdrop-blur border-red-500/30">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
             <div>
@@ -226,10 +226,10 @@ const Claim = () => {
       </Button>
 
       {/* Header */}
-      <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+      <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
         <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 rounded-full bg-primary/10">
-            <Lock className="w-5 h-5 text-primary" />
+          <div className="p-2 rounded-full bg-vault-primary/15">
+            <Lock className="w-5 h-5 text-vault-primary" />
           </div>
           <div>
             <h1 className="text-xl font-bold">Pool Claim</h1>
@@ -243,7 +243,7 @@ const Claim = () => {
       </Card>
 
       {/* Claim details */}
-      <Card className="p-6 bg-card/80 backdrop-blur border-border/50 space-y-4">
+      <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30 space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Claim details</h2>
 
         <div className="space-y-1.5 text-xs font-mono">
@@ -258,7 +258,7 @@ const Claim = () => {
                 <a
                   href={chainInfo ? `${chainInfo.explorer}/address/${claim.token}` : "#"}
                   target="_blank" rel="noreferrer noopener"
-                  className="hover:text-primary inline-flex items-center gap-1"
+                  className="hover:text-vault-primary inline-flex items-center gap-1"
                 >
                   {claim.token.slice(0, 8)}…{claim.token.slice(-6)} <ExternalLink className="w-3 h-3" />
                 </a>
@@ -282,12 +282,12 @@ const Claim = () => {
             <a
               href={chainInfo ? `${chainInfo.explorer}/address/${claim.contractAddress}` : "#"}
               target="_blank" rel="noreferrer noopener"
-              className="hover:text-primary inline-flex items-center gap-1"
+              className="hover:text-vault-primary inline-flex items-center gap-1"
             >
               {claim.contractAddress.slice(0, 8)}…{claim.contractAddress.slice(-6)} <ExternalLink className="w-3 h-3" />
             </a>
           </div>
-          <div className="flex justify-between gap-4 pt-2 border-t border-border/30">
+          <div className="flex justify-between gap-4 pt-2 border-t border-vault-primary/15">
             <span className="text-muted-foreground">Commitment hash:</span>
             <span className="truncate" title={computedCommitment}>
               {computedCommitment.slice(0, 10)}…{computedCommitment.slice(-8)}
@@ -345,7 +345,7 @@ const Claim = () => {
             <a
               href={`${chainInfo.explorer}/address/${claim.contractAddress}`}
               target="_blank" rel="noreferrer noopener"
-              className="inline-flex items-center gap-1 mt-3 text-xs text-primary hover:underline font-mono"
+              className="inline-flex items-center gap-1 mt-3 text-xs text-vault-primary hover:underline font-mono"
             >
               View contract events <ExternalLink className="w-3 h-3" />
             </a>
@@ -395,9 +395,9 @@ const Claim = () => {
           </div>
         </Card>
       ) : claimState === "wait" ? (
-        <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+        <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
           <div className="flex items-center gap-2 mb-3">
-            <Clock className="w-5 h-5 text-primary" />
+            <Clock className="w-5 h-5 text-vault-primary" />
             <p className="font-semibold">Not eligible yet</p>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -407,13 +407,13 @@ const Claim = () => {
               <> at <span className="font-mono text-foreground">{new Date(eligibleAtMs).toLocaleString()}</span></>
             )}.
           </p>
-          <Button disabled className="w-full bg-primary hover:bg-primary/90 mt-3 opacity-60">
+          <Button disabled className="w-full bg-vault-primary text-background hover:bg-vault-primary/90 mt-3 opacity-60">
             Wait {msUntil !== undefined ? formatCountdown(msUntil) : "…"}
           </Button>
         </Card>
       ) : (
-        <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
-          <Button onClick={handleClaim} disabled={!canClaim} className="w-full bg-primary hover:bg-primary/90">
+        <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
+          <Button onClick={handleClaim} disabled={!canClaim} className="w-full bg-vault-primary text-background hover:bg-vault-primary/90">
             {isRevealing
               ? "Claiming…"
               : claimState === "loading"
@@ -452,7 +452,7 @@ const Claim = () => {
             <a
               href={`${chainInfo.explorer}/tx/${result.txHash}`}
               target="_blank" rel="noreferrer noopener"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-mono"
+              className="inline-flex items-center gap-1 text-xs text-vault-primary hover:underline font-mono"
             >
               View tx <ExternalLink className="w-3 h-3" />
             </a>

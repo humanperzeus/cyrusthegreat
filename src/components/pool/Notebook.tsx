@@ -113,10 +113,10 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
   };
 
   return (
-    <Card className="p-6 bg-card/80 backdrop-blur border-border/50 space-y-4">
+    <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Clock className="w-5 h-5 text-primary" />
+          <Clock className="w-5 h-5 text-vault-primary" />
           <h3 className="text-base font-semibold">Your Commits (notebook)</h3>
           <span className="text-xs text-muted-foreground">
             {dedupedNotebook.filter((e) => !e.spent).length} pending · {dedupedNotebook.filter((e) => e.spent).length} revealed
@@ -164,8 +164,8 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
                 entry.spent
                   ? "border-emerald-500/30 bg-emerald-500/5"
                   : isEligible
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-border/40 bg-card/40"
+                  ? "border-vault-primary/60 bg-vault-primary/10"
+                  : "border-vault-primary/20 bg-vault-primary/5"
               }`}
             >
               {/* Top row: status + bucket + withdrawTo */}
@@ -175,7 +175,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
                     <Check className="w-3 h-3" /> Revealed
                   </span>
                 ) : isEligible ? (
-                  <span className="text-primary font-medium">Ready to reveal</span>
+                  <span className="text-vault-primary font-medium">Ready to reveal</span>
                 ) : (
                   <span className="text-muted-foreground inline-flex items-center gap-1">
                     <Clock className="w-3 h-3" /> {formatCountdown(msUntil)}
@@ -209,7 +209,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
                       href={explorerForChain(activeChain, entry.commitTx)}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="text-foreground/70 hover:text-primary inline-flex items-center gap-1"
+                      className="text-foreground/70 hover:text-vault-primary inline-flex items-center gap-1"
                     >
                       commit tx <ExternalLink className="w-3 h-3" />
                     </a>
@@ -234,7 +234,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
                     size="sm"
                     onClick={() => handleReveal(entry)}
                     disabled={!isEligible || isRevealing || !isCurrentChain}
-                    className="bg-primary hover:bg-primary/90"
+                    className="bg-vault-primary text-background hover:bg-vault-primary/90"
                   >
                     {isRevealing ? "Revealing…" : !isCurrentChain ? "Switch chain" : isEligible ? "Reveal" : "Not eligible yet"}
                   </Button>
@@ -252,7 +252,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
 
               {/* Expandable claim URL */}
               {expandedClaim === entry.commitment && (
-                <div className="pt-2 space-y-2 border-t border-border/30">
+                <div className="pt-2 space-y-2 border-t border-vault-primary/15">
                   <div className="flex gap-2">
                     <Input
                       readOnly
@@ -286,7 +286,7 @@ export const Notebook = ({ activeChain }: NotebookProps) => {
         </div>
       )}
 
-      <div className="pt-3 border-t border-border/30">
+      <div className="pt-3 border-t border-vault-primary/15">
         <Button
           size="sm"
           variant="ghost"

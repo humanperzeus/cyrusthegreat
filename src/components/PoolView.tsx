@@ -47,10 +47,10 @@ export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
       </div>
 
       {/* Header card — mirrors the Secure Vault hero in VaultCore */}
-      <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+      <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
         <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 rounded-full bg-primary/10">
-            <Lock className="w-5 h-5 text-primary" />
+          <div className="p-2 rounded-full bg-vault-primary/15">
+            <Lock className="w-5 h-5 text-vault-primary" />
           </div>
           <div>
             <h2 className="text-xl font-bold">Anonymity Pool</h2>
@@ -90,7 +90,7 @@ export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
 
       {/* Address debug footer — kept for now, useful for verifying which contract
           you're committing to. Remove once the dapp matures. */}
-      <Card className="p-3 bg-card/40 border-border/30 text-xs font-mono">
+      <Card className="p-3 bg-gradient-card border-vault-primary/15 text-xs font-mono">
         <div className="text-muted-foreground">
           Active chain: <span className="text-foreground">{activeChain}</span>
           {" · "}

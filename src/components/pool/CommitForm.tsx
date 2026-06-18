@@ -157,7 +157,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   // Not deployed on this chain (e.g. mainnet currently `notdeployednow`)
   if (!contractAddress) {
     return (
-      <Card className="p-6 bg-card/80 backdrop-blur border-yellow-500/30">
+      <Card className="p-6 bg-gradient-card backdrop-blur border-yellow-500/30">
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
           <div>
@@ -173,9 +173,9 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
   }
 
   return (
-    <Card className="p-6 bg-card/80 backdrop-blur border-border/50 space-y-5">
+    <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30 space-y-5">
       <div className="flex items-center gap-2">
-        <Lock className="w-5 h-5 text-primary" />
+        <Lock className="w-5 h-5 text-vault-primary" />
         <h3 className="text-base font-semibold">Commit to Anonymity Pool</h3>
       </div>
 
@@ -191,8 +191,8 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
                 onClick={() => setSelectedToken(t)}
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors border ${
                   selectedToken?.address === t.address
-                    ? "bg-primary/20 border-primary/40 text-foreground"
-                    : "bg-card/50 border-border/40 text-muted-foreground hover:border-border"
+                    ? "bg-vault-primary/20 border-vault-primary/60 text-vault-primary"
+                    : "bg-vault-primary/5 border-vault-primary/20 text-muted-foreground hover:border-vault-primary/40"
                 }`}
               >
                 {t.symbol}
@@ -218,8 +218,8 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
                 onClick={() => setBucketIdx(idx)}
                 className={`px-3 py-2 rounded-md text-sm font-mono transition-colors border ${
                   idx === bucketIdx
-                    ? "bg-primary/20 border-primary/40 text-foreground"
-                    : "bg-card/50 border-border/40 text-muted-foreground hover:border-border"
+                    ? "bg-vault-primary/20 border-vault-primary/60 text-vault-primary"
+                    : "bg-vault-primary/5 border-vault-primary/20 text-muted-foreground hover:border-vault-primary/40"
                 }`}
               >
                 {formatUnits(size, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
@@ -261,7 +261,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
 
       {/* Summary */}
       {bucketSize != null && feeWei != null && (
-        <div className="rounded-md border border-border/40 bg-card/50 p-3 space-y-1.5 text-xs font-mono">
+        <div className="rounded-md border border-vault-primary/20 bg-vault-primary/5 p-3 space-y-1.5 text-xs font-mono">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Bucket size:</span>
             <span>{formatUnits(bucketSize, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}</span>
@@ -270,7 +270,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
             <span className="text-muted-foreground">Dynamic fee:</span>
             <span>{formatUnits(feeWei, 18)} {nativeSymbol}</span>
           </div>
-          <div className="flex justify-between border-t border-border/40 pt-1.5 mt-1.5">
+          <div className="flex justify-between border-t border-vault-primary/20 pt-1.5 mt-1.5">
             <span>{isNative ? "Total sent:" : "msg.value (fee only):"}</span>
             <span className="font-semibold">
               {totalNativeWei != null ? formatUnits(totalNativeWei, 18) : "—"} {nativeSymbol}
@@ -282,7 +282,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
             </span>
           </div>
           {eligibleAtMs != null && (
-            <div className="flex justify-between text-muted-foreground pt-1.5 border-t border-border/40 mt-1.5">
+            <div className="flex justify-between text-muted-foreground pt-1.5 border-t border-vault-primary/20 mt-1.5">
               <span>Eligible to reveal:</span>
               <span>epoch {eligibleEpoch} ({new Date(eligibleAtMs).toLocaleString()})</span>
             </div>
@@ -292,7 +292,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
 
       {/* Allowance status row — only relevant for ERC-20 tokens */}
       {!isNative && bucketSize != null && (
-        <div className="rounded-md border border-border/30 bg-card/30 px-3 py-2 text-xs font-mono flex items-center gap-2">
+        <div className="rounded-md border border-vault-primary/15 bg-vault-primary/5 px-3 py-2 text-xs font-mono flex items-center gap-2">
           <ShieldCheck className={`w-3.5 h-3.5 ${needsApproval ? 'text-yellow-500' : 'text-emerald-400'}`} />
           <span className="text-muted-foreground">Allowance:</span>
           <span className={needsApproval ? "text-yellow-200" : "text-emerald-200"}>
@@ -309,7 +309,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
         <Button
           onClick={handleApprove}
           disabled={!canApprove}
-          className="w-full bg-primary hover:bg-primary/90"
+          className="w-full bg-vault-primary text-background hover:bg-vault-primary/90"
         >
           {isApproving ? "Approving…" : !isConnected ? "Connect wallet first" : `Approve ${formatUnits(bucketSize!, tokenDecimals)} ${tokenSymbol}`}
         </Button>
@@ -317,7 +317,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
       <Button
         onClick={handleCommit}
         disabled={!canCommit}
-        className="w-full bg-primary hover:bg-primary/90"
+        className="w-full bg-vault-primary text-background hover:bg-vault-primary/90"
       >
         {isCommitting ? "Committing…" : !isConnected ? "Connect wallet first" : !withdrawToValid ? "Enter a valid recipient address" : "Commit"}
       </Button>
@@ -344,7 +344,7 @@ export const CommitForm = ({ activeChain }: CommitFormProps) => {
                 href={explorerForChain(activeChain, result.txHash)}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="font-mono text-foreground hover:text-primary inline-flex items-center gap-1"
+                className="font-mono text-foreground hover:text-vault-primary inline-flex items-center gap-1"
               >
                 {result.txHash.slice(0, 10)}…{result.txHash.slice(-8)} <ExternalLink className="w-3 h-3" />
               </a>
