@@ -10,15 +10,15 @@ The dapp without connecting a wallet — for reviewers, grant panels, and anyone
 
 | Surface | Status | Preview | What to look at |
 |---|---|---|---|
+| **v1 — CyrusTresor (vault home)** | ✅ Captured | ![CyrusTresor home](docs/screenshots/01-cyrustresor-home.png) | "Secure Vault" hero, Testnet/Mainnet switch top, contract-explorer buttons per chain, Deposit/Withdraw/Transfer entry points, connect-wallet CTAs, feature blurbs at bottom |
 | **v2 — CyrusTeleport commit form** | ✅ Captured | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Imperial Gold theme, Testnet/Mainnet switch, v1/v2 tabs, 5-chain switcher (tARB active), bucket picker, Teleport/Escrow tabs, fee summary, build SHA pill bottom-left |
-| **v1 — CyrusTresor (vault home)** | ⏳ Pending | `docs/screenshots/01-cyrustresor-home.png` | 5-chain switcher, connect-wallet hero, action buttons |
+| **/claim page** | ✅ Captured (error state) | ![Claim page](docs/screenshots/08-claim-page.png) | Recipient-side route validation. Showing the "invalid claim URL" state — full eligible-to-claim view requires a real claim URL fragment with secret + salt |
 | **v1 — Multi-token deposit modal** | ⏳ Pending (wallet needed) | `docs/screenshots/02-multi-token-deposit.png` | Per-token row, batched single-tx, locale-tolerant inputs |
-| **v2 — Escrow mode** | ⏳ Pending | `docs/screenshots/04-cyrusteleport-escrow.png` | Escrow tab selected, agent address field, yellow warning |
+| **v2 — Escrow mode** | ⏳ Pending (wallet needed for v2 view) | `docs/screenshots/04-cyrusteleport-escrow.png` | Escrow tab selected, agent address field, yellow warning |
 | **v2 — Notebook with mixed entries** | ⏳ Pending (wallet needed) | `docs/screenshots/05-notebook.png` | Pending + eligible + revealed states |
 | **v2 — 4-step ERC-20 ProgressFlow** | ⏳ Pending (wallet needed) | `docs/screenshots/06-progressflow-4step.png` | Approve → Sign → Confirm → Saved gold-stepper |
 | **Stacked chips during concurrent txs** | ⏳ Pending (wallet needed) | `docs/screenshots/07-stacked-chips.png` | One centered ProgressFlow + others as bottom-right chips |
-| **/claim page (recipient-side)** | ⏳ Pending | `docs/screenshots/08-claim-page.png` | Decoded claim details + eligible/wait/already-claimed states |
-| **Mainnet "coming soon" guard** | ⏳ Pending | `docs/screenshots/09-mainnet-guard.png` | After flipping the Mainnet switch on a build with no mainnet contracts |
+| **Mainnet "coming soon" guard** | ⏳ Pending (live build's mainnet switch may need a fix to flip mode reliably — see notes) | `docs/screenshots/09-mainnet-guard.png` | After flipping the Mainnet switch on a build with no mainnet contracts |
 
 To capture the pending ones: open `cyrusthegreat.dev` in your browser, navigate to each surface, take a screenshot (`Cmd+Shift+4` on macOS), save as PNG with the matching filename under `docs/screenshots/`, then commit. See [docs/screenshots/README.md](docs/screenshots/README.md) for per-shot recipes.
 
