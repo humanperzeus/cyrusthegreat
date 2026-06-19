@@ -8,17 +8,13 @@ A sophisticated, privacy-focused Web3 vault that enables anonymous ETH and ERC20
 
 The dapp without connecting a wallet — for reviewers, grant panels, and anyone who wants to evaluate the UI without going through the wallet-connect flow.
 
-| Surface | Status | Preview | What to look at |
-|---|---|---|---|
-| **v1 — CyrusTresor (vault home)** | ✅ Captured | ![CyrusTresor home](docs/screenshots/01-cyrustresor-home.png) | "Secure Vault" hero, Testnet/Mainnet switch top, contract-explorer buttons per chain, Deposit/Withdraw/Transfer entry points, connect-wallet CTAs, feature blurbs at bottom |
-| **v1 — Multi-token batched deposit** | ✅ Captured | ![Multi-token deposit](docs/screenshots/02-multi-token-deposit.png) | 3-token batch (ETH 0.3 + WLFI 50 + USD1 10), MAX-approval toggles per token, live balance read, validation summary, single "Deposit 3 Tokens" CTA |
-| **v2 — CyrusTeleport commit form (wallet connected)** | ✅ Captured | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Testnet/Mainnet switch, v1/v2 tabs, 5-chain switcher (tETH active), real wallet balance, bucket picker (0.001 / 0.01 / 0.1 / 1 ETH), Teleport/Escrow tabs, fee summary, eligible-epoch ETA |
-| **v2 — Commit success + shareable claim URL** | ✅ Captured | ![Commit success](docs/screenshots/05-commit-success.png) | Post-commit result card: tx hash + link, full claim URL with copy button, QR code, yellow "treat like cash" warning about end-to-end sharing |
-| **/claim page** | ✅ Captured (error state) | ![Claim page](docs/screenshots/08-claim-page.png) | Recipient-side route validation. Showing the "invalid claim URL" state — full eligible-to-claim view requires a real claim URL fragment with secret + salt |
-| **v2 — Escrow mode** | ⏳ Pending | `docs/screenshots/04-cyrusteleport-escrow.png` | Escrow tab selected, agent address field, yellow "treat the agent as if they hold the cash" warning |
-| **Mainnet "coming soon" guard** | ⏳ Pending | `docs/screenshots/09-mainnet-guard.png` | After flipping the Mainnet switch on a build with no mainnet contracts |
-
-To capture the pending ones: open `cyrusthegreat.dev` in your browser, navigate to each surface, take a screenshot (`Cmd+Shift+4` on macOS), save as PNG with the matching filename under `docs/screenshots/`, then commit. See [docs/screenshots/README.md](docs/screenshots/README.md) for per-shot recipes.
+| Surface | Preview | What to look at |
+|---|---|---|
+| **v1 — CyrusTresor (vault home)** | ![CyrusTresor home](docs/screenshots/01-cyrustresor-home.png) | "Secure Vault" hero, branding ("human rights since 539BC"), wallet + vault balance cards, connect-wallet CTAs, feature blurbs (Anonymous Transfers / Secure Storage / Multi-Asset Support) |
+| **v1 — Multi-token batched deposit** | ![Multi-token deposit](docs/screenshots/02-multi-token-deposit.png) | 3-token batch (ETH 0.3 + WLFI 50 + USD1 10), MAX-approval toggles per token, live balance read, validation summary, single "Deposit 3 Tokens" CTA |
+| **v2 — CyrusTeleport commit form** | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Testnet/Mainnet switch, v1/v2 tabs, 5-chain switcher (tETH active), real wallet balance, bucket picker (0.001 / 0.01 / 0.1 / 1 ETH), Teleport/Escrow tabs, fee summary, eligible-epoch ETA |
+| **v2 — Commit success + shareable claim URL** | ![Commit success](docs/screenshots/05-commit-success.png) | Post-commit result card: tx hash + link, full claim URL with copy button, QR code, yellow "treat like cash" warning |
+| **/claim page** | ![Claim page](docs/screenshots/08-claim-page.png) | Recipient-side route validation |
 
 ## 🚀 Features
 
