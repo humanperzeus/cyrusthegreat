@@ -8,19 +8,19 @@ A sophisticated, privacy-focused Web3 vault that enables anonymous ETH and ERC20
 
 The dapp without connecting a wallet — for reviewers, grant panels, and anyone who wants to evaluate the UI without going through the wallet-connect flow.
 
-| Surface | Preview | What to look at |
-|---|---|---|
-| **v1 — CyrusTresor (vault home)** | ![CyrusTresor home](docs/screenshots/01-cyrustresor-home.png) | 5-chain switcher, vault balance card, deposit/withdraw/transfer entry points, Imperial Gold theme |
-| **v1 — Multi-token deposit modal** | ![Multi-token deposit](docs/screenshots/02-multi-token-deposit.png) | Per-token row, batched single-tx deposit, locale-tolerant amount inputs |
-| **v2 — CyrusTeleport commit form (Teleport mode)** | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Token + bucket picker, recipient input, allowance + balance pre-flight rows |
-| **v2 — CyrusTeleport commit form (Escrow mode)** | ![Escrow mode](docs/screenshots/04-cyrusteleport-escrow.png) | Escrow tab selected, agent address field, "treat the agent as if they hold the cash" warning |
-| **v2 — Notebook with mixed entries** | ![Notebook](docs/screenshots/05-notebook.png) | Pending entries with countdown, eligible entries with Reveal button, revealed entries in emerald |
-| **v2 — ProgressFlow during 4-step ERC-20 commit** | ![4-step ProgressFlow](docs/screenshots/06-progressflow-4step.png) | Gold step indicator, Approve → Sign → Confirm → Saved lifecycle |
-| **Stacked chips during multiple concurrent txs** | ![Stacked chips](docs/screenshots/07-stacked-chips.png) | Two or three ProgressFlow sessions: one centered, others as chips bottom-right |
-| **/claim page (recipient-side)** | ![Claim page](docs/screenshots/08-claim-page.png) | Decoded claim details, chain warning, eligible/wait/already-claimed states |
-| **Mainnet "coming soon" guard** | ![Mainnet guard](docs/screenshots/09-mainnet-guard.png) | Triggered by flipping the testnet/mainnet switch on a build without mainnet contracts |
+| Surface | Status | Preview | What to look at |
+|---|---|---|---|
+| **v2 — CyrusTeleport commit form** | ✅ Captured | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Imperial Gold theme, Testnet/Mainnet switch, v1/v2 tabs, 5-chain switcher (tARB active), bucket picker, Teleport/Escrow tabs, fee summary, build SHA pill bottom-left |
+| **v1 — CyrusTresor (vault home)** | ⏳ Pending | `docs/screenshots/01-cyrustresor-home.png` | 5-chain switcher, connect-wallet hero, action buttons |
+| **v1 — Multi-token deposit modal** | ⏳ Pending (wallet needed) | `docs/screenshots/02-multi-token-deposit.png` | Per-token row, batched single-tx, locale-tolerant inputs |
+| **v2 — Escrow mode** | ⏳ Pending | `docs/screenshots/04-cyrusteleport-escrow.png` | Escrow tab selected, agent address field, yellow warning |
+| **v2 — Notebook with mixed entries** | ⏳ Pending (wallet needed) | `docs/screenshots/05-notebook.png` | Pending + eligible + revealed states |
+| **v2 — 4-step ERC-20 ProgressFlow** | ⏳ Pending (wallet needed) | `docs/screenshots/06-progressflow-4step.png` | Approve → Sign → Confirm → Saved gold-stepper |
+| **Stacked chips during concurrent txs** | ⏳ Pending (wallet needed) | `docs/screenshots/07-stacked-chips.png` | One centered ProgressFlow + others as bottom-right chips |
+| **/claim page (recipient-side)** | ⏳ Pending | `docs/screenshots/08-claim-page.png` | Decoded claim details + eligible/wait/already-claimed states |
+| **Mainnet "coming soon" guard** | ⏳ Pending | `docs/screenshots/09-mainnet-guard.png` | After flipping the Mainnet switch on a build with no mainnet contracts |
 
-To regenerate: open cyrusthegreat.dev in a browser, capture each surface above (no wallet connect needed for `01`, `08`, `09`; connect a testnet wallet for the others), save as PNG under `docs/screenshots/` with the filenames above. Suggested width 1200-1600px.
+To capture the pending ones: open `cyrusthegreat.dev` in your browser, navigate to each surface, take a screenshot (`Cmd+Shift+4` on macOS), save as PNG with the matching filename under `docs/screenshots/`, then commit. See [docs/screenshots/README.md](docs/screenshots/README.md) for per-shot recipes.
 
 ## 🚀 Features
 

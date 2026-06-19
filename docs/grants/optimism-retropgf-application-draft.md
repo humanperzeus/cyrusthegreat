@@ -146,13 +146,21 @@ Concrete roadmap from current state to sustainable operation:
 
 | Stage | Effort | Funded by |
 |---|---|---|
+| **Phase A · Near-term (next 4-8 weeks)** | | |
+| Submit this grant; ship P2P payments + receipts UI; ship fundraising-page generator | 4-6 weeks solo dev | Zero capital |
 | Audit (Spearbit / Cantina / Code4rena, single-chain v1 only) | $25-40k, 2-3 weeks | THIS GRANT if awarded |
 | Mainnet deploy of single-chain CyrusTresor + CyrusTresor1 across 5 chains | 1-2 weeks dev + gas costs | THIS GRANT |
 | Initial LP funding (for v1 single-chain pool — not strictly needed but enables larger bucket sizes) | $5-20k inventory | This grant + protocol fees |
-| Cross-chain teleport build (LayerZero v2, Sepolia ↔ Base) | 8-10 weeks | Subsequent grants + protocol fees |
+| **Phase B · Yield-bearing CyrusTresor (3-4 months from mainnet)** | | |
+| CyrusTresor v3 — vault routes idle deposits to Aave v3 / Morpho / Spark to earn yield. Vault keeps 10-20% of yield as protocol revenue. User funds stay self-custodial throughout (un-stake on withdraw). Pattern: Yearn / Beefy / Sommelier ($30B+ industry) | 2-3 months Solidity + integration | Protocol fees + grants |
+| Yield-bearing audit (separate scope from v1) | $30-50k, 3 weeks | Protocol fees + Phase A grants |
+| **Phase C · Cross-chain CyrusTeleport (Q2 next year)** | | |
+| Cross-chain teleport build (LayerZero v2, Sepolia ↔ Base first pair) | 8-10 weeks | Subsequent grants + protocol fees |
 | Cross-chain audit | $25-40k | Subsequent grants |
 | Mainnet cross-chain launch | 4-6 weeks | Subsequent grants |
+| **Phase D · Ongoing** | | |
 | Ongoing operations | $500-2000/month | Protocol fees |
+| Future expansions: human-agent escrow marketplace, wallet-to-wallet chat, ICP/BTC integration via Chain Fusion | Per-project | Self-funded from yield + protocol fees |
 
 Protocol-fee economics:
 - Dynamic fee of ~$0.10 USD-equivalent per deposit/withdraw/transfer/commit/reveal (set via Chainlink price feeds)
