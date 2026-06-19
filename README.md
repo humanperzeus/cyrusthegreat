@@ -11,14 +11,12 @@ The dapp without connecting a wallet — for reviewers, grant panels, and anyone
 | Surface | Status | Preview | What to look at |
 |---|---|---|---|
 | **v1 — CyrusTresor (vault home)** | ✅ Captured | ![CyrusTresor home](docs/screenshots/01-cyrustresor-home.png) | "Secure Vault" hero, Testnet/Mainnet switch top, contract-explorer buttons per chain, Deposit/Withdraw/Transfer entry points, connect-wallet CTAs, feature blurbs at bottom |
-| **v2 — CyrusTeleport commit form** | ✅ Captured | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Imperial Gold theme, Testnet/Mainnet switch, v1/v2 tabs, 5-chain switcher (tARB active), bucket picker, Teleport/Escrow tabs, fee summary, build SHA pill bottom-left |
+| **v1 — Multi-token batched deposit** | ✅ Captured | ![Multi-token deposit](docs/screenshots/02-multi-token-deposit.png) | 3-token batch (ETH 0.3 + WLFI 50 + USD1 10), MAX-approval toggles per token, live balance read, validation summary, single "Deposit 3 Tokens" CTA |
+| **v2 — CyrusTeleport commit form (wallet connected)** | ✅ Captured | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Testnet/Mainnet switch, v1/v2 tabs, 5-chain switcher (tETH active), real wallet balance, bucket picker (0.001 / 0.01 / 0.1 / 1 ETH), Teleport/Escrow tabs, fee summary, eligible-epoch ETA |
+| **v2 — Commit success + shareable claim URL** | ✅ Captured | ![Commit success](docs/screenshots/05-commit-success.png) | Post-commit result card: tx hash + link, full claim URL with copy button, QR code, yellow "treat like cash" warning about end-to-end sharing |
 | **/claim page** | ✅ Captured (error state) | ![Claim page](docs/screenshots/08-claim-page.png) | Recipient-side route validation. Showing the "invalid claim URL" state — full eligible-to-claim view requires a real claim URL fragment with secret + salt |
-| **v1 — Multi-token deposit modal** | ⏳ Pending (wallet needed) | `docs/screenshots/02-multi-token-deposit.png` | Per-token row, batched single-tx, locale-tolerant inputs |
-| **v2 — Escrow mode** | ⏳ Pending (wallet needed for v2 view) | `docs/screenshots/04-cyrusteleport-escrow.png` | Escrow tab selected, agent address field, yellow warning |
-| **v2 — Notebook with mixed entries** | ⏳ Pending (wallet needed) | `docs/screenshots/05-notebook.png` | Pending + eligible + revealed states |
-| **v2 — 4-step ERC-20 ProgressFlow** | ⏳ Pending (wallet needed) | `docs/screenshots/06-progressflow-4step.png` | Approve → Sign → Confirm → Saved gold-stepper |
-| **Stacked chips during concurrent txs** | ⏳ Pending (wallet needed) | `docs/screenshots/07-stacked-chips.png` | One centered ProgressFlow + others as bottom-right chips |
-| **Mainnet "coming soon" guard** | ⏳ Pending (live build's mainnet switch may need a fix to flip mode reliably — see notes) | `docs/screenshots/09-mainnet-guard.png` | After flipping the Mainnet switch on a build with no mainnet contracts |
+| **v2 — Escrow mode** | ⏳ Pending | `docs/screenshots/04-cyrusteleport-escrow.png` | Escrow tab selected, agent address field, yellow "treat the agent as if they hold the cash" warning |
+| **Mainnet "coming soon" guard** | ⏳ Pending | `docs/screenshots/09-mainnet-guard.png` | After flipping the Mainnet switch on a build with no mainnet contracts |
 
 To capture the pending ones: open `cyrusthegreat.dev` in your browser, navigate to each surface, take a screenshot (`Cmd+Shift+4` on macOS), save as PNG with the matching filename under `docs/screenshots/`, then commit. See [docs/screenshots/README.md](docs/screenshots/README.md) for per-shot recipes.
 
