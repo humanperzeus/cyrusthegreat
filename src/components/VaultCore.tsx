@@ -1036,7 +1036,7 @@ export const VaultCore = ({
               >
                 {currentNetwork.networkMode === 'mainnet' ? 'ARB' : 'tARB'}
               </div>
-              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Solana (Coming Soon)">
+              <div className="w-8 h-8 p-0 flex items-center justify-center text-xs font-mono text-muted-foreground/50 bg-transparent border border-muted/30 rounded cursor-not-allowed" title="Solana — not yet integrated (roadmap)">
                 SOL
               </div>
             </div>

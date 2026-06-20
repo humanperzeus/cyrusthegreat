@@ -54,13 +54,11 @@ export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
           </div>
           <div>
             <h2 className="text-xl font-bold">CyrusTeleport</h2>
-            <p className="text-xs text-muted-foreground">Anonymous payments · 5 chains · opt-in privacy</p>
+            <p className="text-xs text-muted-foreground">Anonymous P2P payments — pay anyone, no public link</p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Send crypto without leaving a public link between sender and recipient. Funds enter a
-          shared pool, you wait ~1 hour, then the recipient claims via a shareable URL. Works
-          peer-to-peer or via an escrow agent.
+          You commit to the pool, wait ~1 hour, recipient claims via a shareable URL.
         </p>
       </Card>
 
@@ -69,14 +67,10 @@ export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
         <div className="flex gap-3">
           <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="text-sm font-medium text-yellow-200">Privacy disclaimer — read before depositing</p>
+            <p className="text-sm font-medium text-yellow-200">Cohort-based privacy, not cryptographic anonymity</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              This pool provides <span className="font-medium text-foreground">k-anonymity within an
-              epoch+bucket cohort</span> — convenient privacy against casual block-explorer watchers, but
-              <span className="font-medium text-foreground"> not cryptographic anonymity</span>. A
-              determined chain analyst can still link your commit transaction to your reveal transaction
-              by computing the commitment hash on-chain. A v2 ZK-shielded upgrade is in development for
-              real cryptographic anonymity. Do not use for value you cannot afford to have de-anonymized.
+              A determined chain analyst can still link your commit to the reveal.
+              Don't use for high-value or sensitive transactions. ZK-shielded upgrade planned.
             </p>
           </div>
         </div>
