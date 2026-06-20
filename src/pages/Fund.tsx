@@ -23,12 +23,18 @@
  * display-only.
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useChainId } from "wagmi";
+import { formatUnits, type Address } from "viem";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, HeartHandshake, ExternalLink, AlertTriangle } from "lucide-react";
+import { ChevronLeft, HeartHandshake, ExternalLink, AlertTriangle, TrendingUp, Loader2 } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
+import {
+  POOL_TOKENS_BY_CHAIN,
+  usePoolRevealsForRecipient,
+} from "@/hooks/usePool";
 
 const Fund = () => {
   const navigate = useNavigate();
@@ -44,6 +50,41 @@ const Fund = () => {
 
   const recipientValid = /^0x[a-fA-F0-9]{40}$/.test(recipient);
   const titleValid = title.trim().length > 0;
+
+  // Resolve the campaign's token address from the symbol via the
+  // current chain's registry. If wallet isn't on a supported chain,
+  // fallback to Sepolia (most-deployed). If token symbol isn't found,
+  // we'll skip progress + show a one-line caveat.
+  const walletChainId = useChainId();
+  const chainForTokens = walletChainId ?? 11155111;
+  const availableTokens = POOL_TOKENS_BY_CHAIN[chainForTokens] ?? POOL_TOKENS_BY_CHAIN[11155111] ?? [];
+  const matchedToken = useMemo(
+    () => availableTokens.find(t => t.symbol.toLowerCase() === tokenSymbol.toLowerCase()),
+    [availableTokens, tokenSymbol],
+  );
+  const tokenAddress = matchedToken?.address as Address | undefined;
+  const tokenDecimals = matchedToken?.decimals ?? 18;
+
+  // Live progress — sums PoolReveal events to this recipient for this
+  // token on the current chain. Updates every 30s. Returns zeros while
+  // loading or if the chain RPC's getLogs is rate-limited / restricted.
+  const { totalRaised, count, isLoading: progressLoading } = usePoolRevealsForRecipient(
+    recipientValid ? (recipient as Address) : undefined,
+    tokenAddress,
+  );
+
+  const goalWei = useMemo(() => {
+    if (!goal || !/^\d+(\.\d+)?$/.test(goal)) return undefined;
+    try {
+      const [whole, frac = ''] = goal.split('.');
+      const padded = (whole + frac.padEnd(tokenDecimals, '0')).slice(0, whole.length + tokenDecimals);
+      return BigInt(padded);
+    } catch { return undefined; }
+  }, [goal, tokenDecimals]);
+
+  const progressPercent = goalWei && goalWei > 0n
+    ? Math.min(100, Number((totalRaised * 100n) / goalWei))
+    : null;
 
   if (!WEB3_CONFIG.ENABLE_POOL) {
     return (
@@ -114,12 +155,39 @@ const Fund = () => {
         {description && (
           <p className="text-sm text-muted-foreground leading-relaxed mb-4">{description}</p>
         )}
-        {goal && (
-          <div className="bg-vault-primary/5 border border-vault-primary/20 rounded-md px-3 py-2 mb-4">
-            <p className="text-xs text-muted-foreground">Goal</p>
-            <p className="text-lg font-mono text-vault-primary">{goal} {tokenSymbol}</p>
-            <p className="text-[10px] text-muted-foreground/60 mt-1">
-              Display target. On-chain progress tracking coming with v3 indexer.
+        {/* Live progress — sums PoolReveal events on-chain. Shows
+            even if no goal is set (just "X raised so far"); with goal,
+            adds the progress bar + percentage. */}
+        {matchedToken && (
+          <div className="bg-vault-primary/5 border border-vault-primary/20 rounded-md px-3 py-3 mb-4 space-y-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-vault-primary" />
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Raised so far</p>
+                {progressLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/50" />}
+              </div>
+              <p className="text-[10px] text-muted-foreground/60">{count} {count === 1 ? 'donation' : 'donations'}</p>
+            </div>
+            <p className="text-2xl font-mono text-vault-primary">
+              {formatUnits(totalRaised, tokenDecimals)} {tokenSymbol}
+              {goal && (
+                <span className="text-sm text-muted-foreground ml-2">/ {goal} {tokenSymbol}</span>
+              )}
+            </p>
+            {progressPercent !== null && (
+              <>
+                <div className="h-2 w-full bg-vault-primary/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-vault-primary transition-all duration-500"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground/70 text-right">{progressPercent}% of goal</p>
+              </>
+            )}
+            <p className="text-[9px] text-muted-foreground/50 leading-relaxed pt-1">
+              Live from on-chain events on the current chain ({chainForTokens === 11155111 ? 'Sepolia' : `chainId ${chainForTokens}`}).
+              Last ~7 days of donations. Updates every 30s.
             </p>
           </div>
         )}

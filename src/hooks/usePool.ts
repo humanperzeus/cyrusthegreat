@@ -705,3 +705,88 @@ export function usePoolCurrentEpoch(): { epoch: number | undefined; isLoading: b
   });
   return { epoch: data !== undefined ? Number(data) : undefined, isLoading };
 }
+
+/**
+ * Sum of all completed reveals (donations / payments) to a specific
+ * recipient address for a specific token on the current chain.
+ *
+ * Powers /fund's progress bar: querying PoolReveal events filtered by
+ * `indexed withdrawTo` returns every successful reveal for the campaign's
+ * recipient, then we sum `bucketSizes[bucketIdx]` per event to get the
+ * actual amount raised.
+ *
+ * Single-chain by design (v1). Multi-chain aggregation would need 5
+ * parallel queries — defer until campaigns regularly span multiple chains.
+ *
+ * Block-range: queries the last `BLOCK_LOOKBACK` blocks. Trade-off:
+ *  - Sepolia (12s blocks): 50k ≈ 7 days of history
+ *  - BSC (3s blocks):       50k ≈ 1.7 days
+ *  - Base / Arb (2s):       50k ≈ 1 day
+ * Acceptable for v1; "Load all-time" button is a follow-up that
+ * chunks-and-paginates backwards.
+ *
+ * Refetches every 30s for near-live progress.
+ */
+const BLOCK_LOOKBACK = 50_000n;
+export function usePoolRevealsForRecipient(
+  token: Address | undefined,
+  recipient: Address | undefined,
+): { totalRaised: bigint; count: number; isLoading: boolean; refetch: () => void } {
+  const chainId = useChainId();
+  const poolAddr = contractAddressForChain(chainId);
+  const publicClient = usePublicClient();
+  const { sizes: bucketSizes } = usePoolBucketSizes(token);
+
+  const [state, setState] = useState<{ totalRaised: bigint; count: number; isLoading: boolean }>({
+    totalRaised: 0n, count: 0, isLoading: true,
+  });
+
+  const fetchReveals = useCallback(async () => {
+    if (!publicClient || !poolAddr || !token || !recipient || bucketSizes.length === 0) {
+      setState({ totalRaised: 0n, count: 0, isLoading: false });
+      return;
+    }
+    setState(prev => ({ ...prev, isLoading: true }));
+    try {
+      const latestBlock = await publicClient.getBlockNumber();
+      const fromBlock = latestBlock > BLOCK_LOOKBACK ? latestBlock - BLOCK_LOOKBACK : 0n;
+      const logs = await publicClient.getLogs({
+        address: poolAddr,
+        event: {
+          type: 'event',
+          name: 'PoolReveal',
+          inputs: [
+            { name: 'commitment', type: 'bytes32', indexed: true },
+            { name: 'token', type: 'address', indexed: true },
+            { name: 'bucketIdx', type: 'uint8', indexed: false },
+            { name: 'withdrawTo', type: 'address', indexed: true },
+          ],
+        } as const,
+        args: { token, withdrawTo: recipient },
+        fromBlock,
+        toBlock: 'latest',
+      });
+      let total = 0n;
+      let count = 0;
+      for (const log of logs) {
+        const idx = Number((log.args as { bucketIdx?: number }).bucketIdx ?? 0);
+        const size = bucketSizes[idx];
+        if (size != null) { total += size; count += 1; }
+      }
+      setState({ totalRaised: total, count, isLoading: false });
+    } catch (e) {
+      // Many RPCs cap block ranges; silently degrade to "no data" instead
+      // of erroring. The campaign page still renders without the progress.
+      console.debug('[usePoolRevealsForRecipient] getLogs failed:', e);
+      setState({ totalRaised: 0n, count: 0, isLoading: false });
+    }
+  }, [publicClient, poolAddr, token, recipient, bucketSizes]);
+
+  useEffect(() => {
+    void fetchReveals();
+    const id = setInterval(() => { void fetchReveals(); }, 30_000);
+    return () => clearInterval(id);
+  }, [fetchReveals]);
+
+  return { ...state, refetch: () => { void fetchReveals(); } };
+}
