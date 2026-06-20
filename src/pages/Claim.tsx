@@ -415,16 +415,27 @@ const Claim = () => {
       ) : claimState === "wait" ? (
         <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
           <div className="flex items-center gap-2 mb-3">
-            <Clock className="w-5 h-5 text-vault-primary" />
-            <p className="font-semibold">Not eligible yet</p>
+            <Check className="w-5 h-5 text-emerald-400" />
+            <p className="font-semibold text-emerald-200">Payment confirmed on-chain</p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Reveals must wait at least 1 epoch after commit (spec § 4 — anonymity primitive).
-            Eligible in approximately <span className="font-mono text-foreground">{msUntil !== undefined ? formatCountdown(msUntil) : "…"}</span>
-            {eligibleAtMs !== undefined && (
-              <> at <span className="font-mono text-foreground">{new Date(eligibleAtMs).toLocaleString()}</span></>
-            )}.
-          </p>
+          <div className="space-y-2 text-sm">
+            <p className="text-muted-foreground">
+              <span className="text-foreground font-medium">Funds locked in the pool</span> — they can't
+              be reversed, redirected, or stolen. The recipient address (above) is the only one that
+              can receive them.
+            </p>
+            <p className="text-muted-foreground">
+              Claim available in <span className="font-mono text-vault-primary font-medium">{msUntil !== undefined ? formatCountdown(msUntil) : "…"}</span>
+              {eligibleAtMs !== undefined && (
+                <> · {new Date(eligibleAtMs).toLocaleString()}</>
+              )}.
+            </p>
+            <p className="text-xs text-muted-foreground/70 pt-1">
+              The 1-hour wait is the anonymity mechanism — it lets your transaction blend into a
+              cohort of other commits in the same epoch + bucket. The wait is normal and the funds
+              are safe.
+            </p>
+          </div>
           <Button disabled className="w-full bg-vault-primary text-background hover:bg-vault-primary/90 mt-3 opacity-60">
             Wait {msUntil !== undefined ? formatCountdown(msUntil) : "…"}
           </Button>

@@ -22,7 +22,8 @@
  * without lying about availability.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAccount, useBalance } from "wagmi";
 import { formatUnits, type Address } from "viem";
 import { Card } from "@/components/ui/card";
@@ -99,6 +100,27 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
   const [memo, setMemo] = useState<string>("");
   const [result, setResult] = useState<{ txHash: string; claimURL: string } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Pay-link pre-fill — when a business shares
+  // cyrusthegreat.dev/pay?to=0xWallet&memo=customer:alice123 with a
+  // customer, we read both params on mount. Recipient locks (read-only
+  // input + override link); memo pre-fills but stays editable so the
+  // customer can append their own note. Sub-page for businesses to
+  // generate these URLs is a follow-up — for now the URL params just
+  // work and a tip line in the form tells users they can construct them.
+  const [searchParams] = useSearchParams();
+  const recipientFromURL = searchParams.get("to");
+  const memoFromURL = searchParams.get("memo");
+  const [recipientLocked, setRecipientLocked] = useState<boolean>(false);
+  useEffect(() => {
+    if (recipientFromURL && /^0x[a-fA-F0-9]{40}$/.test(recipientFromURL)) {
+      setRecipient(recipientFromURL);
+      setRecipientLocked(true);
+    }
+    if (memoFromURL) setMemo(memoFromURL.slice(0, 200));
+    // intentionally empty deps — URL params only read once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useMemo(() => { setBucketIdx(0); }, [token]);
 
@@ -181,7 +203,8 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
         <h3 className="text-base font-semibold">Pay anyone, privately</h3>
       </div>
 
-      {/* Recipient — first thing the user sees, biggest decision */}
+      {/* Recipient — first thing the user sees, biggest decision.
+          Locked when arriving via a pre-filled pay link (?to=0x…). */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground uppercase tracking-wide">
           Pay to (wallet address)
@@ -190,12 +213,22 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
           value={recipient}
           onChange={(e) => setRecipient(e.target.value)}
           placeholder="0x… (the recipient's wallet address)"
-          className="font-mono text-xs"
+          className={`font-mono text-xs ${recipientLocked ? 'bg-vault-primary/10 text-vault-primary border-vault-primary/40' : ''}`}
+          readOnly={recipientLocked}
         />
-        <p className="text-xs text-muted-foreground">
-          Get this from whoever you're paying. Funds will land at this exact address — baked into the
-          commitment hash (MEV-safe).
-        </p>
+        {recipientLocked ? (
+          <p className="text-xs text-vault-primary">
+            🔒 Address locked by sender's pay link.{" "}
+            <button type="button" onClick={() => setRecipientLocked(false)} className="underline hover:text-vault-primary/80">
+              Override
+            </button>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Get this from whoever you're paying. Funds will land at this exact address — baked into the
+            commitment hash (MEV-safe).
+          </p>
+        )}
       </div>
 
       {/* Token picker — only shown when chain has >1 token configured */}
@@ -322,6 +355,17 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
         <CreditCard className="w-3.5 h-3.5" />
         Buy with Apple Pay / Card (coming soon)
       </button>
+
+      {/* Pay-link tip — only show when user is NOT already on a pre-filled link */}
+      {!recipientLocked && (
+        <div className="text-[11px] text-muted-foreground/80 leading-relaxed bg-vault-primary/5 border border-vault-primary/15 rounded-md px-3 py-2">
+          💡 <strong>Are you a business?</strong> Share a pre-filled pay link with your customers — they just pick the amount and pay. Format:
+          <br />
+          <code className="font-mono text-[10px] text-vault-primary mt-1 inline-block break-all">
+            https://cyrusthegreat.dev/pay?to=YOUR_WALLET&memo=optional_note
+          </code>
+        </div>
+      )}
 
       {/* Error surface */}
       {lastError && !result && (
