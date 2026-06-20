@@ -111,7 +111,9 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
   const [searchParams] = useSearchParams();
   const recipientFromURL = searchParams.get("to");
   const memoFromURL = searchParams.get("memo");
+  const amountFromURL = searchParams.get("amount");
   const [recipientLocked, setRecipientLocked] = useState<boolean>(false);
+  const [amountLocked, setAmountLocked] = useState<boolean>(false);
   useEffect(() => {
     if (recipientFromURL && /^0x[a-fA-F0-9]{40}$/.test(recipientFromURL)) {
       setRecipient(recipientFromURL);
@@ -121,6 +123,32 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
     // intentionally empty deps — URL params only read once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // amountLocked also drives bucket-picker visibility — see render below.
+  // We can't compute the matching bucket until bucketSizes load, so the
+  // bucket-locking happens in a second effect downstream once sizes arrive.
+  useEffect(() => {
+    if (!amountFromURL || bucketSizes.length === 0) return;
+    const requested = parseFloat(amountFromURL);
+    if (!isFinite(requested) || requested <= 0) return;
+    // Match the closest bucket size by display-units (formatUnits-rounded).
+    let bestIdx = 0;
+    let bestDiff = Infinity;
+    bucketSizes.forEach((size, idx) => {
+      const display = parseFloat(formatUnits(size, tokenDecimals));
+      const diff = Math.abs(display - requested);
+      if (diff < bestDiff) { bestDiff = diff; bestIdx = idx; }
+    });
+    setBucketIdx(bestIdx);
+    setAmountLocked(true);
+    // re-run when sizes / decimals change (token swap)
+  }, [amountFromURL, bucketSizes, tokenDecimals]);
+
+  // Simplified mode = arriving via a pre-filled pay link. Hides the
+  // pay-link tip + collapses allowance / balance / fee technical rows
+  // behind a "Details" disclosure. Goal: a customer hitting a pay link
+  // sees ~4 things — recipient (locked), amount (locked or simple
+  // picker), Pay button, that's it.
+  const simplifiedMode = recipientLocked;
 
   useMemo(() => { setBucketIdx(0); }, [token]);
 
@@ -254,13 +282,28 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
         </div>
       )}
 
-      {/* Amount (bucket size) */}
+      {/* Amount (bucket size). When amount is locked via URL, show a
+          single "amount confirmation" card instead of the picker grid. */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground uppercase tracking-wide">Amount</Label>
         {loadingBuckets ? (
           <div className="text-xs text-muted-foreground py-2">Loading…</div>
         ) : bucketSizes.length === 0 ? (
           <div className="text-xs text-yellow-500 py-2">No amounts configured for this token on this chain.</div>
+        ) : amountLocked && bucketSize != null ? (
+          <div className="rounded-md border border-vault-primary/60 bg-vault-primary/15 px-4 py-3 text-center">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Sender requested</p>
+            <p className="text-2xl font-mono text-vault-primary mt-1">
+              {formatUnits(bucketSize, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
+            </p>
+            <button
+              type="button"
+              onClick={() => setAmountLocked(false)}
+              className="text-[10px] text-muted-foreground hover:text-foreground underline mt-2"
+            >
+              Override amount
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
             {bucketSizes.map((size, idx) => (
@@ -293,35 +336,74 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
         <p className="text-[10px] text-muted-foreground/70 text-right">{memo.length} / 200</p>
       </div>
 
-      {/* Balance + allowance pre-flight (same pattern as CommitForm) */}
-      {bucketSize != null && account && (
-        <div className={`rounded-md border px-3 py-2 text-xs font-mono flex items-center gap-2 ${hasEnoughBalance ? 'border-vault-primary/15 bg-vault-primary/5' : 'border-red-500/40 bg-red-500/10'}`}>
-          <Coins className={`w-3.5 h-3.5 ${hasEnoughBalance ? 'text-emerald-400' : 'text-red-400'}`} />
+      {/* Balance + allowance pre-flight.
+          In simplified mode (pre-filled link customer) these technical
+          rows are tucked into a "Details ▾" disclosure so the visible
+          form stays minimal. The insufficient-balance case ALWAYS
+          surfaces (red border) regardless of mode — too important to
+          hide behind a toggle.
+          In normal mode (advanced user) the rows are shown inline. */}
+      {bucketSize != null && account && !hasEnoughBalance && (
+        <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono flex items-center gap-2">
+          <Coins className="w-3.5 h-3.5 text-red-400" />
           <span className="text-muted-foreground">Balance:</span>
-          <span className={hasEnoughBalance ? 'text-emerald-200' : 'text-red-300'}>
+          <span className="text-red-300">
             {formatUnits(effectiveBalance, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
           </span>
-          {!hasEnoughBalance && requiredBalance != null && (
+          {requiredBalance != null && (
             <span className="text-red-300/90 ml-auto">need {formatUnits(requiredBalance, tokenDecimals)}</span>
-          )}
-          {hasEnoughBalance && (
-            <span className="text-emerald-200/70 ml-auto">enough to pay</span>
           )}
         </div>
       )}
-      {!isNative && bucketSize != null && (
-        <div className="rounded-md border border-vault-primary/15 bg-vault-primary/5 px-3 py-2 text-xs font-mono flex items-center gap-2">
-          <ShieldCheck className={`w-3.5 h-3.5 ${needsApproval ? 'text-yellow-500' : 'text-emerald-400'}`} />
-          <span className="text-muted-foreground">Allowance:</span>
-          <span className={needsApproval ? 'text-yellow-200' : 'text-emerald-200'}>
-            {formatUnits(allowance, tokenDecimals)} {tokenSymbol}
-          </span>
-          {needsApproval ? (
-            <span className="text-yellow-200/70 ml-auto">approve step will run first</span>
-          ) : (
-            <span className="text-emerald-200/70 ml-auto">no approve needed</span>
+      {simplifiedMode ? (
+        bucketSize != null && account && hasEnoughBalance && (
+          <details className="rounded-md border border-vault-primary/15 bg-vault-primary/5 px-3 py-2 text-xs">
+            <summary className="cursor-pointer text-muted-foreground select-none">Details (balance, allowance, fee)</summary>
+            <div className="mt-2 space-y-1 font-mono">
+              <div className="flex items-center gap-2">
+                <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-muted-foreground">Balance:</span>
+                <span className="text-emerald-200">{formatUnits(effectiveBalance, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}</span>
+                <span className="text-emerald-200/70 ml-auto">enough to pay</span>
+              </div>
+              {!isNative && (
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className={`w-3.5 h-3.5 ${needsApproval ? 'text-yellow-500' : 'text-emerald-400'}`} />
+                  <span className="text-muted-foreground">Allowance:</span>
+                  <span className={needsApproval ? 'text-yellow-200' : 'text-emerald-200'}>{formatUnits(allowance, tokenDecimals)} {tokenSymbol}</span>
+                  {needsApproval && <span className="text-yellow-200/70 ml-auto">approve step will run first</span>}
+                </div>
+              )}
+            </div>
+          </details>
+        )
+      ) : (
+        <>
+          {bucketSize != null && account && hasEnoughBalance && (
+            <div className="rounded-md border border-vault-primary/15 bg-vault-primary/5 px-3 py-2 text-xs font-mono flex items-center gap-2">
+              <Coins className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-muted-foreground">Balance:</span>
+              <span className="text-emerald-200">
+                {formatUnits(effectiveBalance, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
+              </span>
+              <span className="text-emerald-200/70 ml-auto">enough to pay</span>
+            </div>
           )}
-        </div>
+          {!isNative && bucketSize != null && (
+            <div className="rounded-md border border-vault-primary/15 bg-vault-primary/5 px-3 py-2 text-xs font-mono flex items-center gap-2">
+              <ShieldCheck className={`w-3.5 h-3.5 ${needsApproval ? 'text-yellow-500' : 'text-emerald-400'}`} />
+              <span className="text-muted-foreground">Allowance:</span>
+              <span className={needsApproval ? 'text-yellow-200' : 'text-emerald-200'}>
+                {formatUnits(allowance, tokenDecimals)} {tokenSymbol}
+              </span>
+              {needsApproval ? (
+                <span className="text-yellow-200/70 ml-auto">approve step will run first</span>
+              ) : (
+                <span className="text-emerald-200/70 ml-auto">no approve needed</span>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* Primary CTA */}
@@ -356,14 +438,16 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
         Buy with Apple Pay / Card (coming soon)
       </button>
 
-      {/* Pay-link tip — only show when user is NOT already on a pre-filled link */}
-      {!recipientLocked && (
+      {/* Pay-link tip — shows only in normal mode (advanced user, not
+          on a pre-filled link). Now points at /get-paid for the form
+          rather than asking users to construct the URL by hand. */}
+      {!simplifiedMode && (
         <div className="text-[11px] text-muted-foreground/80 leading-relaxed bg-vault-primary/5 border border-vault-primary/15 rounded-md px-3 py-2">
-          💡 <strong>Are you a business?</strong> Share a pre-filled pay link with your customers — they just pick the amount and pay. Format:
-          <br />
-          <code className="font-mono text-[10px] text-vault-primary mt-1 inline-block break-all">
-            https://cyrusthegreat.dev/pay?to=YOUR_WALLET&memo=optional_note
-          </code>
+          💡 <strong>Are you a business?</strong> Generate a pre-filled pay link to share with
+          customers — they just pick the amount and pay.{" "}
+          <a href="/get-paid" className="text-vault-primary hover:underline">
+            Create payment link →
+          </a>
         </div>
       )}
 
