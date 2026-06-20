@@ -1334,6 +1334,33 @@ export const VaultCore = ({
 
 
 
+      {/* Discoverability CTAs for the privacy-payment surfaces. v1 home
+          is the main landing — most visitors arrive here, so the entry
+          points to /pay (send), /get-paid (receive via pay link),
+          /fundraise (donation campaigns) should be visible without
+          requiring users to know the URLs. Buttons-as-links per
+          react-router-dom convention. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
+        <a
+          href="/pay"
+          className="text-center text-xs py-2 px-3 rounded-md border border-vault-primary/30 bg-vault-primary/5 text-vault-primary hover:bg-vault-primary/10 transition-colors"
+        >
+          → Pay anyone privately
+        </a>
+        <a
+          href="/get-paid"
+          className="text-center text-xs py-2 px-3 rounded-md border border-vault-primary/30 bg-vault-primary/5 text-vault-primary hover:bg-vault-primary/10 transition-colors"
+        >
+          → Get paid (create link)
+        </a>
+        <a
+          href="/fundraise"
+          className="text-center text-xs py-2 px-3 rounded-md border border-vault-primary/30 bg-vault-primary/5 text-vault-primary hover:bg-vault-primary/10 transition-colors"
+        >
+          → Fundraise (donation page)
+        </a>
+      </div>
+
       {/* Live deployment status. Version + SHA is shown in the BuildBadge
           bottom-left (driven by package.json + git rev-parse at build time
           via vite.config.ts); this footer just states the chain coverage

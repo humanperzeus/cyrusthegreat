@@ -13,6 +13,8 @@ import Index from "./pages/Index";
 import Claim from "./pages/Claim";
 import Pay from "./pages/Pay";
 import GetPaid from "./pages/GetPaid";
+import Fundraise from "./pages/Fundraise";
+import Fund from "./pages/Fund";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +47,8 @@ const App = () => (
                 <Route path="/claim" element={<Claim />} />
                 <Route path="/pay" element={<Pay />} />
                 <Route path="/get-paid" element={<GetPaid />} />
+                <Route path="/fundraise" element={<Fundraise />} />
+                <Route path="/fund" element={<Fund />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

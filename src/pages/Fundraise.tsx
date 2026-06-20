@@ -1,21 +1,26 @@
 /**
- * /get-paid — payment-link generator for businesses.
+ * /fundraise — donation-campaign generator (FundMe-style).
  *
- * "I want to accept anonymous crypto payments from customers" → this page.
- * Business pastes their wallet address + optional preset amount + optional
- * memo template, gets a pre-filled pay-link URL + QR code to share via
- * email, Telegram, WhatsApp, embedded button on their site, etc.
+ * Sibling to /get-paid. Same underlying primitive (CyrusTeleport
+ * commit-reveal → recipient address gets the funds) but framed for
+ * collecting donations to a cause rather than receiving invoiced
+ * payments.
  *
- * Output URL format: cyrusthegreat.dev/pay?to=0x…&amount=N&memo=…
- * (amount is in token-display units, e.g., "25" for 25 USD1 — PayForm
- * matches it to the nearest configured bucket size on arrival).
+ * Form inputs:
+ *   - Recipient wallet (you / the cause's wallet)
+ *   - Campaign title (required, ≤ 80 chars)
+ *   - Description (optional, ≤ 300 chars)
+ *   - Goal amount (optional — displayed as a target on the /fund page)
+ *   - Default token (USD1 today; USDC/USDT when configured per chain)
  *
- * No backend, no DB, no auth. The URL IS the payment link — share it
- * however you want. Same security model as the rest of the dapp: the
- * recipient address is bound into the commitment hash on commit, so a
- * customer who pastes a different address into a tampered link would
- * just pay a different recipient — still anonymous, still MEV-safe,
- * just the wrong destination.
+ * Output: a /fund?to=…&title=…&desc=…&goal=…&token=… URL + QR.
+ *
+ * No backend. No DB. URL is the campaign. Same pattern as /get-paid.
+ *
+ * Why /fund vs /pay for the donor side: campaign pages need extra
+ * framing (title hero, optional progress bar against goal,
+ * description copy). /pay is for transactional one-off payments;
+ * /fund is for campaigns with a story.
  */
 
 import { useState } from "react";
@@ -25,28 +30,22 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, Link2, Copy, Check, ExternalLink } from "lucide-react";
+import { ChevronLeft, HeartHandshake, Copy, Check, ExternalLink } from "lucide-react";
 import { ClaimQR } from "@/components/pool/ClaimQR";
 import { WEB3_CONFIG } from "@/config/web3";
 import { POOL_TOKENS_BY_CHAIN, NATIVE_TOKEN_ADDRESS } from "@/hooks/usePool";
 
-const GetPaid = () => {
+const Fundraise = () => {
   const navigate = useNavigate();
   const { address: account } = useAccount();
   const walletChainId = useChainId();
-  // Show the tokens available on whichever chain the wallet is on. If
-  // wallet not connected, default to Sepolia (most-deployed). User can
-  // change chain via their wallet — we don't render a chain picker here
-  // because pay-link recipients pick a chain on /pay anyway.
   const chainForTokens = walletChainId ?? 11155111;
   const availableTokens = POOL_TOKENS_BY_CHAIN[chainForTokens] ?? POOL_TOKENS_BY_CHAIN[11155111] ?? [];
 
   const [recipient, setRecipient] = useState<string>("");
-  const [amount, setAmount] = useState<string>("");
-  const [memo, setMemo] = useState<string>("");
-  // Token picker — default to the first stablecoin if available, else
-  // native. Customer-facing /pay also enforces this default; explicit
-  // pick here just makes the URL self-describing.
+  const [title, setTitle] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
+  const [goal, setGoal] = useState<string>("");
   const defaultTokenSymbol =
     (availableTokens.find(t => t.address !== NATIVE_TOKEN_ADDRESS)?.symbol)
     ?? availableTokens[0]?.symbol
@@ -59,7 +58,7 @@ const GetPaid = () => {
     return (
       <div className="max-w-2xl mx-auto px-4 py-12">
         <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
-          <h1 className="text-xl font-bold mb-2">Pay links unavailable</h1>
+          <h1 className="text-xl font-bold mb-2">Fundraising unavailable</h1>
           <p className="text-sm text-muted-foreground">
             The privacy-payment feature isn't enabled on this build.
           </p>
@@ -69,17 +68,19 @@ const GetPaid = () => {
   }
 
   const recipientValid = /^0x[a-fA-F0-9]{40}$/.test(recipient);
-  const amountValid = !amount || /^\d+(\.\d+)?$/.test(amount);
-  const canGenerate = recipientValid && amountValid;
+  const titleValid = title.trim().length > 0 && title.length <= 80;
+  const goalValid = !goal || /^\d+(\.\d+)?$/.test(goal);
+  const canGenerate = recipientValid && titleValid && goalValid;
 
   const handleGenerate = () => {
     if (!canGenerate) return;
-    const base = window.location.origin + "/pay";
+    const base = window.location.origin + "/fund";
     const params = new URLSearchParams();
     params.set("to", recipient);
+    params.set("title", title.slice(0, 80));
+    if (description) params.set("desc", description.slice(0, 300));
+    if (goal) params.set("goal", goal);
     if (tokenSymbol) params.set("token", tokenSymbol);
-    if (amount) params.set("amount", amount);
-    if (memo) params.set("memo", memo.slice(0, 200));
     setGenerated(`${base}?${params.toString()}`);
   };
 
@@ -90,10 +91,7 @@ const GetPaid = () => {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const handleReset = () => {
-    setGenerated(null);
-    setCopied(false);
-  };
+  const handleReset = () => { setGenerated(null); setCopied(false); };
 
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-6 space-y-4">
@@ -101,28 +99,26 @@ const GetPaid = () => {
         <ChevronLeft className="w-4 h-4 mr-1" /> Back to vault
       </Button>
 
-      {/* Header */}
       <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 rounded-full bg-vault-primary/15">
-            <Link2 className="w-5 h-5 text-vault-primary" />
+            <HeartHandshake className="w-5 h-5 text-vault-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">Get paid — create a payment link</h1>
-            <p className="text-xs text-muted-foreground">Share with customers. Anonymous on-chain. ~1 hr settlement.</p>
+            <h1 className="text-xl font-bold">Fundraise — create a donation page</h1>
+            <p className="text-xs text-muted-foreground">Anonymous donations. No platform cut. Share the link anywhere.</p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Generate a link your customers can open, pay, and share the receipt. You'll receive funds at
-          the wallet address below. No accounts, no backend — the URL is the whole thing.
+          Donors land on your campaign page, pick an amount, donate via the privacy pool. Funds arrive
+          at the wallet below. ~1 hour settlement per donation.
         </p>
       </Card>
 
       {!generated ? (
         <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30 space-y-5">
-          {/* Recipient (you) */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Your wallet address (where funds land)</Label>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Your wallet address (where donations land)</Label>
             <div className="flex gap-2">
               <Input
                 value={recipient}
@@ -136,16 +132,33 @@ const GetPaid = () => {
                 </Button>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              This address gets baked into every payment made via the link — payers can't redirect
-              funds elsewhere (MEV-safe).
-            </p>
           </div>
 
-          {/* Token picker */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Campaign title</Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value.slice(0, 80))}
+              placeholder="Help fund my open-source library / Medical bills / etc."
+              className="text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground/70 text-right">{title.length} / 80</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Description (optional)</Label>
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value.slice(0, 300))}
+              placeholder="What's the cause? Why should people donate?"
+              className="text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground/70 text-right">{description.length} / 300</p>
+          </div>
+
           {availableTokens.length > 1 && (
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Token</Label>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Donation token</Label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {availableTokens.map((t) => (
                   <button
@@ -162,43 +175,20 @@ const GetPaid = () => {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Which token your customers pay in. Default: stablecoin (USD1 today on Sepolia; USDC/USDT
-                coming to other chains).
-              </p>
             </div>
           )}
 
-          {/* Amount (optional) */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Amount (optional)</Label>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Goal (optional)</Label>
             <Input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="25"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              placeholder="1000"
               className="text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              Leave empty if customer picks. Otherwise enter a number — pay form will match it to the
-              closest fixed bucket size for the chosen token. Use whole numbers for stables (e.g.,{" "}
-              <code className="font-mono text-[10px]">25</code> = 25 {tokenSymbol}), decimals for native
-              (e.g., <code className="font-mono text-[10px]">0.01</code> = 0.01 ETH).
-            </p>
-          </div>
-
-          {/* Memo (optional) */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Memo / note (optional)</Label>
-            <Input
-              value={memo}
-              onChange={(e) => setMemo(e.target.value.slice(0, 200))}
-              placeholder="Invoice #1234 · service description · customer ID"
-              className="text-sm"
-            />
-            <p className="text-[10px] text-muted-foreground/70 text-right">{memo.length} / 200</p>
-            <p className="text-xs text-muted-foreground">
-              Pre-fills the customer's memo field. They can edit before paying. Useful for invoice
-              numbers / customer IDs / order references — shows up in the receipt URL.
+              Just a display target on your campaign page ("Goal: 1000 {tokenSymbol}"). Doesn't gate
+              anything on-chain — donors can give any of the supported bucket amounts.
             </p>
           </div>
 
@@ -209,19 +199,20 @@ const GetPaid = () => {
           >
             {!recipient ? "Enter your wallet address" :
               !recipientValid ? "Invalid wallet address" :
-              !amountValid ? "Invalid amount" :
-              "Generate payment link"}
+              !titleValid ? "Add a campaign title" :
+              !goalValid ? "Invalid goal amount" :
+              "Generate campaign page"}
           </Button>
         </Card>
       ) : (
         <Card className="p-6 bg-emerald-500/5 border-emerald-500/30 space-y-4">
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-400" />
-            <p className="text-sm font-medium text-emerald-200">Your payment link is ready</p>
+            <p className="text-sm font-medium text-emerald-200">Your campaign page is ready</p>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Share this URL with your customer</Label>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Share this URL anywhere</Label>
             <div className="flex gap-2">
               <Input value={generated} readOnly className="font-mono text-xs flex-1" />
               <Button size="sm" variant="outline" onClick={handleCopy}>
@@ -233,7 +224,7 @@ const GetPaid = () => {
               target="_blank" rel="noreferrer noopener"
               className="text-xs text-vault-primary hover:underline inline-flex items-center gap-1"
             >
-              Preview what customer sees <ExternalLink className="w-3 h-3" />
+              Preview campaign page <ExternalLink className="w-3 h-3" />
             </a>
           </div>
 
@@ -241,27 +232,22 @@ const GetPaid = () => {
             <ClaimQR value={generated} size={160} />
             <div className="text-xs text-muted-foreground space-y-1.5 sm:flex-1">
               <p>
-                <strong className="text-foreground">QR for in-person sharing</strong> — customer scans
-                with their phone, opens the pay form pre-filled.
+                <strong className="text-foreground">QR for stickers / posters / in-person sharing.</strong> Donors scan
+                with their phone, land on your campaign page.
               </p>
               <p>
-                <strong className="text-foreground">URL for digital sharing</strong> — paste in
-                Telegram, WhatsApp, email, Signal, or embed as a "Pay now" button on your website.
+                <strong className="text-foreground">URL for digital sharing.</strong> Twitter, Discord, your blog, your
+                README, in-bio link, email signature.
               </p>
               <p className="text-yellow-200/80">
-                ⚠ Share via end-to-end encrypted channels for high-value flows. Public sharing
-                (Twitter, Discord) is fine for tip jars / low-stakes payments — no security risk,
-                just less private about WHO is paying.
+                ⚠ Anyone with the URL can donate to YOUR address. The URL is safe to share publicly — donations
+                go to you, not whoever holds the URL.
               </p>
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            className="w-full text-xs"
-          >
-            Create another link
+          <Button variant="outline" onClick={handleReset} className="w-full text-xs">
+            Create another campaign
           </Button>
         </Card>
       )}
@@ -269,4 +255,4 @@ const GetPaid = () => {
   );
 };
 
-export default GetPaid;
+export default Fundraise;

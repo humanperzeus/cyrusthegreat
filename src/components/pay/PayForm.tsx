@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Send, Coins, ShieldCheck, AlertTriangle, Check, ExternalLink, Copy, CreditCard,
+  Send, Coins, ShieldCheck, AlertTriangle, Check, ExternalLink, Copy,
 } from "lucide-react";
 import {
   usePool,
@@ -45,6 +45,7 @@ import {
 } from "@/hooks/usePool";
 import { useProgress } from "@/contexts/ProgressContext";
 import { ClaimQR } from "@/components/pool/ClaimQR";
+import { OnrampButton } from "@/components/shared/OnrampButton";
 
 interface PayFormProps {
   activeChain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB";
@@ -68,14 +69,42 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
   const { commit, isCommitting, isApproving, lastError, contractAddress } = usePool();
   const { startProgress, updateProgress } = useProgress();
 
+  // searchParams hoisted up — token auto-select effect below reads it
+  // before the rest of the URL-param handlers down at line ~140 run.
+  const [searchParams] = useSearchParams();
+
   const availableTokens: PoolTokenEntry[] = POOL_TOKENS_BY_CHAIN[CHAIN_ID_FOR[activeChain]] ?? [];
   const [selectedToken, setSelectedToken] = useState<PoolTokenEntry | undefined>(undefined);
-  useMemo(() => {
+  // Token auto-selection priority:
+  //   1. URL param ?token=USD1 (highest — explicit sender choice)
+  //   2. When ?amount= is set, prefer the first stablecoin (sender
+  //      probably meant USD value, not ETH value — "25" in ETH terms
+  //      is wildly different from "25" in USD1 terms, and the bug
+  //      reported was /pay?amount=25 defaulting to ETH and mismatching
+  //      the user's intent).
+  //   3. Fall back to first token in the registry (native).
+  // Re-evaluates only when the available token set changes (chain
+  // switch or token registry update) so user's manual picks aren't
+  // overwritten.
+  useEffect(() => {
     if (availableTokens.length === 0) { setSelectedToken(undefined); return; }
-    if (!selectedToken || !availableTokens.some(t => t.address === selectedToken.address)) {
-      setSelectedToken(availableTokens[0]);
+    if (selectedToken && availableTokens.some(t => t.address === selectedToken.address)) return;
+
+    const tokenFromURL = searchParams.get("token");
+    if (tokenFromURL) {
+      const match = availableTokens.find(t => t.symbol.toLowerCase() === tokenFromURL.toLowerCase());
+      if (match) { setSelectedToken(match); return; }
     }
-  }, [availableTokens, selectedToken]);
+
+    const amountFromURL_inner = searchParams.get("amount");
+    if (amountFromURL_inner) {
+      const stable = availableTokens.find(t => t.address !== NATIVE_TOKEN_ADDRESS);
+      if (stable) { setSelectedToken(stable); return; }
+    }
+
+    setSelectedToken(availableTokens[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableTokens]);
 
   const token = selectedToken?.address ?? NATIVE_TOKEN_ADDRESS;
   const tokenDecimals = selectedToken?.decimals ?? 18;
@@ -108,7 +137,7 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
   // customer can append their own note. Sub-page for businesses to
   // generate these URLs is a follow-up — for now the URL params just
   // work and a tip line in the form tells users they can construct them.
-  const [searchParams] = useSearchParams();
+  // searchParams already destructured above. Read individual params here.
   const recipientFromURL = searchParams.get("to");
   const memoFromURL = searchParams.get("memo");
   const amountFromURL = searchParams.get("amount");
@@ -427,16 +456,15 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
         })()}
       </Button>
 
-      {/* Onramp placeholder — disabled until Transak sandbox key arrives */}
-      <button
-        type="button"
-        disabled
-        title="Coming soon — Transak fiat onramp integration. Will let you buy USDC/USDT/USD1 with Apple Pay / credit card directly here."
-        className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-md text-xs border border-dashed border-vault-primary/30 text-muted-foreground/60 cursor-not-allowed"
-      >
-        <CreditCard className="w-3.5 h-3.5" />
-        Buy with Apple Pay / Card (coming soon)
-      </button>
+      {/* Onramp button — provider-agnostic scaffold. Renders disabled
+          until an onramp provider (Transak / MoonPay / Ramp / Onramp.money)
+          approves us; wiring happens inside OnrampButton when one lands. */}
+      <OnrampButton
+        recipientAddress={account}
+        amountFiat={bucketSize != null ? formatUnits(bucketSize, tokenDecimals) : undefined}
+        cryptoSymbol={tokenSymbol}
+        chain={activeChain}
+      />
 
       {/* Pay-link tip — shows only in normal mode (advanced user, not
           on a pre-filled link). Now points at /get-paid for the form
