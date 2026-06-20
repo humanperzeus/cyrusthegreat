@@ -54,13 +54,13 @@ export const PoolView = ({ activeChain, setActiveChain }: PoolViewProps) => {
           </div>
           <div>
             <h2 className="text-xl font-bold">CyrusTeleport</h2>
-            <p className="text-xs text-muted-foreground">Anonymity pool · time-windowed batching · per-bucket commitments</p>
+            <p className="text-xs text-muted-foreground">Anonymous payments · 5 chains · opt-in privacy</p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Opt-in privacy mode. Deposits go into a fixed-bucket pool with 1-hour epochs;
-          withdrawals to any address you specify, claimable after the epoch boundary.
-          The recipient can be yourself (self-pay) or someone else (teleport).
+          Send crypto without leaving a public link between sender and recipient. Funds enter a
+          shared pool, you wait ~1 hour, then the recipient claims via a shareable URL. Works
+          peer-to-peer or via an escrow agent.
         </p>
       </Card>
 

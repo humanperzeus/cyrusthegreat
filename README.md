@@ -1,8 +1,8 @@
-# Cyrus The Great - Anonymous Web3 Vault
+# cyrusthegreat.dev — Self-custodial multi-chain crypto with privacy + yield
 
 **Live Demo**: [cyrusthegreat.dev](https://cyrusthegreat.dev)
 
-A sophisticated, privacy-focused Web3 vault that enables anonymous ETH and ERC20 token transfers across multiple blockchain networks.
+Hold and move crypto across 5 chains. Use an optional anonymity pool (CyrusTeleport) to pay anyone without leaving a public link between sender and recipient. Yield-bearing tresor in development. Self-custodial throughout — no single intermediary holds your funds.
 
 ## Screenshots
 
@@ -21,7 +21,7 @@ The dapp without connecting a wallet — for reviewers, grant panels, and anyone
 ### **Core Functionality**
 - **Anonymous ETH Operations**: Deposit, withdraw, and internal transfers
 - **Full ERC20 Support**: Dynamic token detection and management
-- **Multi-Chain Ready**: Ethereum, Binance Smart Chain, Base, and Solana (coming soon)
+- **Multi-Chain Live**: Ethereum, BSC, Base, Arbitrum, HyperEVM — 5 testnets deployed. Solana + ICP / Bitcoin via Chain Fusion on roadmap.
 - **Smart Fee System**: Dynamic $0.10 USD fees via Chainlink price feeds
 
 ### **User Experience**
@@ -33,7 +33,7 @@ The dapp without connecting a wallet — for reviewers, grant panels, and anyone
 ### **Security & Privacy**
 - **Method ID Privacy**: Obfuscated transaction methods
 - **Event Privacy**: Anonymous internal transfers
-- **Smart Contract Security**: Audited vault contracts with proper access controls
+- **Smart Contract Security**: Audit-ready vault contracts with explicit access controls. Formal third-party audit planned with grant funding — see [docs/AUDIT_RFP.md](docs/AUDIT_RFP.md).
 
 ## 🛠️ Technology Stack
 

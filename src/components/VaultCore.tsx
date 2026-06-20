@@ -1139,7 +1139,8 @@ export const VaultCore = ({
             {/* Vault Status */}
             <div className="text-center space-y-2">
               <h2 className="text-2xl font-bold text-foreground">Secure Vault</h2>
-              <p className="text-sm text-muted-foreground">Anonymous • Secure • Decentralized</p>
+              <p className="text-sm text-muted-foreground">Self-custody · 5 chains · optional privacy</p>
+              <p className="text-xs text-muted-foreground/80">Hold &amp; move crypto. Yield-bearing coming next.</p>
               
               {/* Contract Link */}
               <div className="pt-2">
