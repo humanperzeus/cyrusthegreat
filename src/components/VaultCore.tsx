@@ -1114,6 +1114,43 @@ export const VaultCore = ({
         )}
       </div>
 
+      {/* Top-of-page CTAs — visible WITHOUT wallet connection.
+          Discoverability for the three payment surfaces: most visitors
+          arrive at this page first, so these must be above the wallet-
+          connect hero to be seen. Bigger + bolder than the footer
+          version we used to render below. */}
+      <Card className="bg-gradient-card border-vault-primary/30 p-4 mb-4">
+        <p className="text-xs text-muted-foreground text-center mb-3 uppercase tracking-wide">
+          What do you want to do today?
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <a
+            href="/pay"
+            className="group text-center py-4 px-3 rounded-md border border-vault-primary/40 bg-vault-primary/10 hover:bg-vault-primary/20 hover:border-vault-primary/70 transition-all"
+          >
+            <p className="text-sm font-semibold text-vault-primary">→ Pay anyone</p>
+            <p className="text-[10px] text-muted-foreground mt-1 leading-tight">privately · anonymous P2P</p>
+          </a>
+          <a
+            href="/get-paid"
+            className="group text-center py-4 px-3 rounded-md border border-vault-primary/40 bg-vault-primary/10 hover:bg-vault-primary/20 hover:border-vault-primary/70 transition-all"
+          >
+            <p className="text-sm font-semibold text-vault-primary">→ Get paid</p>
+            <p className="text-[10px] text-muted-foreground mt-1 leading-tight">create a pay link · share with customers</p>
+          </a>
+          <a
+            href="/fundraise"
+            className="group text-center py-4 px-3 rounded-md border border-vault-primary/40 bg-vault-primary/10 hover:bg-vault-primary/20 hover:border-vault-primary/70 transition-all"
+          >
+            <p className="text-sm font-semibold text-vault-primary">→ Fundraise</p>
+            <p className="text-[10px] text-muted-foreground mt-1 leading-tight">donation campaign · share anywhere</p>
+          </a>
+        </div>
+        <p className="text-[10px] text-muted-foreground/60 text-center mt-3">
+          No wallet needed to explore — connect below only when you want to pay or withdraw.
+        </p>
+      </Card>
+
       {/* Central Vault */}
       <div className="relative">
         {/* Vault Container */}
@@ -1334,32 +1371,9 @@ export const VaultCore = ({
 
 
 
-      {/* Discoverability CTAs for the privacy-payment surfaces. v1 home
-          is the main landing — most visitors arrive here, so the entry
-          points to /pay (send), /get-paid (receive via pay link),
-          /fundraise (donation campaigns) should be visible without
-          requiring users to know the URLs. Buttons-as-links per
-          react-router-dom convention. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
-        <a
-          href="/pay"
-          className="text-center text-xs py-2 px-3 rounded-md border border-vault-primary/30 bg-vault-primary/5 text-vault-primary hover:bg-vault-primary/10 transition-colors"
-        >
-          → Pay anyone privately
-        </a>
-        <a
-          href="/get-paid"
-          className="text-center text-xs py-2 px-3 rounded-md border border-vault-primary/30 bg-vault-primary/5 text-vault-primary hover:bg-vault-primary/10 transition-colors"
-        >
-          → Get paid (create link)
-        </a>
-        <a
-          href="/fundraise"
-          className="text-center text-xs py-2 px-3 rounded-md border border-vault-primary/30 bg-vault-primary/5 text-vault-primary hover:bg-vault-primary/10 transition-colors"
-        >
-          → Fundraise (donation page)
-        </a>
-      </div>
+      {/* CTAs moved to top of page (above the Secure Vault hero) for
+          visibility without scroll. See the prominent CTA card near the
+          top of this component. */}
 
       {/* Live deployment status. Version + SHA is shown in the BuildBadge
           bottom-left (driven by package.json + git rev-parse at build time
