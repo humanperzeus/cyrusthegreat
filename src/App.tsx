@@ -15,6 +15,7 @@ import Pay from "./pages/Pay";
 import GetPaid from "./pages/GetPaid";
 import Fundraise from "./pages/Fundraise";
 import Fund from "./pages/Fund";
+import Receipt from "./pages/Receipt";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,6 +50,7 @@ const App = () => (
                 <Route path="/get-paid" element={<GetPaid />} />
                 <Route path="/fundraise" element={<Fundraise />} />
                 <Route path="/fund" element={<Fund />} />
+                <Route path="/receipt" element={<Receipt />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

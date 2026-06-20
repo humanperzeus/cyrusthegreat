@@ -510,6 +510,15 @@ export const PayForm = ({ activeChain }: PayFormProps) => {
                   {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
+              {/* Direct link to the styled receipt page — replaces "raw URL only"
+                  with a polished Stripe-style receipt anyone can open. */}
+              <a
+                href={`/receipt${(() => { try { return new URL(result.claimURL).hash; } catch { return ''; } })()}`}
+                target="_blank" rel="noreferrer noopener"
+                className="text-xs text-vault-primary hover:underline inline-flex items-center gap-1"
+              >
+                Open styled receipt → <ExternalLink className="w-3 h-3" />
+              </a>
               <div className="flex flex-col sm:flex-row gap-3 items-start pt-2">
                 <ClaimQR value={result.claimURL} size={140} />
                 <p className="text-xs text-yellow-200 sm:flex-1">
