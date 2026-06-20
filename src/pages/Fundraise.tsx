@@ -34,6 +34,7 @@ import { ChevronLeft, HeartHandshake, Copy, Check, ExternalLink } from "lucide-r
 import { ClaimQR } from "@/components/pool/ClaimQR";
 import { WEB3_CONFIG } from "@/config/web3";
 import { POOL_TOKENS_BY_CHAIN, NATIVE_TOKEN_ADDRESS } from "@/hooks/usePool";
+import { WalletConnector } from "@/components/WalletConnector";
 
 const Fundraise = () => {
   const navigate = useNavigate();
@@ -98,6 +99,10 @@ const Fundraise = () => {
       <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground">
         <ChevronLeft className="w-4 h-4 mr-1" /> Back to vault
       </Button>
+
+      <Card className="p-4 bg-gradient-card backdrop-blur border-vault-primary/30">
+        <WalletConnector />
+      </Card>
 
       <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
         <div className="flex items-center gap-3 mb-2">

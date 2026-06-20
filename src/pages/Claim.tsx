@@ -31,6 +31,7 @@ import { Lock, ExternalLink, AlertTriangle, Check, ChevronLeft, Clock } from "lu
 import { WEB3_CONFIG } from "@/config/web3";
 import { usePool, usePoolCurrentEpoch, usePoolBucketSizes, useTokenDecimals, POOL_TOKENS_BY_CHAIN, NATIVE_TOKEN_ADDRESS } from "@/hooks/usePool";
 import { useProgress } from "@/contexts/ProgressContext";
+import { WalletConnector } from "@/components/WalletConnector";
 import { decodeTeleportClaim, computeCommitment, type TeleportClaim } from "@/lib/poolURI";
 import CyrusTresor1Artifact from "@/contracts/abis/CyrusTresor1.json";
 
@@ -242,6 +243,10 @@ const Claim = () => {
       <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
         <ChevronLeft className="w-4 h-4 mr-1" /> Back to vault
       </Button>
+
+      <Card className="p-4 bg-gradient-card backdrop-blur border-vault-primary/30">
+        <WalletConnector />
+      </Card>
 
       {/* Header */}
       <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">

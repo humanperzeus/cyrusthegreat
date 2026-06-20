@@ -23,6 +23,7 @@ import { Send, ChevronLeft } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
 import { PayForm } from "@/components/pay/PayForm";
 import { ChainSwitcher } from "@/components/pool/ChainSwitcher";
+import { WalletConnector } from "@/components/WalletConnector";
 
 type ChainTag = "ETH" | "BSC" | "BASE" | "HYPER" | "ARB";
 
@@ -48,6 +49,14 @@ const Pay = () => {
       <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground">
         <ChevronLeft className="w-4 h-4 mr-1" /> Back to vault
       </Button>
+
+      {/* Wallet connect strip — visible on standalone pages so user
+          can connect without bouncing back to the v1 home. Component
+          renders compact-connected (address + disconnect) OR full
+          connect buttons depending on state. */}
+      <Card className="p-4 bg-gradient-card backdrop-blur border-vault-primary/30">
+        <WalletConnector />
+      </Card>
 
       <div className="flex justify-center pt-2">
         <ChainSwitcher activeChain={activeChain} setActiveChain={setActiveChain} />

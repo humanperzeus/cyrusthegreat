@@ -31,6 +31,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, HeartHandshake, ExternalLink, AlertTriangle, TrendingUp, Loader2 } from "lucide-react";
 import { WEB3_CONFIG } from "@/config/web3";
+import { WalletConnector } from "@/components/WalletConnector";
 import {
   POOL_TOKENS_BY_CHAIN,
   usePoolRevealsForRecipient,
@@ -142,6 +143,10 @@ const Fund = () => {
       <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground">
         <ChevronLeft className="w-4 h-4 mr-1" /> Back to vault
       </Button>
+
+      <Card className="p-4 bg-gradient-card backdrop-blur border-vault-primary/30">
+        <WalletConnector />
+      </Card>
 
       {/* Campaign hero */}
       <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30">
