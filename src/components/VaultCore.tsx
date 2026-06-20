@@ -1334,11 +1334,15 @@ export const VaultCore = ({
 
 
 
-      {/* v1.17.64 Release Information */}
+      {/* Live deployment status. Version + SHA is shown in the BuildBadge
+          bottom-left (driven by package.json + git rev-parse at build time
+          via vite.config.ts); this footer just states the chain coverage
+          + roadmap. Keep both lines synced with the README's "Multi-Chain
+          Live" bullet so reviewers see consistent claims. */}
       <div className="text-xs text-muted-foreground text-center p-2 bg-muted/20 rounded">
-        🚀 <strong>v1.17.64 Release</strong> - Chain Switching Bug Fix & Provider Independence
+        🌐 <strong>5 testnets live</strong>: Ethereum · BSC · Base · Arbitrum · HyperEVM
         <br />
-        <span className="text-xs">🌐 ETH/BSC/BASE & Solana soon</span>
+        <span className="text-xs">Roadmap: mainnet · yield-bearing tresor · cross-chain teleport · BTC via ICP Chain Fusion</span>
       </div>
 
       {/* Made by humanperzeus */}
