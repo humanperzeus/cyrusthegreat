@@ -1,0 +1,371 @@
+/**
+ * PayForm — the /pay surface. Payment-themed wrapper around the existing
+ * CyrusTeleport commit primitive.
+ *
+ * Differences from CommitForm.tsx (which v2 PoolView uses):
+ *  - No mode tabs (Teleport / Escrow). Every /pay submission is a P2P
+ *    payment to someone else's address. Escrow stays in v2 where the
+ *    framing exists.
+ *  - No "Use my address" button. /pay is "pay someone else" — defaulting
+ *    to your own address would be confusing.
+ *  - Optional memo field (200 char, stored in the URL fragment of the
+ *    resulting claim/receipt URL — never sent to a server).
+ *  - "Buy with [provider] →" placeholder below the pay CTA. Disabled
+ *    until Transak's sandbox key arrives + integration ships. Tooltip
+ *    explains the flow.
+ *  - Same contract calls (usePool.commit), same 3- or 4-step
+ *    ProgressFlow lifecycle, same fresh-allowance read, same pre-flight
+ *    balance check.
+ *
+ * Pre-onramp UX: user must already have stablecoin in their wallet. The
+ * "Buy with Apple Pay" placeholder makes the future flow legible
+ * without lying about availability.
+ */
+
+import { useState, useMemo } from "react";
+import { useAccount, useBalance } from "wagmi";
+import { formatUnits, type Address } from "viem";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Send, Coins, ShieldCheck, AlertTriangle, Check, ExternalLink, Copy, CreditCard,
+} from "lucide-react";
+import {
+  usePool,
+  usePoolBucketSizes,
+  usePoolCurrentFee,
+  useTokenAllowance,
+  usePoolTokenBalance,
+  POOL_TOKENS_BY_CHAIN,
+  NATIVE_TOKEN_ADDRESS,
+  type PoolTokenEntry,
+} from "@/hooks/usePool";
+import { useProgress } from "@/contexts/ProgressContext";
+import { ClaimQR } from "@/components/pool/ClaimQR";
+
+interface PayFormProps {
+  activeChain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB";
+}
+
+const explorerForChain = (chain: PayFormProps["activeChain"], txHash: string): string => {
+  if (chain === "ETH")   return `https://sepolia.etherscan.io/tx/${txHash}`;
+  if (chain === "BSC")   return `https://testnet.bscscan.com/tx/${txHash}`;
+  if (chain === "BASE")  return `https://sepolia.basescan.org/tx/${txHash}`;
+  if (chain === "HYPER") return `https://testnet.purrsec.com/tx/${txHash}`;
+  if (chain === "ARB")   return `https://sepolia.arbiscan.io/tx/${txHash}`;
+  return "#";
+};
+
+const CHAIN_ID_FOR: Record<PayFormProps["activeChain"], number> = {
+  ETH: 11155111, BSC: 97, BASE: 84532, HYPER: 998, ARB: 421614,
+};
+
+export const PayForm = ({ activeChain }: PayFormProps) => {
+  const { address: account, isConnected } = useAccount();
+  const { commit, isCommitting, isApproving, lastError, contractAddress } = usePool();
+  const { startProgress, updateProgress } = useProgress();
+
+  const availableTokens: PoolTokenEntry[] = POOL_TOKENS_BY_CHAIN[CHAIN_ID_FOR[activeChain]] ?? [];
+  const [selectedToken, setSelectedToken] = useState<PoolTokenEntry | undefined>(undefined);
+  useMemo(() => {
+    if (availableTokens.length === 0) { setSelectedToken(undefined); return; }
+    if (!selectedToken || !availableTokens.some(t => t.address === selectedToken.address)) {
+      setSelectedToken(availableTokens[0]);
+    }
+  }, [availableTokens, selectedToken]);
+
+  const token = selectedToken?.address ?? NATIVE_TOKEN_ADDRESS;
+  const tokenDecimals = selectedToken?.decimals ?? 18;
+  const tokenSymbol = selectedToken?.symbol ?? "ETH";
+  const isNative = token === NATIVE_TOKEN_ADDRESS;
+  const nativeSymbol =
+    activeChain === "BSC" ? "tBNB"
+    : activeChain === "HYPER" ? "HYPE"
+    : "ETH";
+
+  const { sizes: bucketSizes, isLoading: loadingBuckets } = usePoolBucketSizes(token);
+  const { feeWei } = usePoolCurrentFee();
+  const { allowance, refetch: refetchAllowance } = useTokenAllowance(token, account);
+  const { balance: tokenBalance } = usePoolTokenBalance(token, account);
+  const { data: nativeBalanceData } = useBalance({ address: account, query: { enabled: !!account && isNative } });
+  const effectiveBalance: bigint = isNative
+    ? (nativeBalanceData?.value ?? 0n)
+    : tokenBalance;
+
+  const [bucketIdx, setBucketIdx] = useState<number>(0);
+  const [recipient, setRecipient] = useState<string>("");
+  const [memo, setMemo] = useState<string>("");
+  const [result, setResult] = useState<{ txHash: string; claimURL: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useMemo(() => { setBucketIdx(0); }, [token]);
+
+  const bucketSize = bucketSizes[bucketIdx];
+  const recipientValid = /^0x[a-fA-F0-9]{40}$/.test(recipient);
+  const needsApproval = !isNative && bucketSize != null && allowance < bucketSize;
+
+  const requiredBalance: bigint | undefined = bucketSize != null && feeWei != null
+    ? (isNative ? bucketSize + feeWei : bucketSize)
+    : undefined;
+  const hasEnoughBalance: boolean = requiredBalance == null ? true : effectiveBalance >= requiredBalance;
+
+  const canPay =
+    isConnected && contractAddress && bucketSize != null && feeWei != null &&
+    recipientValid && !isCommitting && !isApproving && hasEnoughBalance;
+
+  const handlePay = async () => {
+    if (!canPay || bucketSize == null || feeWei == null) return;
+    setResult(null);
+    const amountLabel = `${formatUnits(bucketSize, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`;
+    const seed = needsApproval
+      ? [
+          { label: `Approve ${tokenSymbol}`,  status: 'running' as const, detail: `Allowance ${formatUnits(allowance, tokenDecimals)} ${tokenSymbol} → need ${formatUnits(bucketSize, tokenDecimals)}` },
+          { label: 'Sign payment in wallet',  status: 'pending' as const },
+          { label: 'Confirm on-chain',         status: 'pending' as const },
+          { label: 'Receipt ready',            status: 'pending' as const },
+        ]
+      : [
+          { label: 'Sign payment in wallet',  status: 'running' as const, detail: `Preparing ${amountLabel}…` },
+          { label: 'Confirm on-chain',         status: 'pending' as const },
+          { label: 'Receipt ready',            status: 'pending' as const },
+        ];
+    const sessionId = startProgress(`Pay · ${amountLabel}`, seed);
+    try {
+      const { txHash, claimURL } = await commit({
+        withdrawTo: recipient as Address,
+        token, bucketIdx, bucketSize, feeWei,
+        onProgress: (steps) => updateProgress(sessionId, steps),
+      });
+      // Append memo to the URL fragment so the receipt view can render it
+      // without server-side storage. URL-encoded; trimmed to 200 chars at
+      // input time.
+      const claimURLWithMemo = memo
+        ? `${claimURL}&memo=${encodeURIComponent(memo)}`
+        : claimURL;
+      setResult({ txHash, claimURL: claimURLWithMemo });
+      if (needsApproval) refetchAllowance();
+    } catch {
+      // commit() already surfaces lastError + marks lifecycle step failed
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!result) return;
+    await navigator.clipboard.writeText(result.claimURL);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  if (!contractAddress) {
+    return (
+      <Card className="p-6 bg-gradient-card backdrop-blur border-yellow-500/30">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-yellow-200">Payments not available on {activeChain}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Switch chains above (Sepolia, BSC Testnet, Base Sepolia, Arbitrum Sepolia, HyperEVM) — pool contract isn't deployed on the current selection.
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30 space-y-5">
+      <div className="flex items-center gap-2">
+        <Send className="w-5 h-5 text-vault-primary" />
+        <h3 className="text-base font-semibold">Pay anyone, privately</h3>
+      </div>
+
+      {/* Recipient — first thing the user sees, biggest decision */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+          Pay to (wallet address)
+        </Label>
+        <Input
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+          placeholder="0x… (the recipient's wallet address)"
+          className="font-mono text-xs"
+        />
+        <p className="text-xs text-muted-foreground">
+          Get this from whoever you're paying. Funds will land at this exact address — baked into the
+          commitment hash (MEV-safe).
+        </p>
+      </div>
+
+      {/* Token picker — only shown when chain has >1 token configured */}
+      {availableTokens.length > 1 && (
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">Token</Label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {availableTokens.map((t) => (
+              <button
+                key={t.address}
+                type="button"
+                onClick={() => setSelectedToken(t)}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors border ${
+                  selectedToken?.address === t.address
+                    ? "bg-vault-primary/20 border-vault-primary/60 text-vault-primary"
+                    : "bg-vault-primary/5 border-vault-primary/20 text-muted-foreground hover:border-vault-primary/40"
+                }`}
+              >
+                {t.symbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Amount (bucket size) */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Amount</Label>
+        {loadingBuckets ? (
+          <div className="text-xs text-muted-foreground py-2">Loading…</div>
+        ) : bucketSizes.length === 0 ? (
+          <div className="text-xs text-yellow-500 py-2">No amounts configured for this token on this chain.</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {bucketSizes.map((size, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setBucketIdx(idx)}
+                className={`px-3 py-2 rounded-md text-sm font-mono transition-colors border ${
+                  idx === bucketIdx
+                    ? "bg-vault-primary/20 border-vault-primary/60 text-vault-primary"
+                    : "bg-vault-primary/5 border-vault-primary/20 text-muted-foreground hover:border-vault-primary/40"
+                }`}
+              >
+                {formatUnits(size, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Optional memo (URL fragment, never server-side) */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground uppercase tracking-wide">Memo (optional)</Label>
+        <Input
+          value={memo}
+          onChange={(e) => setMemo(e.target.value.slice(0, 200))}
+          placeholder="Invoice #1234 · service description · note for the recipient"
+          className="text-xs"
+        />
+        <p className="text-[10px] text-muted-foreground/70 text-right">{memo.length} / 200</p>
+      </div>
+
+      {/* Balance + allowance pre-flight (same pattern as CommitForm) */}
+      {bucketSize != null && account && (
+        <div className={`rounded-md border px-3 py-2 text-xs font-mono flex items-center gap-2 ${hasEnoughBalance ? 'border-vault-primary/15 bg-vault-primary/5' : 'border-red-500/40 bg-red-500/10'}`}>
+          <Coins className={`w-3.5 h-3.5 ${hasEnoughBalance ? 'text-emerald-400' : 'text-red-400'}`} />
+          <span className="text-muted-foreground">Balance:</span>
+          <span className={hasEnoughBalance ? 'text-emerald-200' : 'text-red-300'}>
+            {formatUnits(effectiveBalance, tokenDecimals)} {isNative ? nativeSymbol : tokenSymbol}
+          </span>
+          {!hasEnoughBalance && requiredBalance != null && (
+            <span className="text-red-300/90 ml-auto">need {formatUnits(requiredBalance, tokenDecimals)}</span>
+          )}
+          {hasEnoughBalance && (
+            <span className="text-emerald-200/70 ml-auto">enough to pay</span>
+          )}
+        </div>
+      )}
+      {!isNative && bucketSize != null && (
+        <div className="rounded-md border border-vault-primary/15 bg-vault-primary/5 px-3 py-2 text-xs font-mono flex items-center gap-2">
+          <ShieldCheck className={`w-3.5 h-3.5 ${needsApproval ? 'text-yellow-500' : 'text-emerald-400'}`} />
+          <span className="text-muted-foreground">Allowance:</span>
+          <span className={needsApproval ? 'text-yellow-200' : 'text-emerald-200'}>
+            {formatUnits(allowance, tokenDecimals)} {tokenSymbol}
+          </span>
+          {needsApproval ? (
+            <span className="text-yellow-200/70 ml-auto">approve step will run first</span>
+          ) : (
+            <span className="text-emerald-200/70 ml-auto">no approve needed</span>
+          )}
+        </div>
+      )}
+
+      {/* Primary CTA */}
+      <Button
+        onClick={handlePay}
+        disabled={!canPay}
+        className="w-full bg-vault-primary text-background hover:bg-vault-primary/90"
+      >
+        {(() => {
+          if (isApproving) return "Approving…";
+          if (isCommitting) return "Sending payment…";
+          if (!isConnected) return "Connect wallet first";
+          if (!recipientValid) return "Enter recipient address";
+          if (!hasEnoughBalance && requiredBalance != null) {
+            return `Need ${formatUnits(requiredBalance, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`;
+          }
+          const amountLabel = bucketSize != null
+            ? `${formatUnits(bucketSize, tokenDecimals)} ${isNative ? nativeSymbol : tokenSymbol}`
+            : '';
+          return `Pay ${amountLabel}`;
+        })()}
+      </Button>
+
+      {/* Onramp placeholder — disabled until Transak sandbox key arrives */}
+      <button
+        type="button"
+        disabled
+        title="Coming soon — Transak fiat onramp integration. Will let you buy USDC/USDT/USD1 with Apple Pay / credit card directly here."
+        className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-md text-xs border border-dashed border-vault-primary/30 text-muted-foreground/60 cursor-not-allowed"
+      >
+        <CreditCard className="w-3.5 h-3.5" />
+        Buy with Apple Pay / Card (coming soon)
+      </button>
+
+      {/* Error surface */}
+      {lastError && !result && (
+        <div className="text-xs text-red-400 font-mono whitespace-pre-wrap">{lastError}</div>
+      )}
+
+      {/* Success: shareable receipt URL */}
+      {result && (
+        <Card className="p-4 bg-emerald-500/5 border-emerald-500/30 space-y-3">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400" />
+            <p className="text-sm font-medium text-emerald-200">Payment sent — share this receipt with the recipient</p>
+          </div>
+          <div className="text-xs space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Tx:</span>
+              <a
+                href={explorerForChain(activeChain, result.txHash)}
+                target="_blank" rel="noreferrer noopener"
+                className="font-mono text-foreground hover:text-vault-primary inline-flex items-center gap-1"
+              >
+                {result.txHash.slice(0, 10)}…{result.txHash.slice(-8)} <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <div className="space-y-2">
+              <span className="text-muted-foreground">Receipt URL (share with recipient — they claim here):</span>
+              <div className="flex gap-2">
+                <Input value={result.claimURL} readOnly className="font-mono text-xs flex-1" />
+                <Button size="sm" variant="outline" onClick={handleCopy}>
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 items-start pt-2">
+                <ClaimQR value={result.claimURL} size={140} />
+                <p className="text-xs text-yellow-200 sm:flex-1">
+                  ⚠ Anyone with this URL or QR code can broadcast the reveal — they get nothing,
+                  but the recipient address (above) receives the funds. Share with the recipient via
+                  end-to-end-encrypted channels (Signal, Matrix E2EE) or in person.
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+    </Card>
+  );
+};

@@ -11,6 +11,7 @@ import { MainnetComingSoon } from "@/components/shared/MainnetComingSoon";
 import { getEffectiveNetworkMode, isMainnetDeployedAnywhere } from "@/config/web3";
 import Index from "./pages/Index";
 import Claim from "./pages/Claim";
+import Pay from "./pages/Pay";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/claim" element={<Claim />} />
+                <Route path="/pay" element={<Pay />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
