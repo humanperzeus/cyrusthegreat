@@ -14,7 +14,7 @@ The dapp without connecting a wallet — for reviewers, grant panels, and anyone
 | **v1 — Multi-token batched deposit** | ![Multi-token deposit](docs/screenshots/02-multi-token-deposit.png) | 3-token batch (ETH 0.3 + WLFI 50 + USD1 10), MAX-approval toggles per token, live balance read, validation summary, single "Deposit 3 Tokens" CTA |
 | **v2 — CyrusTeleport commit form** | ![CyrusTeleport commit](docs/screenshots/03-cyrusteleport-commit.png) | Testnet/Mainnet switch, v1/v2 tabs, 5-chain switcher (tETH active), real wallet balance, bucket picker (0.001 / 0.01 / 0.1 / 1 ETH), Teleport/Escrow tabs, fee summary, eligible-epoch ETA |
 | **v2 — Commit success + shareable claim URL** | ![Commit success](docs/screenshots/05-commit-success.png) | Post-commit result card: tx hash + link, full claim URL with copy button, QR code, yellow "treat like cash" warning |
-| **/claim page** | ![Claim page](docs/screenshots/08-claim-page.png) | Recipient-side route validation |
+| **/claim page** | ![Claim page](docs/screenshots/08-claim-page.png) | Recipient-side claim flow: decoded claim details (chain, token, amount, recipient, contract, commitment hash), "Already claimed" success state with link to view contract events on the explorer |
 
 ## 🚀 Features
 
