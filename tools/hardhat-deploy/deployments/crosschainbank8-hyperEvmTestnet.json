@@ -1,0 +1,15 @@
+{
+  "network": "hyperEvmTestnet",
+  "chainId": 998,
+  "contract": "CrossChainBank8",
+  "address": "0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219",
+  "deployTx": "0x134000aac9a55783ae393ee88b40b48a59959dead9c7dcb3a9f7fdcb3f295e2f",
+  "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+  "blockNumber": 55593980,
+  "timestamp": "2026-06-07T14:00:05.762Z",
+  "constructorArgs": {
+    "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+    "salt": "0x50b0abe34b9c6bd393d5bb80df9292952a983c62dc3f3ea071ea22195c8e66f0",
+    "priceFeed": "0xd2fC71E2fbF7a267c2F884160F01c82994175958"
+  }
+}

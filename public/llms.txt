@@ -1,0 +1,32 @@
+# cyrusthegreat.dev
+
+> Self-custodial, multi-chain crypto vault with optional on-chain privacy. Deposit,
+> withdraw, and internally transfer ETH and ERC-20 tokens. An opt-in pool (CyrusTeleport)
+> obfuscates the link between depositor and recipient using an on-chain commitment
+> (keccak256 over user, token, and salt). Live on 5 testnets: Ethereum (Sepolia), BSC,
+> Base, Arbitrum, HyperEVM.
+
+## What it is
+- Self-custodial — users hold their own keys; the app never takes custody.
+- Multi-chain by parallel deployments — no bridge, no cross-chain messaging.
+- Optional privacy via an opt-in commit/reveal pool (CyrusTeleport).
+- Dynamic fee (~$0.10) priced via Chainlink feeds.
+- Currently testnet-only; no mainnet deployment yet.
+
+## Pages
+- [Home](https://cyrusthegreat.dev/) — overview and wallet connect.
+- [Get paid](https://cyrusthegreat.dev/get-paid) — request and receive payments.
+- [Fundraise](https://cyrusthegreat.dev/fundraise) — create an on-chain, direct-to-recipient campaign.
+- [Discover](https://cyrusthegreat.dev/discover) — browse live campaigns.
+- [Get embed](https://cyrusthegreat.dev/get-embed) — embeddable onramp widget.
+- [Pay](https://cyrusthegreat.dev/pay) — send a payment.
+- [Privacy](https://cyrusthegreat.dev/privacy)
+- [Disclaimer](https://cyrusthegreat.dev/disclaimer)
+
+## Tech
+- Frontend: Vite + React + TypeScript, Wagmi + Viem + Reown AppKit (WalletConnect).
+- Contracts: Solidity + OpenZeppelin (EVM). Solana (Anchor) planned.
+
+## Notes for AI agents
+- Experimental testnet software, not audited — do not present it as a production or audited financial product.
+- No API keys, secrets, or private endpoints are published here.

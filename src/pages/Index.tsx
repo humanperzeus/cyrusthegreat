@@ -1,0 +1,432 @@
+import { useState, useEffect } from "react";
+import { useSeo } from "@/hooks/useSeo";
+import { VaultCore } from "@/components/VaultCore";
+import { PoolView } from "@/components/PoolView";
+import { DepositModal } from "@/components/modals/DepositModal";
+import { WithdrawModal } from "@/components/modals/WithdrawModal";
+import { TransferModal } from "@/components/modals/TransferModal";
+import { useVault } from "@/hooks/useVault";
+import { parseEther } from "viem";
+import { debugLog } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Shield, Lock } from "lucide-react";
+import { WEB3_CONFIG } from "@/config/web3";
+import { NetworkModeSwitch } from "@/components/shared/NetworkModeSwitch";
+
+  // DISABLED: Debounce utility function to prevent RPC spam
+  // const debounce = <T extends (...args: any[]) => any>(
+  //   func: T,
+  //   wait: number
+  // ): ((...args: Parameters<T>) => void) => {
+  //   let timeout: NodeJS.Timeout;
+  //   return (...args: Parameters<T>) => {
+  //     clearTimeout(timeout);
+  //     timeout = setTimeout(() => func(...args), wait);
+  //   };
+  // };
+
+
+// As of 2026-05-30 both v1 (Bank8) and v2 (CyrusTresor1) cover the same
+// 5 EVM chains. ActiveChain and V1Chain are now identical — the historical
+// v1SafeChain bridge is a no-op pass-through (kept for naming clarity).
+type ActiveChain = 'ETH' | 'BSC' | 'BASE' | 'HYPER' | 'ARB';
+type V1Chain = 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
+
+const Index = () => {
+  useSeo({
+    title: "cyrusthegreat.dev — multi-chain crypto vault with privacy",
+    description: "Self-custodial multi-chain crypto vault. Anonymous payments via opt-in pool (CyrusTeleport). 5 testnets live: Ethereum, BSC, Base, Arbitrum, HyperEVM.",
+    path: "/",
+  });
+  // Chain switching state with persistence
+  const [activeChain, setActiveChain] = useState<ActiveChain>(() => {
+    // Try to restore from localStorage, fallback to ETH
+    const saved = localStorage.getItem('cyrusthegreat-active-chain');
+    if (saved === 'ETH' || saved === 'BSC' || saved === 'BASE' || saved === 'HYPER' || saved === 'ARB') {
+      return saved;
+    }
+    return 'ETH';
+  });
+
+  // Save chain preference to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('cyrusthegreat-active-chain', activeChain);
+    debugLog(`💾 Chain preference saved to localStorage: ${activeChain}`);
+  }, [activeChain]);
+
+  // Mode switching state (v1 = Bank8 vault, v2 = CyrusTresor1 anonymity pool).
+  // Persisted in localStorage. Only RENDERED when wallet is connected AND
+  // VITE_ENABLE_POOL=true at build time — the live site stays single-mode
+  // until the flag flips.
+  const [mode, setMode] = useState<'v1' | 'v2'>(() => {
+    const saved = localStorage.getItem('cyrusthegreat-active-mode');
+    return saved === 'v2' ? 'v2' : 'v1';
+  });
+  useEffect(() => {
+    localStorage.setItem('cyrusthegreat-active-mode', mode);
+  }, [mode]);
+
+  // Bank8 (v1) is now deployed on HyperEVM as of 2026-05-30, so v1 supports
+  // the same 5 chains as v2. The HYPER → v2 auto-promote effect is removed.
+  // v1SafeChain is a no-op pass-through (kept for naming clarity / future
+  // chain-set divergence).
+  const v1SafeChain: V1Chain = activeChain;
+  const v1SetActiveChain = (chain: V1Chain) => setActiveChain(chain);
+  
+  const {
+    walletBalance,
+    vaultBalance,
+    currentFee,
+    isLoading,
+    depositETH, // ORIGINAL: Custom transaction management
+    depositETHWagmi, // NEW: Wagmi-based implementation
+    withdrawETH, // ORIGINAL: Custom transaction management
+    withdrawETHWagmi, // NEW: Wagmi-based implementation
+    transferETH, // ORIGINAL: Custom transaction management
+    transferInternalETHWagmi, // NEW: Wagmi-based implementation
+    isConnected,
+    isSimulating, // Add simulation state
+    isConfirmed, // Add transaction confirmation state
+    walletTokens,
+    vaultTokens,
+    // Pre-built native-token entries for the multi-token pickers
+    // (CrossChainBank8 accepts native alongside ERC-20s atomically).
+    walletNativeToken,
+    vaultNativeToken,
+    isLoadingWalletTokens,
+    isLoadingVaultTokens,
+    isLoadingTokens, // Keep for backward compatibility
+    refetchWalletTokens,
+    refetchVaultTokens,
+    // Token functions (Wagmi-based)
+    approveTokenWagmi,
+    depositTokenWagmi,
+    depositTokenSmartWagmi,
+    withdrawTokenWagmi,
+    withdrawMultipleTokensWagmi, // NEW: Multi-token withdrawal function (Wagmi)
+    transferInternalTokenWagmi, // Add transferInternalToken to the hook (Wagmi)
+    transferMultipleTokensWagmi, // NEW: Multi-token transfer function (Wagmi)
+    depositMultipleTokensWagmi, // NEW: Multi-token deposit function (Wagmi)
+    getRateLimitStatus, // NEW: Rate limit status function
+    // Network switching functions
+    currentNetwork,
+    isSwitchingNetwork,
+    autoSwitchNetwork
+  } = useVault(v1SafeChain);
+
+  const [depositModalOpen, setDepositModalOpen] = useState(false);
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+
+  // Token lists for the multi-token modals — prepend the chain's native
+  // currency so it's pickable alongside ERC-20s. walletTokens/vaultTokens
+  // skip native because the single-asset UI shows it separately at the
+  // top of the page; the multi-token flow needs it back.
+  const walletTokensWithNative = walletNativeToken
+    ? [walletNativeToken, ...walletTokens]
+    : walletTokens;
+  const vaultTokensWithNative = vaultNativeToken
+    ? [vaultNativeToken, ...vaultTokens]
+    : vaultTokens;
+
+  // Multi-token functionality state
+  const [rateLimitStatus, setRateLimitStatus] = useState<{
+    remaining: number;
+    total: number;
+    resetTime: number;
+  } | null>(null);
+
+  // DISABLED: Debounced refresh function to prevent RPC spam
+  // const debouncedRefresh = useCallback(
+  //   debounce(() => {
+  //     refetchWalletTokens();
+  //     refetchVaultTokens();
+  //   }, 300),
+  //   [refetchWalletTokens, refetchVaultTokens]
+  // );
+
+  // REMOVED 2026-06-10: the "close every modal when ANY tx confirms"
+  // effect was a relic from the toast-only era. With our current modal
+  // pattern (the submit handler closes its own dialog immediately via
+  // onOpenChange(false) right after startProgress), this effect just
+  // killed unrelated modals — e.g. the user opens DepositModal for USD1
+  // while a WLFI tx is in flight; WLFI confirms and the USD1 modal
+  // they were filling in disappears. The ProgressFlow popup is the
+  // confirmation surface now; the modals don't need to react to
+  // isConfirmed at all.
+
+  // DISABLED: Rate limit status fetching to prevent RPC spam
+  // useEffect(() => {
+  //   const timeoutId = setTimeout(() => {
+  //     const fetchRateLimitStatus = async () => {
+  //       try {
+  //         const status = await getRateLimitStatus();
+  //         setRateLimitStatus(status);
+  //       } catch (error) {
+  //         console.error('Failed to fetch rate limit status:', error);
+  //       }
+  //     };
+
+  //     if (isConnected && getRateLimitStatus) {
+  //       fetchRateLimitStatus();
+  //       }
+  //     }, 2000); // 2 second delay to prevent rapid calls
+
+  //     return () => clearTimeout(timeoutId);
+  //   }, [isConnected, getRateLimitStatus, activeChain]);
+
+  // State for token deposit modal
+  const [tokenDepositInfo, setTokenDepositInfo] = useState<{
+    symbol: string;
+    address: string;
+    balance: string;
+  } | null>(null);
+
+  // State for token withdraw modal
+  const [tokenWithdrawInfo, setTokenWithdrawInfo] = useState<{
+    symbol: string;
+    address: string;
+    balance: string;
+    decimals: number;
+  } | null>(null);
+
+  // State for token transfer modal
+  const [tokenTransferInfo, setTokenTransferInfo] = useState<{
+    symbol: string;
+    address: string;
+    balance: string;
+    decimals: number;
+  } | null>(null);
+
+  // Handle token deposit click
+  const handleTokenDeposit = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
+    setTokenDepositInfo(token);
+    setDepositModalOpen(true);
+  };
+
+  // Handle ETH deposit (reset token info)
+  const handleETHDeposit = () => {
+    setTokenDepositInfo(null);
+    setDepositModalOpen(true);
+  };
+
+  // Handle ETH withdraw (reset token info)
+  const handleETHWithdraw = () => {
+    setTokenWithdrawInfo(null);
+    setWithdrawModalOpen(true);
+  };
+
+  // Handle ETH transfer (reset token info)
+  const handleETHTransfer = () => {
+    setTokenTransferInfo(null);
+    setTransferModalOpen(true);
+  };
+
+  // Handle token deposit from modal
+  const handleTokenDepositFromModal = (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
+    // Call the smart deposit function with complete allowance flow (Wagmi-based)
+    depositTokenSmartWagmi(tokenAddress, amount, tokenSymbol, onProgress);
+  };
+
+  // Handle multi-token deposit from modal
+  const handleMultiTokenDepositFromModal = async (
+    deposits: { token: string; amount: string; approvalType: 'exact' | 'unlimited' }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
+    console.log('handleMultiTokenDepositFromModal called with:', deposits);
+    // Forward onProgress so useVault.depositMultipleTokensWagmi can drive
+    // the MultiTokenDepositModal's <ProgressFlow> step indicator live.
+    await depositMultipleTokensWagmi(deposits, onProgress);
+  };
+
+  // Handle token withdraw click
+  const handleTokenWithdraw = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
+    setTokenWithdrawInfo(token);
+    setWithdrawModalOpen(true);
+  };
+
+  // Handle token withdraw from modal
+  const handleTokenWithdrawFromModal = (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
+    // Call the token withdraw function (Wagmi-based)
+    withdrawTokenWagmi(tokenAddress, amount, tokenSymbol, onProgress);
+  };
+
+  // Token transfer handler
+  const handleTokenTransfer = (token: { symbol: string; address: string; balance: string; decimals: number }) => {
+    setTokenTransferInfo({
+      symbol: token.symbol,
+      address: token.address,
+      balance: token.balance,
+      decimals: token.decimals
+    });
+    setTransferModalOpen(true);
+  };
+
+  // Token transfer from modal (for ETH compatibility - keeps existing logic)
+  const handleTokenTransferFromModal = (
+    to: string,
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
+    if (tokenTransferInfo) {
+      transferInternalTokenWagmi(tokenTransferInfo.address, to, amount, tokenTransferInfo.symbol, onProgress);
+    }
+  };
+
+  // Show the v1/v2 mode toggle only when the build has the feature flag on
+  // AND the user has connected a wallet (otherwise the toggle would float
+  // above a connect-screen, which is confusing UX).
+  const showModeToggle = WEB3_CONFIG.ENABLE_POOL && isConnected;
+
+  return (
+    <>
+      {/* Network mode switch sits ABOVE the v1/v2 tabs. Always visible
+          (no isConnected gate) so the user can flip mainnet ↔ testnet
+          before connecting a wallet. Page reloads on change; if the
+          target is mainnet and no contracts are deployed, App.tsx's
+          guard renders MainnetComingSoon instead of the route tree. */}
+      <NetworkModeSwitch />
+      {showModeToggle && (
+        <div className="w-full pt-2 pb-2 flex justify-center">
+          <Tabs value={mode} onValueChange={(v) => setMode(v as 'v1' | 'v2')}>
+            <TabsList className="bg-card/80 backdrop-blur border border-border/50">
+              <TabsTrigger value="v1" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-foreground">
+                <Shield className="w-4 h-4" />
+                <span>v1 — CyrusTresor</span>
+              </TabsTrigger>
+              <TabsTrigger value="v2" className="gap-2 data-[state=active]:bg-primary/20 data-[state=active]:text-foreground">
+                <Lock className="w-4 h-4" />
+                <span>v2 — CyrusTeleport</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
+
+      {mode === 'v2' && showModeToggle ? (
+        <PoolView activeChain={activeChain} setActiveChain={setActiveChain} />
+      ) : (
+      <VaultCore
+        walletBalance={walletBalance}
+        vaultBalance={vaultBalance}
+        currentFee={currentFee}
+        isLoading={isLoading}
+        isSimulating={isSimulating}
+        isTransactionConfirmed={isConfirmed}
+        walletTokens={walletTokens}
+        vaultTokens={vaultTokens}
+        isLoadingWalletTokens={isLoadingWalletTokens}
+        isLoadingVaultTokens={isLoadingVaultTokens}
+        refetchWalletTokens={refetchWalletTokens}
+        refetchVaultTokens={refetchVaultTokens}
+        onDeposit={handleETHDeposit}
+        onWithdraw={handleETHWithdraw}
+        onTransfer={handleETHTransfer}
+        onTokenDeposit={handleTokenDeposit}
+        onTokenWithdraw={handleTokenWithdraw}
+        onTokenTransfer={handleTokenTransfer}
+        // Chain switching props — narrowed for v1 (no HyperEVM here)
+        activeChain={v1SafeChain}
+        setActiveChain={v1SetActiveChain}
+      />
+      )}
+
+      <DepositModal
+        open={depositModalOpen}
+        onOpenChange={(open) => {
+          setDepositModalOpen(open);
+          // DISABLED: All refresh logic to prevent RPC spam
+          // The useVault hook already handles smart refresh after transactions
+        }}
+        onDeposit={depositETHWagmi} // NEW: Using Wagmi-based implementation
+        onTokenDeposit={handleTokenDepositFromModal}
+        onMultiTokenDeposit={handleMultiTokenDepositFromModal}
+        isLoading={isLoading}
+        isSimulating={isSimulating}
+        walletBalance={walletBalance}
+        currentFee={currentFee}
+        isTransactionConfirmed={isConfirmed}
+        // Token-specific props
+        isTokenDeposit={!!tokenDepositInfo}
+        tokenSymbol={tokenDepositInfo?.symbol}
+        tokenAddress={tokenDepositInfo?.address}
+        tokenBalance={tokenDepositInfo?.balance}
+        // Chain-aware props — narrowed for v1 modals
+        activeChain={v1SafeChain}
+        // Multi-token functionality — pass the with-native list so the
+        // multi-token deposit picker shows ETH/BNB/HYPE/etc. as a choice.
+        availableTokens={walletTokensWithNative}
+        rateLimitStatus={rateLimitStatus}
+      />
+
+      <WithdrawModal
+        open={withdrawModalOpen}
+        onOpenChange={(open) => {
+          setWithdrawModalOpen(open);
+          // DISABLED: All refresh logic to prevent RPC spam
+          // The useVault hook already handles smart refresh after transactions
+        }}
+        onWithdraw={withdrawETHWagmi} // NEW: Using Wagmi-based implementation
+        onTokenWithdraw={handleTokenWithdrawFromModal}
+        onMultiTokenWithdraw={withdrawMultipleTokensWagmi}
+        isLoading={isLoading}
+        vaultBalance={vaultBalance}
+        currentFee={currentFee}
+        isTransactionConfirmed={isConfirmed}
+        isSimulating={isSimulating}
+        isTokenWithdraw={!!tokenWithdrawInfo}
+        tokenSymbol={tokenWithdrawInfo?.symbol}
+        tokenAddress={tokenWithdrawInfo?.address}
+        tokenBalance={tokenWithdrawInfo?.balance}
+        tokenDecimals={tokenWithdrawInfo?.decimals}
+        // Chain-aware props — narrowed for v1 modals
+        activeChain={v1SafeChain}
+        // Multi-token functionality — pass the with-native list so the
+        // multi-token withdraw picker shows vaulted native (ETH/BNB/…)
+        // as a choice.
+        vaultTokens={vaultTokensWithNative}
+        rateLimitStatus={rateLimitStatus}
+      />
+
+      <TransferModal
+        open={transferModalOpen}
+        onOpenChange={(open) => {
+          setTransferModalOpen(open);
+          // DISABLED: All refresh logic to prevent RPC spam
+          // The useVault hook already handles smart refresh after transactions
+        }}
+        onTransfer={transferInternalETHWagmi} // NEW: Using Wagmi-based implementation
+        isLoading={isLoading}
+        vaultBalance={vaultBalance}
+        currentFee={currentFee}
+        isTransactionConfirmed={isConfirmed}
+        isSimulating={isSimulating}
+        onTokenTransfer={handleTokenTransferFromModal}
+        isTokenTransfer={!!tokenTransferInfo}
+        tokenSymbol={tokenTransferInfo?.symbol}
+        tokenAddress={tokenTransferInfo?.address}
+        tokenBalance={tokenTransferInfo?.balance}
+        tokenDecimals={tokenTransferInfo?.decimals}
+        // Chain-aware props — narrowed for v1 modals
+        activeChain={v1SafeChain}
+        // Multi-token functionality — with-native list so the multi-token
+        // transfer picker shows vaulted native (ETH/BNB/…) as a choice.
+        onMultiTokenTransfer={transferMultipleTokensWagmi}
+        vaultTokens={vaultTokensWithNative}
+        rateLimitStatus={rateLimitStatus}
+      />
+    </>
+  );
+};
+
+export default Index;

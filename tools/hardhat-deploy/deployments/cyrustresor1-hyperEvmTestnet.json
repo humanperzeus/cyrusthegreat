@@ -1,0 +1,39 @@
+{
+  "network": "hyperEvmTestnet",
+  "chainId": 998,
+  "contract": "CyrusTresor1",
+  "address": "0x57d438eA49CFe54814ccA12E14736c7A059361C8",
+  "deployTx": "0xa979cf6262adc13370a109ba12d4acdf8be24726d25ae16179fcc88e48b6d131",
+  "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+  "blockNumber": 55594041,
+  "timestamp": "2026-06-07T14:01:06.384Z",
+  "constructorArgs": {
+    "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+    "salt": "0xeb35dd15d4fe825c01a6aab7597ace9b740dca9be4785eea827648a65677e828",
+    "priceFeed": "0xd2fC71E2fbF7a267c2F884160F01c82994175958",
+    "poolTokens": [
+      "0x0000000000000000000000000000000000000000"
+    ],
+    "bucketSchedules": [
+      [
+        "1000000000000000",
+        "10000000000000000",
+        "100000000000000000",
+        "1000000000000000000"
+      ]
+    ],
+    "zkVerifier": "0x0000000000000000000000000000000000000000"
+  },
+  "poolBucketsHuman": [
+    {
+      "symbol": "HYPE",
+      "addr": "0x0000000000000000000000000000000000000000",
+      "sizes": [
+        "0.001",
+        "0.01",
+        "0.1",
+        "1.0"
+      ]
+    }
+  ]
+}

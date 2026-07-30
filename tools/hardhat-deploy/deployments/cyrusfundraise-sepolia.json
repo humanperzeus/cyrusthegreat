@@ -1,0 +1,11 @@
+{
+  "contract": "CyrusFundraise",
+  "network": "sepolia",
+  "address": "0x55585fC29eea111ef627Ba6d0c5E57Aef21E1335",
+  "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+  "txHash": "0x6f3c5607ea11f54806ece42348707302bdfbe79c71528c2d0efbc32798e91d13",
+  "timestamp": "2026-07-05T21:27:25.086Z",
+  "constructorArgs": {
+    "feeCollector": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8"
+  }
+}

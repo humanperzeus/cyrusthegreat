@@ -1,0 +1,391 @@
+import { useState, useEffect } from "react";
+import { formatTokenBalance } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowUpDown, Loader2, Shield, Info, Coins } from "lucide-react";
+import { getChainConfig } from "@/config/web3";
+import { MultiTokenTransferModal } from "./MultiTokenTransferModal";
+import { useProgress } from "@/contexts/ProgressContext";
+import { useAccount } from "wagmi";
+
+interface TransferModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  // Optional onProgress channel for the App-level ProgressFlow — see
+  // DepositModal for the rationale.
+  onTransfer: (
+    to: string,
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
+  onTokenTransfer?: (
+    to: string,
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
+  onMultiTokenTransfer?: (
+    transfers: { token: string; amount: string }[],
+    to: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => Promise<void>;
+  vaultBalance: string;
+  currentFee?: string;
+  isLoading: boolean;
+  isSimulating?: boolean;
+  isTransactionConfirmed?: boolean;
+  // Token-specific props
+  isTokenTransfer?: boolean;
+  tokenSymbol?: string;
+  tokenAddress?: string;
+  tokenBalance?: string;
+  tokenDecimals?: number;
+  // Chain-aware props
+  activeChain?: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
+  // Multi-token functionality
+  vaultTokens?: Array<{address: string, symbol: string, balance: string, decimals: number}>;
+  rateLimitStatus?: {
+    remaining: number;
+    total: number;
+    resetTime: number;
+  };
+}
+
+export function TransferModal({
+  open,
+  onOpenChange,
+  onTransfer,
+  onTokenTransfer,
+  onMultiTokenTransfer,
+  vaultBalance,
+  currentFee = "0.00",
+  isLoading,
+  isSimulating = false,
+  isTransactionConfirmed = false,
+  isTokenTransfer,
+  tokenSymbol,
+  tokenAddress,
+  tokenBalance,
+  tokenDecimals,
+  activeChain,
+  vaultTokens = [],
+  rateLimitStatus
+}: TransferModalProps) {
+  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState("");
+
+  // Reset form on fresh open / token swap — see DepositModal for why.
+  useEffect(() => {
+    if (open) {
+      setTo("");
+      setAmount("");
+    }
+  }, [open, tokenAddress]);
+  // ProgressFlow session wiring — see DepositModal for the pattern
+  // (no re-entry lock: wallet handles the queue; concurrent submits
+  // stack as chips in the App-level ProgressFlow registry).
+  const { startProgress, updateProgress, expandProgress } = useProgress();
+  // Connected wallet address — used to reject self-transfers up-front.
+  // The contract reverts on transferInternalETH/Token(self), and the
+  // wallet may silently swallow that revert at the simulate stage,
+  // leaving the user staring at "Preparing transfer…" with nothing
+  // happening. Block the submit before we ever open a session.
+  const { address: connectedAddress } = useAccount();
+  const isSelfTransfer = !!(connectedAddress && to && to.toLowerCase() === connectedAddress.toLowerCase());
+  const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
+  const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
+
+  // Auto-close modal after successful transaction (now handled centrally in Index.tsx)
+  // Removed to prevent conflicts with centralized modal management
+
+  // Reset multi-token mode when modal opens/closes
+  useEffect(() => {
+    if (!open) {
+      setIsMultiTokenMode(false);
+      setShowMultiTokenModal(false);
+    }
+  }, [open]);
+
+  const handleMultiTokenTransfer = async (
+    transfers: { token: string; amount: string }[],
+    recipient: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
+    if (onMultiTokenTransfer) {
+      // Forward onProgress so the MultiTokenTransferModal's ProgressFlow
+      // receives live step updates from useVault.
+      await onMultiTokenTransfer(transfers, recipient, onProgress);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Number(amount) > 0 blocks "", "0", "0.00", " ", "abc", "-1" all
+    // at once — the contract takes the fee even on 0-amount calls.
+    if (!to || !(Number(amount) > 0)) return;
+    // Bank8 reverts on self-transfer (require recipient != msg.sender).
+    // Catch it here so we never open a popup for a tx the contract will
+    // refuse — mirrors the debug UI b8-5 / b8-10 / b8-11 guards.
+    if (isSelfTransfer) return;
+    // Start a global session, seed it with a preparing step, close the
+    // dialog so the App-level ProgressFlow is the only floating UI.
+    const title = isTokenTransfer && tokenSymbol
+      ? `Single ${tokenSymbol} transfer`
+      : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} transfer`;
+    const sessionId = startProgress(
+      title,
+      [{ label: 'Preparing transfer…', status: 'running', detail: `Submitting ${amount} → ${to.slice(0, 6)}…${to.slice(-4)}…` }],
+    );
+    // Start as corner chip so it doesn't overlap the Radix
+    // DialogContent close animation (duration-200); re-expand THIS
+    // session once the dialog has fully unmounted. expandProgress(id)
+    // keeps focus on this submit's chip even if a sibling submit
+    // arrives during the 250ms window.
+    expandProgress(null);
+    onOpenChange(false);
+    setTimeout(() => expandProgress(sessionId), 250);
+    if (isTokenTransfer && onTokenTransfer) {
+      onTokenTransfer(to, amount, (steps) => updateProgress(sessionId, steps));
+    } else {
+      onTransfer(to, amount, (steps) => updateProgress(sessionId, steps));
+    }
+  };
+
+  const setMaxAmount = () => {
+    if (isTokenTransfer && tokenBalance && tokenDecimals) {
+      // CRITICAL FIX: Use formatted balance for MAX button, not raw balance
+      const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
+      setAmount(formattedBalance);
+    } else {
+      setAmount(vaultBalance);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-gradient-card border-vault-secondary/30">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
+              <Shield className="w-6 h-6 text-vault-secondary" />
+              {isTokenTransfer
+                ? `Anonymous ${tokenSymbol} Transfer`
+                : `Anonymous ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} Transfer`
+              }
+            </DialogTitle>
+
+            {/* Multi-Token Toggle - Only for token transfers */}
+            {isTokenTransfer && onMultiTokenTransfer && vaultTokens.length > 0 && (
+              <Button
+                type="button"
+                variant={isMultiTokenMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsMultiTokenMode(!isMultiTokenMode)}
+                className="flex items-center space-x-1"
+              >
+                <Coins className="h-4 w-4" />
+                <span className="text-xs">{isMultiTokenMode ? 'Single' : 'Multi'}</span>
+              </Button>
+            )}
+          </div>
+        </DialogHeader>
+        
+        <div className="bg-vault-secondary/10 border border-vault-secondary/20 rounded-lg p-4 mb-4">
+          <p className="text-sm text-vault-secondary flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            This transfer is completely anonymous within the vault
+          </p>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Token Contract Display for Token Transfers */}
+          {isTokenTransfer && tokenAddress && (
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Token Contract</Label>
+              <div className="flex items-center gap-2 p-2 bg-background/20 rounded border">
+                <span className="text-xs font-mono text-foreground">
+                  {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => window.open(`https://sepolia.etherscan.io/address/${tokenAddress}`, '_blank')}
+                >
+                  🔗
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="to" className="text-foreground">
+              Recipient Address
+            </Label>
+            <Input
+              id="to"
+              type="text"
+              placeholder="0x..."
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="bg-background/50 border-border text-foreground"
+              disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="amount" className="text-foreground">
+              Amount {isTokenTransfer 
+                ? `(${tokenSymbol})` 
+                : `(${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'})`
+              }
+            </Label>
+            <div className="relative">
+              <Input
+                id="amount"
+                type="number"
+                                  step="0.000000000000000001"
+                placeholder="0.0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="bg-background/50 border-border text-foreground pr-16"
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 px-2 text-xs"
+                onClick={setMaxAmount}
+                disabled={isLoading}
+              >
+                MAX
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Available in vault: {isTokenTransfer 
+                ? `${formatTokenBalance(tokenBalance, tokenDecimals)} ${tokenSymbol}` 
+                : `${vaultBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+              }
+            </p>
+          </div>
+
+          {/* Fee Information */}
+          {amount && !isNaN(Number(amount)) && (
+            <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="flex justify-between text-sm">
+                <span className="text-amber-700 dark:text-amber-300">Recipient receives:</span>
+                <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
+                  {amount} {isTokenTransfer 
+                    ? tokenSymbol 
+                    : (activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH')
+                  }
+                </span>
+              </div>
+              <div className="flex justify-between text-sm text-amber-600">
+                <span>Fee (paid from wallet):</span>
+                <span className="font-mono">{currentFee} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}</span>
+              </div>
+            </div>
+          )}
+
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              {isTokenTransfer 
+                ? `The recipient receives exactly ${amount || "0"} ${tokenSymbol}. The ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} fee is paid separately from your wallet balance.`
+                : `The recipient receives exactly ${amount || "0"} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}. The fee is paid separately from your wallet balance.`
+              }
+            </AlertDescription>
+          </Alert>
+
+          {/* Single Token Transfer Button */}
+          {!isMultiTokenMode && (
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => onOpenChange(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                // isLoading dropped — see DepositModal for the rationale.
+                disabled={!to || !(Number(amount) > 0) || isSimulating || isSelfTransfer}
+                className="flex-1"
+              >
+                {isSelfTransfer ? (
+                  "Recipient must differ from sender"
+                ) : isSimulating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Checking...
+                  </>
+                ) : (
+                  isTokenTransfer
+                    ? `Transfer ${tokenSymbol}`
+                    : `Transfer ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Multi-Token Transfer Button */}
+          {isMultiTokenMode && isTokenTransfer && (
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setShowMultiTokenModal(true)}
+                disabled={isLoading}
+                className="flex-1"
+                variant="default"
+              >
+                <Shield className="h-4 w-4 mr-2" />
+                Open Multi-Token Transfer
+                <span className="ml-2 text-xs bg-background/20 px-2 py-1 rounded">
+                  {vaultTokens.length} tokens
+                </span>
+              </Button>
+            </div>
+          )}
+        </form>
+      </DialogContent>
+
+      {/* Multi-Token Transfer Modal */}
+      {showMultiTokenModal && onMultiTokenTransfer && isTokenTransfer && (
+        <MultiTokenTransferModal
+          isOpen={showMultiTokenModal}
+          onClose={() => {
+            // Cancel: only close the sub-modal, keep TransferModal open.
+            setShowMultiTokenModal(false);
+          }}
+          onCommitted={() => {
+            // Submit: close both layers so the App-level ProgressFlow
+            // is the only floating UI and the page is interactive.
+            setShowMultiTokenModal(false);
+            onOpenChange(false);
+          }}
+          availableTokens={vaultTokens}
+          onTransfer={handleMultiTokenTransfer}
+          isLoading={isLoading}
+          rateLimitStatus={rateLimitStatus}
+        />
+      )}
+    </Dialog>
+  );
+};

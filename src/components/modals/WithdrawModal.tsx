@@ -1,0 +1,387 @@
+import { useState, useEffect } from "react";
+import { formatTokenBalance } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowUpDown, Loader2, Info, Coins } from "lucide-react";
+import { getChainConfig } from "@/config/web3";
+import { MultiTokenWithdrawModal } from "./MultiTokenWithdrawModal";
+import { useProgress } from "@/contexts/ProgressContext";
+
+interface WithdrawModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  // Optional onProgress channel for the App-level ProgressFlow — see
+  // DepositModal for the rationale.
+  onWithdraw: (
+    amount: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
+  onTokenWithdraw?: (
+    tokenAddress: string,
+    amount: string,
+    tokenSymbol: string,
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => void;
+  onMultiTokenWithdraw?: (
+    withdrawals: { token: string; amount: string }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => Promise<void>;
+  vaultBalance: string;
+  currentFee?: string;
+  isLoading: boolean;
+  isSimulating?: boolean;
+  isTransactionConfirmed?: boolean;
+  // Token-specific props
+  isTokenWithdraw?: boolean;
+  tokenSymbol?: string;
+  tokenAddress?: string;
+  tokenBalance?: string;
+  tokenDecimals?: number;
+  // Chain-aware props
+  activeChain?: 'ETH' | 'BSC' | 'BASE' | 'ARB' | 'HYPER';
+  // Multi-token functionality
+  vaultTokens?: Array<{address: string, symbol: string, balance: string, decimals: number}>;
+  rateLimitStatus?: {
+    remaining: number;
+    total: number;
+    resetTime: number;
+  };
+}
+
+export function WithdrawModal({
+  open,
+  onOpenChange,
+  onWithdraw,
+  onTokenWithdraw,
+  onMultiTokenWithdraw,
+  vaultBalance,
+  currentFee = "0.00",
+  isLoading,
+  isSimulating = false,
+  isTransactionConfirmed = false,
+  isTokenWithdraw,
+  tokenSymbol,
+  tokenAddress,
+  tokenBalance,
+  tokenDecimals,
+  activeChain,
+  vaultTokens = [],
+  rateLimitStatus
+}: WithdrawModalProps) {
+  const [amount, setAmount] = useState("");
+  // ProgressFlow session wiring — see DepositModal for the pattern
+  // (no re-entry lock: wallet handles the queue; concurrent submits
+  // stack as chips in the App-level ProgressFlow registry).
+  const { startProgress, updateProgress, expandProgress } = useProgress();
+  const [isMultiTokenMode, setIsMultiTokenMode] = useState(false);
+  const [showMultiTokenModal, setShowMultiTokenModal] = useState(false);
+
+  // Reset form on fresh open / token swap — see DepositModal for why.
+  useEffect(() => {
+    if (open) {
+      setAmount("");
+    }
+  }, [open, tokenAddress]);
+
+  // Auto-close modal after successful transaction (now handled centrally in Index.tsx)
+  // Removed to prevent conflicts with centralized modal management
+
+  // Reset multi-token mode when modal opens/closes
+  useEffect(() => {
+    if (!open) {
+      setIsMultiTokenMode(false);
+      setShowMultiTokenModal(false);
+    }
+  }, [open]);
+
+  const handleMultiTokenWithdraw = async (
+    withdrawals: { token: string; amount: string }[],
+    onProgress?: (steps: import('@/components/shared/ProgressFlow').ProgressStep[]) => void,
+  ) => {
+    if (onMultiTokenWithdraw) {
+      // Forward onProgress so the MultiTokenWithdrawModal's ProgressFlow
+      // receives live step updates from useVault.
+      await onMultiTokenWithdraw(withdrawals, onProgress);
+    }
+  };
+
+  // 2026-06-12: handleSubmit fires on form-level submit (pressing Enter
+  // in the amount input, or any default-typed button inside the <form>).
+  // Until now it called onWithdraw(amount) unconditionally — that's
+  // withdrawETHWagmi, which then ran the ETH-vault balance check and
+  // toasted "You only have X ETH in vault. Cannot withdraw Y ETH" even
+  // when the modal was open for an ERC-20 (user reports pressing Enter
+  // during a USD1 withdraw and seeing the ETH toast). The button's
+  // onClick handler already branched on isTokenWithdraw correctly;
+  // this mirrors that path so Enter-to-submit takes the same route as
+  // click-to-submit (matching TransferModal.handleSubmit at :123).
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Block empty / "0" / "0.00" / whitespace / non-numeric. Number()
+    // returns NaN for non-numeric and 0 for ""; NaN > 0 is false so
+    // a single comparison covers every bad case.
+    if (!(Number(amount) > 0)) return;
+    const title = isTokenWithdraw && tokenSymbol
+      ? `Single ${tokenSymbol} withdraw`
+      : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} withdraw`;
+    const sessionId = startProgress(
+      title,
+      [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${amount}…` }],
+    );
+    // Open as chip during the 200ms Radix close animation, re-expand
+    // THIS session after — mirrors the W4 fix at the button-click
+    // site; the new API takes id|null so the re-expand stays correct
+    // even if another submit lands in the interim.
+    expandProgress(null);
+    onOpenChange(false);
+    setTimeout(() => expandProgress(sessionId), 250);
+    if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
+      onTokenWithdraw(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
+    } else {
+      onWithdraw(amount, (steps) => updateProgress(sessionId, steps));
+    }
+  };
+
+  const setMaxAmount = () => {
+    if (isTokenWithdraw && tokenBalance && tokenDecimals) {
+      // CRITICAL FIX: Use formatted balance for MAX button, not raw balance
+      const formattedBalance = formatTokenBalance(tokenBalance, tokenDecimals);
+      setAmount(formattedBalance);
+    } else {
+      setAmount(vaultBalance);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-gradient-card border-vault-primary/30">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
+              <ArrowUpDown className="w-6 h-6 text-vault-success" />
+              {isTokenWithdraw
+                ? `Withdraw ${tokenSymbol} from Vault`
+                : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} from Vault`
+              }
+            </DialogTitle>
+
+            {/* Multi-Token Toggle - Only for token withdrawals */}
+            {isTokenWithdraw && onMultiTokenWithdraw && vaultTokens.length > 0 && (
+              <Button
+                type="button"
+                variant={isMultiTokenMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsMultiTokenMode(!isMultiTokenMode)}
+                className="flex items-center space-x-1"
+              >
+                <Coins className="h-4 w-4" />
+                <span className="text-xs">{isMultiTokenMode ? 'Single' : 'Multi'}</span>
+              </Button>
+            )}
+          </div>
+        </DialogHeader>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid gap-4 py-4">
+            {/* Token Contract Display for Token Withdrawals */}
+            {isTokenWithdraw && tokenAddress && (
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Token Contract</Label>
+                <div className="flex items-center gap-2 p-2 bg-background/20 rounded border">
+                  <span className="text-xs font-mono text-foreground">
+                    {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => window.open(`https://sepolia.etherscan.io/address/${tokenAddress}`, '_blank')}
+                  >
+                    🔗
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="amount">
+                Amount {isTokenWithdraw 
+                  ? `(${tokenSymbol})` 
+                  : `(${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'})`
+                }
+              </Label>
+              <div className="relative">
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.000000000000000001"
+                  placeholder="0.0"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="bg-background/50 border-border text-foreground pr-16"
+                  disabled={isLoading}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-6 px-2 text-xs"
+                  onClick={setMaxAmount}
+                  disabled={isLoading}
+                >
+                  MAX
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Available in vault: {isTokenWithdraw 
+                  ? `${formatTokenBalance(tokenBalance, tokenDecimals)} ${tokenSymbol}` 
+                  : `${vaultBalance} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                }
+              </p>
+            </div>
+
+            {/* Fee Information */}
+            {amount && !isNaN(Number(amount)) && (
+              <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="flex justify-between text-sm">
+                  <span className="text-amber-700 dark:text-amber-300">You will receive:</span>
+                  <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
+                    {amount} {isTokenWithdraw 
+                      ? tokenSymbol 
+                      : (activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH')
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm text-amber-600">
+                  <span>Fee (paid from wallet):</span>
+                  <span className="font-mono">{currentFee} {activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}</span>
+                </div>
+              </div>
+            )}
+
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                {isTokenWithdraw 
+                  ? `You receive exactly ${amount || "0"} ${tokenSymbol} to your wallet. The ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} fee is paid separately from your wallet balance.`
+                  : `You receive exactly ${amount || "0"} ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} to your wallet. The fee is paid separately from your wallet balance.`
+                }
+              </AlertDescription>
+            </Alert>
+
+            {/* Single Token Withdraw Button */}
+            {!isMultiTokenMode && (
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const title = isTokenWithdraw && tokenSymbol
+                      ? `Single ${tokenSymbol} withdraw`
+                      : `Single ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'} withdraw`;
+                    const sessionId = startProgress(
+                      title,
+                      [{ label: 'Preparing withdrawal…', status: 'running', detail: `Submitting ${amount}…` }],
+                    );
+                    // Start as corner chip so it doesn't overlap the
+                    // Radix DialogContent close animation (duration-200);
+                    // re-expand THIS session once the dialog has fully
+                    // unmounted. expandProgress(id) keeps the focus on
+                    // this submit's chip even if a sibling submit lands
+                    // in the 250ms window.
+                    expandProgress(null);
+                    onOpenChange(false);
+                    setTimeout(() => expandProgress(sessionId), 250);
+                    if (isTokenWithdraw && tokenAddress && tokenSymbol && onTokenWithdraw) {
+                      onTokenWithdraw(tokenAddress, amount, tokenSymbol, (steps) => updateProgress(sessionId, steps));
+                    } else {
+                      onWithdraw(amount, (steps) => updateProgress(sessionId, steps));
+                    }
+                  }}
+                  // isLoading dropped — see DepositModal for the rationale.
+                  // amount gate uses Number(amount) > 0 so "0", "0.00",
+                  // whitespace, and non-numeric all keep the button
+                  // disabled — the contract still charges the fee on
+                  // a 0-amount withdraw, so we must block it at the UI.
+                  disabled={!(Number(amount) > 0) || isSimulating}
+                  className="flex-1"
+                >
+                  {isSimulating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Checking...
+                    </>
+                  ) : (
+                    isTokenWithdraw
+                      ? `Withdraw ${tokenSymbol}`
+                      : `Withdraw ${activeChain ? getChainConfig(activeChain).nativeCurrency.symbol : 'ETH'}`
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Multi-Token Withdraw Button */}
+            {isMultiTokenMode && isTokenWithdraw && (
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setShowMultiTokenModal(true)}
+                  disabled={isLoading}
+                  className="flex-1"
+                  variant="default"
+                >
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  Open Multi-Token Withdraw
+                  <span className="ml-2 text-xs bg-background/20 px-2 py-1 rounded">
+                    {vaultTokens.length} tokens
+                  </span>
+                </Button>
+              </div>
+            )}
+          </div>
+        </form>
+      </DialogContent>
+
+      {/* Multi-Token Withdraw Modal */}
+      {showMultiTokenModal && onMultiTokenWithdraw && isTokenWithdraw && (
+        <MultiTokenWithdrawModal
+          isOpen={showMultiTokenModal}
+          onClose={() => {
+            // Cancel: only close the sub-modal, keep WithdrawModal open.
+            setShowMultiTokenModal(false);
+          }}
+          onCommitted={() => {
+            // Submit: close both layers so the App-level ProgressFlow
+            // is the only floating UI and the page is interactive.
+            setShowMultiTokenModal(false);
+            onOpenChange(false);
+          }}
+          availableTokens={vaultTokens}
+          onWithdraw={handleMultiTokenWithdraw}
+          isLoading={isLoading}
+          rateLimitStatus={rateLimitStatus}
+        />
+      )}
+    </Dialog>
+  );
+};

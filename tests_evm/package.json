@@ -1,0 +1,34 @@
+{
+  "name": "cyrusthegreat-evm-tests",
+  "version": "1.0.0",
+  "description": "EVM contract tests for CrossChainBank8",
+  "main": "CrossChainBank8.test.js",
+  "scripts": {
+
+    "test": "node CrossChainBank8.test.js",
+    "test:eth": "TEST_CHAIN=eth node CrossChainBank8.test.js",
+    "test:bsc": "TEST_CHAIN=bsc node CrossChainBank8.test.js",
+    "test:base": "TEST_CHAIN=base node CrossChainBank8.test.js",
+    "test:native": "node run-tests.js native",
+    "test:eth:native": "node run-tests.js native eth",
+    "test:bsc:native": "node run-tests.js native bsc",
+    "test:base:native": "node run-tests.js native base",
+    "test:verbose": "DEBUG=* node CrossChainBank8.test.js"
+  },
+  "dependencies": {
+    "web3": "^4.3.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "keywords": [
+    "ethereum",
+    "smart-contracts",
+    "testing",
+    "web3",
+    "cyrusthegreat"
+  ],
+  "author": "CyrusTheGreat Team",
+  "license": "MIT"
+}

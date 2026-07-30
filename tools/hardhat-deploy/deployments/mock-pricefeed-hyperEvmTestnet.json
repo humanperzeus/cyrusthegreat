@@ -1,0 +1,15 @@
+{
+  "network": "hyperEvmTestnet",
+  "chainId": 998,
+  "contract": "MockV3Aggregator",
+  "address": "0xd2fC71E2fbF7a267c2F884160F01c82994175958",
+  "deployTx": "0x48aa4fdd68af7f0a80f8351d1f087ff6adb5e5dd94cd418c23958e751fc658ff",
+  "deployer": "0x35Fe77E4E8b4AF616F2b540Ea143b6e27e512cc8",
+  "timestamp": "2026-05-31T15:04:32.800Z",
+  "constructorArgs": {
+    "decimals": 8,
+    "answer": "4000000000",
+    "priceUsd": 40
+  },
+  "note": "Testnet-only mock — never deploy on mainnet. Permissionless setPrice(). Replace with a real Chainlink (or Pyth-adapter) feed before any mainnet path."
+}

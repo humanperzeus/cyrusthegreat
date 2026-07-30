@@ -1,0 +1,44 @@
+# Foundry config for cyrusthegreat
+#
+# Forge is used ONLY for unit testing the Solidity contracts (revert paths,
+# happy paths, gas baselines). The compile/deploy pipeline lives in
+# tools/hardhat-deploy/ — see _WHAT_THIS_IS.md there.
+#
+# Layout decisions:
+# - `src` points at the canonical contract directory (cyrusthegreat/contracts/evm/),
+#   same as hardhat. No source duplication.
+# - `test` lives under tools/foundry-tests/ so the test infrastructure is
+#   self-contained and out of the way of the Vite frontend at src/.
+# - `libs` includes both the vendored `tools/foundry-tests/lib/forge-std/`
+#   AND `node_modules/` so Solidity imports of @openzeppelin / @chainlink
+#   resolve through the same npm-installed copies hardhat uses.
+# - `out` + `cache_path` redirect under tools/foundry-tests/ and are gitignored.
+#
+# Run: forge test --root . --match-path 'tools/foundry-tests/**'
+#      (or just `forge test` from the repo root — defaults pick up this config)
+
+[profile.default]
+src = "contracts/evm"
+test = "tools/foundry-tests/test"
+out = "tools/foundry-tests/out"
+cache_path = "tools/foundry-tests/cache"
+libs = ["tools/foundry-tests/lib", "node_modules"]
+solc = "0.8.27"
+optimizer = true
+optimizer_runs = 200
+# Suppress info-level warnings from inherited OZ assembly NatSpec
+# (matches the hardhat output — same warning, same suppression).
+
+# Remappings let `import "@openzeppelin/contracts/..."` resolve to the
+# npm-installed copy at repo-root node_modules/, same as hardhat-deploy.
+remappings = [
+    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+    "@chainlink/contracts/=node_modules/@chainlink/contracts/",
+    "forge-std/=tools/foundry-tests/lib/forge-std/src/",
+]
+
+# Verbosity helps debug failing tests
+verbosity = 2
+
+# Gas snapshots — useful for catching regressions in storage layout / fn cost
+gas_reports = ["CyrusTresor1"]

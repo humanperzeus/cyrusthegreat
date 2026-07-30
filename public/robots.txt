@@ -1,0 +1,23 @@
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: *
+Allow: /
+# Transient / parameterized app routes — no standalone SEO value
+Disallow: /claim
+Disallow: /receipt
+Disallow: /fund
+Disallow: /embed/
+# In-app avatar image, not a page — keep out of GSC coverage noise
+Disallow: /ctg.png
+
+Sitemap: https://cyrusthegreat.dev/sitemap.xml

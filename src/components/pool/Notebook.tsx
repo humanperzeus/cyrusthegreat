@@ -1,0 +1,324 @@
+/**
+ * Notebook — the depositor's local list of pending CyrusTresor1 commits.
+ *
+ * Each entry corresponds to a successful commitToPool tx. Stored in
+ * localStorage (via usePool's notebook). The secret + userSalt are saved
+ * so the user can reveal later without re-typing — but this means anyone
+ * with browser access to the same localStorage can also reveal. Treat the
+ * browser like a wallet for this feature.
+ *
+ * After ≥1 epoch elapses (currentEpoch > depositEpoch), the Reveal button
+ * unlocks. The user clicks it, Rabby pops up, and the bucket lands at the
+ * commit's withdrawTo address.
+ *
+ * UI principles:
+ *  - Reuses the same Card / Button / mono-font aesthetic as the rest of the dapp
+ *  - Pending entries show a countdown until reveal-eligible
+ *  - Revealed entries show a checkmark + tx link
+ *  - Expandable section per entry for the claim URL (rarely needed in self-pay,
+ *    but essential for the teleport-to-someone-else flow)
+ */
+
+import { useEffect, useState } from "react";
+import { formatUnits } from "viem";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Clock, Check, ExternalLink, Copy, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { usePool, usePoolCurrentEpoch } from "@/hooks/usePool";
+import { useProgress } from "@/contexts/ProgressContext";
+import { buildClaimURL, type TeleportClaim } from "@/lib/poolURI";
+import type { NotebookEntry } from "@/hooks/usePool";
+import { ClaimQR } from "@/components/pool/ClaimQR";
+
+interface NotebookProps {
+  activeChain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB";
+}
+
+const explorerForChain = (chain: "ETH" | "BSC" | "BASE" | "HYPER" | "ARB", txHash: string): string => {
+  if (chain === "ETH") return `https://sepolia.etherscan.io/tx/${txHash}`;
+  if (chain === "BSC") return `https://testnet.bscscan.com/tx/${txHash}`;
+  if (chain === "BASE") return `https://sepolia.basescan.org/tx/${txHash}`;
+  if (chain === "HYPER") return `https://testnet.purrsec.com/tx/${txHash}`;
+  if (chain === "ARB") return `https://sepolia.arbiscan.io/tx/${txHash}`;
+  return "#";
+};
+
+const formatCountdown = (msUntil: number): string => {
+  if (msUntil <= 0) return "eligible now";
+  const minutes = Math.floor(msUntil / 60_000);
+  const seconds = Math.floor((msUntil % 60_000) / 1_000);
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return `${minutes}m ${seconds}s`;
+};
+
+export const Notebook = ({ activeChain }: NotebookProps) => {
+  const { notebook, isRevealing, reveal, clearNotebook } = usePool();
+  const { epoch: currentEpoch } = usePoolCurrentEpoch();
+  const { startProgress, updateProgress } = useProgress();
+  const [expandedClaim, setExpandedClaim] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState<string | null>(null);
+
+  // Tick every 10s so countdowns refresh smoothly even when currentEpoch
+  // (which only changes once an hour) doesn't trigger a re-render.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 10_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Dedup by commitment hash. Defense-in-depth against any older notebook
+  // state that may contain duplicates from before the revealFromURL dedup fix.
+  // When duplicates exist for the same commitment, prefer the one with the
+  // most info (commitTx present > only revealTx > neither).
+  const dedupedNotebook = (() => {
+    const map = new Map<string, NotebookEntry>();
+    for (const entry of notebook) {
+      const prev = map.get(entry.commitment);
+      if (!prev) { map.set(entry.commitment, entry); continue; }
+      // Merge: prefer whichever has commitTx + revealTx + spent state.
+      // Also prefer whichever has the new bucketSize/decimals/symbol fields
+      // (added 2026-05-19) so older entries inherit them when present.
+      const merged: NotebookEntry = {
+        ...prev,
+        ...entry,
+        commitTx: (entry.commitTx && entry.commitTx !== '0x' ? entry.commitTx : prev.commitTx) as `0x${string}`,
+        revealTx: (entry.revealTx ?? prev.revealTx),
+        spent: prev.spent || entry.spent,
+        depositEpoch: prev.depositEpoch || entry.depositEpoch,
+        bucketSizeWei: entry.bucketSizeWei ?? prev.bucketSizeWei,
+        tokenDecimals: entry.tokenDecimals ?? prev.tokenDecimals,
+        tokenSymbol: entry.tokenSymbol ?? prev.tokenSymbol,
+      };
+      map.set(entry.commitment, merged);
+    }
+    return Array.from(map.values());
+  })();
+
+  if (dedupedNotebook.length === 0) return null;
+
+  const handleReveal = async (entry: NotebookEntry) => {
+    setRevealError(null);
+    // Two-act ProgressFlow act 2 — kicked off when the user clicks
+    // Reveal in the Notebook (commit act ended when the previous
+    // session went terminal + auto-closed). Decimal-aware amount
+    // label for the session title, using fields stored at commit time.
+    const displayAmount = entry.bucketSizeWei && entry.tokenDecimals != null
+      ? `${formatUnits(BigInt(entry.bucketSizeWei), entry.tokenDecimals)} ${entry.tokenSymbol ?? ''}`.trim()
+      : `bucket ${entry.claim.bucketIdx}`;
+    const sessionId = startProgress(`Reveal · ${displayAmount}`, [
+      { label: 'Sign in wallet',     status: 'running', detail: `Preparing reveal of ${displayAmount}…` },
+      { label: 'Confirm on-chain',   status: 'pending' },
+      { label: 'Finalize & refresh', status: 'pending' },
+    ]);
+    try {
+      await reveal(entry, (steps) => updateProgress(sessionId, steps));
+    } catch (e) {
+      setRevealError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleCopyClaim = async (entry: NotebookEntry) => {
+    const url = buildClaimURL(`${window.location.origin}/claim`, entry.claim as TeleportClaim);
+    await navigator.clipboard.writeText(url);
+    setCopied(entry.commitment);
+    setTimeout(() => setCopied(null), 1500);
+  };
+
+  return (
+    <Card className="p-6 bg-gradient-card backdrop-blur border-vault-primary/30 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock className="w-5 h-5 text-vault-primary" />
+          <h3 className="text-base font-semibold">Your Commits (notebook)</h3>
+          <span className="text-xs text-muted-foreground">
+            {dedupedNotebook.filter((e) => !e.spent).length} pending · {dedupedNotebook.filter((e) => e.spent).length} revealed
+          </span>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Stored in this browser only. Anyone with access to this browser's localStorage can claim these
+        commits. Clearing the notebook before revealing makes the funds unrecoverable.
+      </p>
+
+      <div className="space-y-3">
+        {dedupedNotebook.map((entry) => {
+          const isEligible = currentEpoch != null && currentEpoch > entry.depositEpoch;
+          const eligibleEpoch = entry.depositEpoch + 1;
+          const eligibleAtMs = eligibleEpoch * 3600 * 1000;
+          const msUntil = eligibleAtMs - Date.now();
+          // Decimal-aware display: prefer fields stored at commit time
+          // (tokenSymbol + tokenDecimals + bucketSizeWei). Fall back gracefully
+          // for older entries that pre-date these fields.
+          const isNativeToken = entry.claim.token === "0x0000000000000000000000000000000000000000";
+          const nativeFallbackSymbol =
+            activeChain === "BSC" ? "tBNB"
+            : activeChain === "HYPER" ? "HYPE"
+            : "ETH"; // ETH, BASE, ARB all use ETH
+          const displaySymbol = entry.tokenSymbol
+            ?? (isNativeToken ? nativeFallbackSymbol : entry.claim.token.slice(0, 6) + "…");
+          const displayDecimals = entry.tokenDecimals ?? 18;
+          const displayAmount = entry.bucketSizeWei
+            ? formatUnits(BigInt(entry.bucketSizeWei), displayDecimals)
+            : null; // null = fall back to "bucket N" label
+          const activeChainId =
+            activeChain === "ETH" ? 11155111
+            : activeChain === "BSC" ? 97
+            : activeChain === "BASE" ? 84532
+            : activeChain === "HYPER" ? 998
+            : 421614; // ARB Sepolia
+          const isCurrentChain = entry.claim.chainId === activeChainId;
+
+          return (
+            <div
+              key={entry.commitment}
+              className={`rounded-md border p-3 space-y-2 ${
+                entry.spent
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : isEligible
+                  ? "border-vault-primary/60 bg-vault-primary/10"
+                  : "border-vault-primary/20 bg-vault-primary/5"
+              }`}
+            >
+              {/* Top row: status + bucket + withdrawTo */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                {entry.spent ? (
+                  <span className="text-emerald-300 inline-flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Revealed
+                  </span>
+                ) : isEligible ? (
+                  <span className="text-vault-primary font-medium">Ready to reveal</span>
+                ) : (
+                  <span className="text-muted-foreground inline-flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> {formatCountdown(msUntil)}
+                  </span>
+                )}
+                <span className="font-mono text-foreground">
+                  {displayAmount
+                    ? `${displayAmount} ${displaySymbol}`
+                    : `bucket ${entry.claim.bucketIdx} (${displaySymbol})`}
+                </span>
+                <span className="text-muted-foreground">→</span>
+                <span className="font-mono text-muted-foreground" title={entry.claim.withdrawTo}>
+                  {entry.claim.withdrawTo.slice(0, 8)}…{entry.claim.withdrawTo.slice(-6)}
+                </span>
+                {!isCurrentChain && (
+                  <span className="text-yellow-500 text-xs">
+                    (chainId {entry.claim.chainId} — switch wallet)
+                  </span>
+                )}
+              </div>
+
+              {/* Detail row: commitment + tx links */}
+              <div className="text-xs text-muted-foreground font-mono space-y-1">
+                <div className="truncate">
+                  <span className="text-muted-foreground/70">commit hash:</span>{" "}
+                  {entry.commitment.slice(0, 12)}…{entry.commitment.slice(-10)}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {entry.commitTx && entry.commitTx !== "0x" && (
+                    <a
+                      href={explorerForChain(activeChain, entry.commitTx)}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-foreground/70 hover:text-vault-primary inline-flex items-center gap-1"
+                    >
+                      commit tx <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                  {entry.revealTx && (
+                    <a
+                      href={explorerForChain(activeChain, entry.revealTx)}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-emerald-300 hover:text-emerald-200 inline-flex items-center gap-1"
+                    >
+                      reveal tx <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {!entry.spent && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleReveal(entry)}
+                    disabled={!isEligible || isRevealing || !isCurrentChain}
+                    className="bg-vault-primary text-background hover:bg-vault-primary/90"
+                  >
+                    {isRevealing ? "Revealing…" : !isCurrentChain ? "Switch chain" : isEligible ? "Reveal" : "Not eligible yet"}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setExpandedClaim(expandedClaim === entry.commitment ? null : entry.commitment)}
+                  className="text-xs"
+                >
+                  {expandedClaim === entry.commitment ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
+                  Claim URL
+                </Button>
+              </div>
+
+              {/* Expandable claim URL */}
+              {expandedClaim === entry.commitment && (
+                <div className="pt-2 space-y-2 border-t border-vault-primary/15">
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={buildClaimURL(`${window.location.origin}/claim`, entry.claim as TeleportClaim)}
+                      className="font-mono text-xs flex-1"
+                    />
+                    <Button size="sm" variant="outline" onClick={() => handleCopyClaim(entry)}>
+                      {copied === entry.commitment ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 items-start pt-1">
+                    <ClaimQR
+                      value={buildClaimURL(`${window.location.origin}/claim`, entry.claim as TeleportClaim)}
+                      size={140}
+                    />
+                    <p className="text-xs text-yellow-200/80 sm:flex-1">
+                      ⚠️ Anyone with this URL <em>or QR code</em> can claim the funds. Share via end-to-end-
+                      encrypted channels only — or show the QR directly to the recipient in person.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {revealError && (
+        <div className="text-xs text-red-400 font-mono whitespace-pre-wrap">
+          Reveal failed: {revealError}
+        </div>
+      )}
+
+      <div className="pt-3 border-t border-vault-primary/15">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            if (
+              confirm(
+                "Clear the notebook? Any UNREVEALED commits become permanently unrecoverable — the secret only lives here in localStorage. This does NOT cancel on-chain commitments; it just forgets the secrets locally."
+              )
+            ) {
+              clearNotebook();
+            }
+          }}
+          className="text-xs text-muted-foreground hover:text-red-300"
+        >
+          <Trash2 className="w-3 h-3 mr-1" />
+          Reset notebook
+        </Button>
+      </div>
+    </Card>
+  );
+};

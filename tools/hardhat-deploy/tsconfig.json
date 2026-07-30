@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+      "target": "ES2022",
+      "module": "NodeNext",          // <-- required by Hardhat’s generated types
+      "moduleResolution": "NodeNext",// <-- must accompany the line above
+      "outDir": "dist",
+      "rootDir": ".",
+      "strict": true,
+      "esModuleInterop": true,
+      "skipLibCheck": true,
+      "forceConsistentCasingInFileNames": true,
+      "resolveJsonModule": true,
+      "noEmit": true,
+      "isolatedModules": false
+    },
+    "include": [
+      "./contracts/**/*.sol",
+      "./scripts/**/*.ts",
+      "./test/**/*.ts",
+      "./hardhat.config.ts"
+    ],
+    "exclude": ["node_modules", "dist"]
+  }
