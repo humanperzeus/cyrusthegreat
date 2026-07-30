@@ -90,3 +90,6 @@ bugs/
 
 # Local deploy config — names the machine-local pass entry, never publish
 tools/hardhat-deploy/.deploy-local
+
+# Pool E2E preimage — local test artifact, never publish
+.pool-e2e-preimage.local

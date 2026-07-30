@@ -1,6 +1,6 @@
 # Optimism RetroPGF — Application draft for CyrusTresor + CyrusTeleport
 
-**Status**: draft. Not yet submitted. User to review, edit, then submit via Optimism's official application form (Charmverse / Atlas — whichever the current round uses).
+**Status**: draft, **reviewed and fact-checked 2026-07-30**. Not yet submitted. Contract addresses filled in, checklist items 1-3 closed, E2E proof added (§4.2a), and the commit-history evidence problem flagged in §0. Remaining blockers are user-only: pick the open round, pick the receiving address, submit.
 **Date**: 2026-06-18.
 **Author**: solo-dev session w/ Claude.
 **Target round**: whichever Optimism RetroPGF round is currently open. RetroPGF rounds run on the Optimism governance schedule; verify which is active at [community.optimism.io/citizens-house/rounds](https://community.optimism.io/citizens-house/rounds) before submitting.
@@ -10,14 +10,34 @@
 
 ## 0 · Pre-submission checklist (DO BEFORE SUBMITTING)
 
+*Checklist re-verified 2026-07-30 by measurement, not recall.*
+
 | Item | Status | Action |
 |---|---|---|
-| Open-source LICENSE in repo | **MISSING** | Add `LICENSE` file at repo root. MIT or Apache-2.0 are the most grant-friendly. AGPL-3.0 also accepted but more restrictive for downstream users |
-| GitHub repo public | TBD | Verify github.com/humanperzeus/cyrusthegreat is set to public, not private |
-| README links + screenshots | Partially done | Add a "Live Demo" section with screenshots of the v2 UI (commit form, notebook, /claim) for grant reviewers who don't connect wallets |
-| `cyrusthegreat.dev` is reachable + on latest build | Verify | Hard-refresh, check BuildBadge bottom-left matches expected commit |
-| Receiving wallet address ready | TBD | Decide which address receives the OP token disbursement (treasury, personal, multisig). Must be on Optimism mainnet |
-| Verify current round eligibility | TBD | Check community.optimism.io for the open round's specific criteria (some rounds have geographic/age restrictions, KYC, etc.) |
+| Open-source LICENSE in repo | ✅ **DONE** | MIT License present at repo root and tracked (`git ls-files LICENSE`) |
+| GitHub repo public | ✅ **DONE** | `gh repo view humanperzeus/cyrusthegreat --json visibility` → `PUBLIC` |
+| README links + screenshots | ✅ mostly | README has a `## Screenshots` section; `docs/screenshots/` holds 5 PNGs. Optional: add a one-line "Live Demo" link at the very top for reviewers who don't scroll |
+| `cyrusthegreat.dev` reachable + latest build | ✅ **DONE** | HTTP 200, serving `index-Cjq3RYsg.js` (post-key-rotation build), verified twice cache-busted 2026-07-30 |
+| Contracts live + reachable | ✅ **DONE** | E2E-tested on Sepolia 2026-07-30 — see §4.2a |
+| Receiving wallet address ready | ⚠️ **USER** | Decide which address receives the OP disbursement, **on Optimism mainnet**. Do NOT reuse the deployer. The cold `walletX` used as mainnet feeCollector is a candidate, or a fresh address |
+| Verify current round eligibility | ⚠️ **USER** | Check community.optimism.io for the open round's criteria (KYC, geography, category). Rounds change; this cannot be pre-filled |
+
+### ⚠️ Read this before submitting — the commit-history evidence changed
+
+On **2026-07-30** the repository history was rebuilt as a **single commit**. Two burner
+private keys had been committed in 2025 and remained fetchable from orphaned commits by SHA
+even after a branch-level rewrite; the only fix that actually removes such objects is deleting
+and recreating the repository.
+
+**Consequence for this application:** §4.1 below originally cited "13 production commits
+between 2026-06-11 and 2026-06-18" as impact evidence. That commit log **is no longer public**.
+A reviewer clicking through today sees one commit dated 2026-07-30.
+
+Do not paper over this. The stronger evidence was always on-chain, and it is untouched:
+contract deployments are timestamped, immutable and independently verifiable on block
+explorers — see §4.2. Lead with those. If a reviewer asks about the thin git history, the
+honest answer is also a good one: *the history was rebuilt to remove leaked key material, and
+the deployment record predates and outlives it.*
 
 ---
 
@@ -36,17 +56,24 @@ CyrusTresor is a user-owned vault for native and ERC-20 tokens with batched mult
 - **Audit RFP scaffold**: [docs/AUDIT_RFP.md](../AUDIT_RFP.md)
 - **Deployment runbook (HyperEVM)**: [docs/HYPEREVM_DEPLOY_RUNBOOK.md](../HYPEREVM_DEPLOY_RUNBOOK.md)
 
-Deployed contract addresses (testnets, all live as of submission):
+Deployed contract addresses (filled in 2026-07-30 from the deployment records; the Sepolia and
+Base-Sepolia deployers were additionally confirmed against the contract-creation tx on-chain):
 
-| Chain | Network | CyrusTresor (vault) | CyrusTresor1 (pool) |
-|---|---|---|---|
-| Sepolia | Ethereum testnet | env: VITE_CTGVAULT_ETH_TESTNET_CONTRACT | env: VITE_CTGTRESOR_ETH_TESTNET_CONTRACT |
-| Base Sepolia | OP Stack / Superchain | env: VITE_CTGVAULT_BASE_TESTNET_CONTRACT | env: VITE_CTGTRESOR_BASE_TESTNET_CONTRACT |
-| BSC Testnet | BNB Smart Chain | env: VITE_CTGVAULT_BSC_TESTNET_CONTRACT | env: VITE_CTGTRESOR_BSC_TESTNET_CONTRACT |
-| Arbitrum Sepolia | Arbitrum L2 | env: VITE_CTGVAULT_ARB_TESTNET_CONTRACT | env: VITE_CTGTRESOR_ARB_TESTNET_CONTRACT |
-| HyperEVM Testnet | Hyperliquid L1 | env: VITE_CTGVAULT_HYPER_TESTNET_CONTRACT | env: VITE_CTGTRESOR_HYPER_TESTNET_CONTRACT |
+| Chain | Network | CrossChainBank8 (vault) | CyrusTresor1 (pool) | Deployed |
+|---|---|---|---|---|
+| Sepolia | Ethereum testnet | `0xb4D636Eceaf469cB7b84bD72387aC61e804A1D42` | `0x48e8B5d31CE1445c2C64EbD2c775E7f753813E1F` | 2026-06-07 |
+| Base Sepolia | OP Stack / Superchain | `0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9` | `0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219` | 2026-06-07 |
+| BSC Testnet | BNB Smart Chain | `0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9` | `0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219` | 2026-06-07 |
+| Arbitrum Sepolia | Arbitrum L2 | `0xf9AAB9b4800E3d5FCD4E4fAf1f7fcF539cbD06A9` | `0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219` | 2026-06-07 |
+| HyperEVM Testnet | Hyperliquid L1 | `0x6F8286F4e08fF59fa2152b6b702ee9D8916a7219` | `0x57d438eA49CFe54814ccA12E14736c7A059361C8` | 2026-06-07 |
 
-(Fill in actual addresses from `.env` at submission time. Verify on the respective explorers.)
+Additionally on Sepolia: **CyrusFundraise** `0x55585fC29eea111ef627Ba6d0c5E57Aef21E1335`
+(deployed 2026-07-05) — non-custodial donation campaigns; fee and remainder are forwarded to
+the recipient in the *same* transaction, the contract never holds funds.
+
+All contracts are **immutable by construction**: no owner, no pause, no upgrade path, no
+`delegatecall`, no `selfdestruct` (verified by source inspection 2026-07-30). `feeCollector`
+is a constructor argument marked `immutable` and cannot be changed after deployment.
 
 ## 3 · Why this is a public good
 
@@ -62,11 +89,22 @@ CyrusTresor + CyrusTeleport contributes three specific public-good properties:
 
 ## 4 · Impact evidence (what was shipped, with verifiable artifacts)
 
-RetroPGF rewards demonstrated impact, not promises. Below is the impact this project has delivered, all verifiable from public commits and the live dapp.
+RetroPGF rewards demonstrated impact, not promises. Below is what this project has delivered. **The verifiable artifacts are the on-chain deployments (§4.2) and the live dapp — not the git history, which was rebuilt on 2026-07-30 to remove leaked key material (§0).**
 
-### 4.1 Code shipped (last 30 days, public commit log)
+### 4.1 Code shipped
 
-13 production commits between 2026-06-11 and 2026-06-18, including:
+> **⚠️ Do not cite the public commit log here — it no longer exists.** The repository history
+> was rebuilt to a single commit on 2026-07-30 to remove leaked key material (see the box in
+> §0). The work below was real and was committed at the time, but a reviewer cannot verify it
+> from GitHub today. **Lead with §4.2 (on-chain deployments) and §4.2a (E2E proof) instead** —
+> those are timestamped, immutable and independently checkable.
+>
+> If you want the code-shipping evidence back in a verifiable form, the options are: point to
+> the deployed+verified contract source on the block explorers, or publish a curated subset of
+> the pre-rewrite history from the offline backup bundle after a fresh secret scan. Do **not**
+> restore the old history wholesale — that is exactly the material that was removed.
+
+Originally 13 production commits between 2026-06-11 and 2026-06-18, including:
 
 - **Multi-session ProgressFlow architecture** (`80797d7`) — supports up to N concurrent transaction sessions with chip-stacking UX, terminal auto-close, expand-swap. Open-source, MIT-able pattern any dapp can copy.
 - **Imperial Gold visual system + 3-step transaction lifecycle** ported to all flows (commit, reveal, claim). Shipped on the live dapp.
@@ -91,6 +129,24 @@ The vault + pool are LIVE and verifiable on 5 distinct testnets:
 | HyperEVM Testnet | CyrusTresor + CyrusTresor1 (with MockV3Aggregator for HYPE/USD) | 2026-05-30 |
 
 Each deployment is a verifiable test of solo-dev multi-chain shipping. The HyperEVM deploy in particular required custom price-feed mocking — documented in [HYPEREVM_DEPLOY_RUNBOOK.md](../HYPEREVM_DEPLOY_RUNBOOK.md) for reuse by other Hyperliquid devs.
+
+### 4.2a End-to-end proof that the deployed contracts work (2026-07-30)
+
+Deployment alone only proves bytecode exists. The three user-facing flows were executed
+against the **live Sepolia contracts** with a real wallet, each asserting on-chain state
+rather than a return code. Anyone can reproduce these against the addresses in §2.
+
+| Flow | Contract | Result |
+|---|---|---|
+| Vault deposit → withdraw | CrossChainBank8 | **PASS** — deposited 0.01 ETH (`msg.value − fee` credited exactly), withdrew in full, vault balance returned to 0 |
+| Campaign create → donate | CyrusFundraise | **PASS** — `nextId` advanced, donation forwarded in-tx; `Donation` event reports fee **0.100%**, recipient receives 99.9%. The contract retained nothing |
+| Anonymity-pool commit | CyrusTresor1 | **PASS** — commitment recorded on-chain, `depositEpoch` set from 0 to the live epoch |
+| Anonymity-pool reveal | CyrusTresor1 | requires a *later* epoch (`EPOCH_LENGTH = 3600s`) — the commit-reveal cycle is deliberately time-separated, which is the privacy property itself |
+
+The fee split was confirmed by decoding the `Donation` event, not by differencing balances:
+an early attempt used a recipient address that happened to equal the `feeCollector`, which made
+the split read as a misleading "100% to recipient". The event carries the fee explicitly and is
+the correct instrument.
 
 ### 4.3 Open-source UI components reusable by other dapps
 
@@ -208,16 +264,28 @@ Apply to whichever of the above is currently accepting submissions. If multiple,
 
 ## 14 · What to do next (user action items)
 
-1. **Add a LICENSE file to the repo.** MIT is the safest grant choice. I can do this in a follow-up commit if you say go.
-2. **Verify the GitHub repo is public** (not private).
-3. **Take screenshots** of the v2 commit form, Notebook, /claim page, the build badge. Add them to the README's "Live Demo" section.
-4. **Verify which Optimism RetroPGF round is currently open** at [community.optimism.io/citizens-house/rounds](https://community.optimism.io/citizens-house/rounds). Note the deadline and which categories are accepting submissions.
-5. **Decide which wallet address receives the OP token disbursement** (must be on Optimism mainnet).
-6. **Submit via the official form.** Round 5-6 used Charmverse; future rounds may use Atlas (atlas.optimism.io) or a different platform — follow the current round's instructions.
-7. **After submission**: post a brief about it on X (@humanperzeus). RetroPGF panels do consider public traction; even a single thread linking the dapp + this application can move the needle.
+*Re-checked 2026-07-30. Items 1–3 are now done; what remains genuinely needs you.*
+
+1. ~~Add a LICENSE file.~~ ✅ **DONE** — MIT, tracked at repo root.
+2. ~~Verify the GitHub repo is public.~~ ✅ **DONE** — `PUBLIC`, verified 2026-07-30.
+3. ~~Screenshots in the README.~~ ✅ **mostly** — `## Screenshots` section exists, 5 PNGs in
+   `docs/screenshots/`. Optional polish: a "Live Demo" link at the very top of the README.
+4. ⚠️ **Verify which round is open** at [community.optimism.io/citizens-house/rounds](https://community.optimism.io/citizens-house/rounds) — deadline, open categories,
+   and any KYC/geography rules. This changes per round and cannot be pre-filled.
+5. ⚠️ **Decide the receiving address** (Optimism mainnet). Do **not** reuse the deployer
+   `0x35Fe…2cc8` — it is a hot key on a dev laptop and is already publicly linked to every
+   testnet deployment. Use a cold address; the `walletX` pattern from the mainnet plan fits.
+6. ⚠️ **Submit via the official form.** Rounds 5–6 used Charmverse; newer rounds may use
+   Atlas (atlas.optimism.io). Follow the active round's instructions.
+7. **Decide how to handle the commit-history question** (see the box in §0). Recommended:
+   don't raise it unprompted, lead with on-chain evidence, and if asked, say plainly that the
+   history was rebuilt to remove leaked key material. That reads as competent incident
+   response, not as a gap.
+8. **After submission**: a short post on X (@humanperzeus) linking the dapp and the
+   application. RetroPGF panels do weigh visible traction.
 
 If awarded, the funds disburse on Optimism mainnet in OP tokens. To convert to operating capital, you'd swap OP → USDC/USDT/ETH on a DEX (Velodrome, Uniswap on Optimism). Plan for a 2-7 day delay between award notification and disbursement.
 
 ---
 
-**End of draft. User: review, edit, then act on the §14 checklist. Tell me when you want me to add the LICENSE file in a follow-up commit.**
+**End of draft.** Reviewed 2026-07-30: everything verifiable from this machine has been verified and filled in. What is left (§14 items 4-6) needs decisions only you can make — which round, which receiving address, and the submission itself.
