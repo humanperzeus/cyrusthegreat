@@ -93,3 +93,7 @@ tools/hardhat-deploy/.deploy-local
 
 # Pool E2E preimage — local test artifact, never publish
 .pool-e2e-preimage.local
+
+# Anchor build artifacts
+contracts/solana/target/
+contracts/solana/.anchor/
