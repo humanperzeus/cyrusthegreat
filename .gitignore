@@ -97,3 +97,7 @@ tools/hardhat-deploy/.deploy-local
 # Anchor build artifacts
 contracts/solana/target/
 contracts/solana/.anchor/
+
+# Whole dir: it holds program AUTHORITY keypairs. The *.json rule above misses
+# anything non-json that lands here.
+contracts/solana/deploy/
