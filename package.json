@@ -9,6 +9,9 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "lint:src": "eslint src",
+    "test": "forge test --root .",
+    "gate": "npm run build && npm run test",
     "preview": "vite preview"
   },
   "dependencies": {
